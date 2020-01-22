@@ -482,8 +482,8 @@ def find_te(flank_bed, flank_seq, ref, family_annotation, te_fa, out, sample_nam
     print ("Done\n")
 
     # read family and strand annotation into dict
-    family_dict = dict() # used later for flanking sequence extraction
-    strand_dict = dict() # used later for flanking sequence extraction
+    family_dict = dict()
+    strand_dict = dict()
     with open(family_annotation, "r") as input:
         for line in input:
             entry = line.replace('\n', '').split("\t")
@@ -492,6 +492,13 @@ def find_te(flank_bed, flank_seq, ref, family_annotation, te_fa, out, sample_nam
                 strand_dict[entry[0]] = "."
             else:
                 strand_dict[entry[0]] = entry[4]
+
+    # read TE sequence length into dict
+    te_len_dict = dict()
+    with open(te_fa, "r") as input:
+        for record in SeqIO.parse(input, "fasta"):
+            contig_name = re.sub('>|:.*', '', record.id)
+            te_len_dict[contig_name] = len(record.seq)
     
     # read flanking info into dict
     flank_dict = dict() # used later for flanking sequence extraction
@@ -503,7 +510,7 @@ def find_te(flank_bed, flank_seq, ref, family_annotation, te_fa, out, sample_nam
             flank_dict[flank_name] = flank_end
 
     # prase minimap2 output and report
-    te_report = out+"/"+sample_name+".final.bed"
+    te_report_tmp = out+"/"+sample_name+".tmp.gff"
     print ("Generating final TE annotation...")
     header = ["flank_name", "flank_len", "flank_start", "flank_end", "flank_strand", "chr", "start", "end"]
     df = pd.read_csv(mm2_out, delimiter="\t", usecols=[0,1,2,3,4,5,7,8], names=header)
@@ -517,44 +524,87 @@ def find_te(flank_bed, flank_seq, ref, family_annotation, te_fa, out, sample_nam
     df['te_family'] = df['contig_name'].map(family_dict)
     # add TE strand info
     df['te_strand'] = df['contig_name'].map(strand_dict)
+    # add TE sequence length info
+    df['te_len'] = df['contig_name'].map(te_len_dict)
     # group and summarize by contig
     new_df = df.groupby('contig_name').apply(get_coordinate).reset_index()
     # remove if two flank have gap/overlap bigger than threshold
     new_df = new_df[((new_df['score'] == 2) & (new_df['end'] - new_df['start'] <= gap)) | ((new_df['score'] == 3) & (new_df['end'] - new_df['start'] <= overlap)) | (new_df['score'] == 1)]
+    new_df['feature'] = "transposon"
+    # new_df['phase'] = "."
+    # merge entries with duplicate coordinates
+    # new_df = new_df.groupby(['chr', 'start', 'end']).apply(merge_prediction).reset_index()
     # output
-    new_df.to_csv(te_report, sep = '\t', index=False, header=False, columns=['chr', 'start', 'end', 'family', 'strand', 'score'])
+    new_df.to_csv(te_report_tmp, sep = '\t', index=False, header=False, columns=['chr', 'contig_name', 'family', 'start', 'end', 'score', 'strand', 'te_len', 'te_strand'])
     print("Done\n")
 
-    # write ref coordinates to dict
-    ref_pos_dict = new_df.set_index('contig_name').T.to_dict('list')
+    # sort gff
+    te_report_tmp_sort = out+"/"+sample_name+".tmp.sort.gff"
+    with open(te_report_tmp_sort, "w") as output:
+        command = "bedtools sort -i " + te_report_tmp
+        subprocess.call(command, shell=True, stdout=output)
+
+    # merge overlap/identical entries
+    te_report_tmp_merge = out+"/"+sample_name+".tmp.merge.gff"
+    with open(te_report_tmp_merge, "w") as output:
+        command = "bedtools merge -d 0 -o collapse -c 2,3,4,5,6,7,8,9 -delim \",\" -i " + te_report_tmp_sort
+        subprocess.call(command, shell=True, stdout=output)
+    
+    te_report_final = out+"/"+sample_name+".final.bed"
+    contig_dict = dict()
+    with open(te_report_tmp_merge, "r") as input, open(te_report_final, "w") as output:
+        for line in input:
+            entry = line.replace('\n', '').split("\t")
+            chr = entry[0]
+            if "," in entry[3]:
+                start = min(entry[5].split(','))
+                end = max(entry[6].split(','))
+
+                len_list = entry[9].split(",")
+                idx = len_list.index(min(len_list))
+                contig_name = entry[3].split(",")[idx]
+                family = entry[4].split(",")[idx]
+                support_type = entry[7].split(",")[idx]
+                strand = entry[8].split(",")[idx]
+                te_strand = entry[10].split(",")[idx]
+            else:
+                start = entry[5]
+                end = entry[6]
+                contig_name = entry[3]
+                family = entry[4]
+                support_type = entry[7]
+                strand = entry[8]
+                te_strand = entry[10]
+            contig_dict[contig_name] = [chr, start, end, family, te_strand]
+            out_line = '\t'.join([chr, start, end, family, strand, support_type])
+            output.write(out_line+"\n")
+            output2.write(contig_name+"\n")
 
     # generate TE sequence fasta
-    contig_set=set(new_df['contig_name'])
     final_te_seqs = out+"/"+sample_name+".final.fa"
     if os.path.isfile(final_te_seqs):
         os.remove(final_te_seqs)
     with open(te_fa, "r") as input, open(final_te_seqs, "a") as output:
         for record in SeqIO.parse(input, "fasta"):
-            contig_name = record.id.split(":")[0]
-            if contig_name in contig_set:
-                pos_list = ref_pos_dict[contig_name]
-                chr = pos_list[0]
-                start = pos_list[1]
-                end = pos_list[2]
-                family = pos_list[3]
-                strand = pos_list[4]
-                record.id = chr+":"+str(start)+"-"+str(end)+"#"+family
-                if strand == "+" or strand == ".":
-                    output.write(record)
+            contig_name = (record.id).split(":")[0]
+            if contig_name in contig_dict:
+                chr = contig_dict[contig_name][0]
+                start = contig_dict[contig_name][1]
+                end = contig_dict[contig_name][2]
+                family = contig_dict[contig_name][3]
+                te_strand = contig_dict[contig_name][4]
+                record.id = chr+"_"+str(start)+"_"+str(end)+"#"+family
+                if te_strand == "+" or te_strand == ".":
+                    output.write(">"+record.id+"\n"+str(record.seq)+"\n")
                 else:
                     output.write(">"+record.id+"\n"+str(record.seq.reverse_complement())+"\n")
-                
-            
+
 def get_coordinate(df_group):
     chr = df_group['chr'][0]
     family = df_group['te_family'][0]
     te_strand = df_group['te_strand'][0]
     flank_strand = df_group['flank_strand'][0]
+    te_len = df_group['te_len'][0]
     # determine final strand
     if te_strand == ".":
         strand = "."
@@ -587,7 +637,7 @@ def get_coordinate(df_group):
             score = 2
         else:
             score = 3
-    return pd.Series([chr, start, end, family, score, strand], index=['chr', 'start', 'end', 'family', 'score', 'strand'])
+    return pd.Series([chr, start, end, family, score, strand, te_strand, te_len], index=['chr', 'start', 'end', 'family', 'score', 'strand', 'te_strand', 'te_len'])
 
 def create_fa(header, seq, out):
     with open(out, "w") as output:
