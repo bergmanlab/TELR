@@ -13,7 +13,7 @@ import re
 
 # import utility as utl
 
-# python3 main.py -o $output_dir -i $read_path -r $reference_path -l $te_library_path -t 16
+# python3 main.py -o $output_dir -i $read_path -r $reference_path -l $te_library_path -t 16 -x pacbio
 
 def main():
     args = get_args()
@@ -21,7 +21,7 @@ def main():
 
     # Alignment
     start_time = time.time()
-    bam = alignment(args.read, args.reference, args.out, sample_name, args.thread)
+    bam = alignment(args.read, args.reference, args.out, sample_name, args.thread, args.presets)
     proc_time = time.time() - start_time
     print("Alignment time:", proc_time)
 
@@ -42,7 +42,7 @@ def main():
     # contig_reads_dir=args.out+"/"+"contig_reads"
     # vcf_parsed=args.out+"/"+sample_name+".vcf.parsed.filtered"
     start_time = time.time()
-    contig_assembly_dir = local_assembly(contig_reads_dir, vcf_parsed, args.out, args.read, args.thread)
+    contig_assembly_dir = local_assembly(contig_reads_dir, vcf_parsed, args.out, args.read, args.thread, args.presets)
     proc_time = time.time() - start_time
     print("Local assembly time:", proc_time)
     
@@ -50,7 +50,7 @@ def main():
     # contig_assembly_dir=args.out+"/"+"contig_assembly"
     # vcf_parsed=args.out+"/"+sample_name+".vcf.parsed.filtered"
     start_time = time.time()
-    flank_fa, flank_bed, family_annotation, te_fa = annotate_contig(contig_assembly_dir, args.library, vcf_parsed, args.out, sample_name, args.thread)
+    flank_fa, flank_bed, family_annotation, te_fa = annotate_contig(contig_assembly_dir, args.library, vcf_parsed, args.out, sample_name, args.thread, args.presets)
     proc_time = time.time() - start_time
     print("Contig annotation time:", proc_time)
 
@@ -60,7 +60,7 @@ def main():
     # flank_fa=args.out+"/"+sample_name+".flank.fa"
     # te_fa=args.out+"/"+sample_name+".te.fa"
     start_time = time.time()
-    find_te(flank_bed, flank_fa, args.reference, family_annotation, te_fa, args.out, sample_name, args.gap, args.overlap)
+    find_te(flank_bed, flank_fa, args.reference, family_annotation, te_fa, args.out, sample_name, args.gap, args.overlap, args.presets)
     proc_time = time.time() - start_time
     print("Flanking alignment time:", proc_time)
 
@@ -73,6 +73,7 @@ def get_args():
     parser.add_argument("-l", "--library", type=str, help="TE consensus sequences in fasta format", required=True)
 
     ## optional ##
+    parser.add_argument("-x", "--presets", type=str, help="parameter presets for different sequencing technologies", required=False)
     parser.add_argument("-o", "--out", type=str, help="directory to output data (default = '.')", required=False)
     parser.add_argument("-t", "--thread", type=int, help="max cpu threads to use (default = '1')", required=False)
     parser.add_argument("-g", "--gap", type=int, help="max gap size for flanking sequence alignment (default = '20')", required=False)
@@ -98,6 +99,9 @@ def get_args():
         print(e)
         sys.exit(1)
 
+    if args.presets is None:
+        args.presets = "pacbio"
+
     # sets up out dir variable
     if args.out is None:
         args.out = "."
@@ -116,7 +120,11 @@ def get_args():
 
     return args
 
-def alignment(read, reference, out, sample_name, thread):
+def alignment(read, reference, out, sample_name, thread, presets):
+    if presets == "ont":
+        presets_nglmr = "ont"
+    else:
+        presets_nglmr = "pacbio"
     tmp_bam=out+"/"+sample_name+"_tmp.bam"
     if os.path.isfile(tmp_bam):
         print ("Raw read alignment exist")
@@ -126,6 +134,7 @@ def alignment(read, reference, out, sample_name, thread):
             subprocess.call(["ngmlr", \
                                     "-r", reference, \
                                     "-q", read, \
+                                    "-x", presets_nglmr, \
                                     "-t", str(thread), \
                                     "--rg-id", sample_name, \
                                     "--rg-sm", sample_name, \
@@ -271,9 +280,14 @@ def sniffle_parse(vcf, out, sample_name, raw_reads, TE_library, thread):
 
     return vcf_parsed_filtered, contig_reads_dir
 
-def local_assembly(contig_reads_dir, vcf, out, raw_reads, thread):
+def local_assembly(contig_reads_dir, vcf, out, raw_reads, thread, presets):
     contig_assembly_dir=out+"/"+"contig_assembly"
     mkdir(contig_assembly_dir)
+
+    if presets == "ont":
+        presets_wtdbg2 = "ont"
+    else:
+        presets_wtdbg2 = "rs"
 
     print ("Assemble contigs...")
     k = 0
@@ -284,13 +298,13 @@ def local_assembly(contig_reads_dir, vcf, out, raw_reads, thread):
             wtdbg2_out = contig_assembly_dir + "/" + contig_name + ".fa"
             contig_reads=contig_reads_dir + "/contig" + str(k)
             k=k+1
-            run_wtdbg2(contig_reads, wtdbg2_out, thread)
+            run_wtdbg2(contig_reads, wtdbg2_out, thread, presets)
     print ("Done\n")
     return(contig_assembly_dir)
 
 def run_wtdbg2(fastq, wtdbg2_out, thread):
     prefix = os.path.splitext(fastq)[0]
-    command = "wtdbg2 -x rs -q -g 30k -t "+str(thread)+" -i "+fastq+" -fo "+prefix
+    command = "wtdbg2 -x "+presets+" -q -g 30k -t "+str(thread)+" -i "+fastq+" -fo "+prefix
     subprocess.call(command, shell = True)
     # subprocess.call(["wtdbg2", "-x", "rs", "-q", "-g", "30k", "-t", str(thread), "-i", fastq, "-fo", prefix])
     contig_layout=prefix+".ctg.lay.gz"
@@ -305,7 +319,12 @@ def run_wtdbg2(fastq, wtdbg2_out, thread):
     #     sys.stderr.write("wtdbg2 failed for "+prefix+" , exiting..."+"\n")
     #     sys.exit(1)
     
-def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread):
+def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets):
+    if presets == "ont":
+        presets_minimap2 = "map-ont"
+    else:
+        presets_minimap2 = "map-pb"
+
     # merge all contigs into a single file
     merge_contigs=out+"/"+sample_name+".contigs.fa"
     contig_list=out+"/"+sample_name+".contigs.list"
@@ -346,7 +365,7 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread):
             subject=asm_dir+"/"+contig_name+".fa"
             if os.path.isfile(subject):
                 with open(seq2contig_out, "a") as output:
-                    subprocess.call(["minimap2", "-cx", "map-pb", "--secondary=no", subject, query], stdout=output)
+                    subprocess.call(["minimap2", "-cx", presets_minimap2, "--secondary=no", subject, query], stdout=output)
             # if sv_len=="999999999":
             #     seq2contig(query, subject, seq2contig_out)
             # else:
@@ -377,7 +396,7 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread):
                     subprocess.call(["samtools", "faidx", merge_contigs, contig_name], stdout=output)
             # map TE library to contig using minimap2 map-pb -p 0.8 -c
             with open(te2contig_out, "a") as output:
-                    subprocess.call(["minimap2", "-cx", "map-pb", contig, TE_library, "-t", str(thread)], stdout=output, stderr=subprocess.DEVNULL)
+                    subprocess.call(["minimap2", "-cx", presets_minimap2, contig, TE_library, "-t", str(thread)], stdout=output, stderr=subprocess.DEVNULL)
             # remove contig file
             os.remove(contig)
     # convert to bed format
@@ -473,12 +492,17 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread):
     
     return flank_fa, flank_bed, te2contig_rm_merge, te_fa
     
-def find_te(flank_bed, flank_seq, ref, family_annotation, te_fa, out, sample_name, gap, overlap):
+def find_te(flank_bed, flank_seq, ref, family_annotation, te_fa, out, sample_name, gap, overlap, presets):
+    if presets == "ont":
+        presets_minimap2 = "map-ont"
+    else:
+        presets_minimap2 = "map-pb"
+
     # minimap2 way
     mm2_out=out+"/"+sample_name+".mm2.paf"
     print ("Align flanking sequence to reference...")
     with open(mm2_out, "w") as output:
-        subprocess.call(["minimap2", "-cx", "map-pb", ref, flank_seq], stdout=output)
+        subprocess.call(["minimap2", "-cx", presets_minimap2, ref, flank_seq], stdout=output)
     print ("Done\n")
 
     # read family and strand annotation into dict
@@ -549,6 +573,14 @@ def find_te(flank_bed, flank_seq, ref, family_annotation, te_fa, out, sample_nam
     with open(te_report_tmp_merge, "w") as output:
         command = "bedtools merge -d 0 -o collapse -c 2,3,4,5,6,7,8,9 -delim \",\" -i " + te_report_tmp_sort
         subprocess.call(command, shell=True, stdout=output)
+
+    # output overlapped/identical entries
+    te_overlap_final = out+"/"+sample_name+".final.overlap"
+    with open(te_report_tmp_merge, "r") as input, open(te_overlap_final, "w") as output:
+        for line in input:
+            entry = line.replace('\n', '').split("\t")
+            if "," in entry[3]:
+                output.write(line+"\n")
     
     te_report_final = out+"/"+sample_name+".final.bed"
     contig_dict = dict()
@@ -578,7 +610,6 @@ def find_te(flank_bed, flank_seq, ref, family_annotation, te_fa, out, sample_nam
             contig_dict[contig_name] = [chr, start, end, family, te_strand]
             out_line = '\t'.join([chr, start, end, family, strand, support_type])
             output.write(out_line+"\n")
-            output2.write(contig_name+"\n")
 
     # generate TE sequence fasta
     final_te_seqs = out+"/"+sample_name+".final.fa"
