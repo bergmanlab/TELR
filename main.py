@@ -608,7 +608,7 @@ def find_te(flank_bed, flank_seq, ref, family_annotation, te_fa, out, sample_nam
                 strand = entry[8]
                 te_strand = entry[10]
             contig_dict[contig_name] = [chr, start, end, family, te_strand]
-            out_line = '\t'.join([chr, start, end, family, strand, support_type])
+            out_line = '\t'.join([chr, start, end, family, support_type, strand])
             output.write(out_line+"\n")
 
     # generate TE sequence fasta
