@@ -298,11 +298,11 @@ def local_assembly(contig_reads_dir, vcf, out, raw_reads, thread, presets):
             wtdbg2_out = contig_assembly_dir + "/" + contig_name + ".fa"
             contig_reads=contig_reads_dir + "/contig" + str(k)
             k=k+1
-            run_wtdbg2(contig_reads, wtdbg2_out, thread, presets)
+            run_wtdbg2(contig_reads, wtdbg2_out, thread, presets_wtdbg2)
     print ("Done\n")
     return(contig_assembly_dir)
 
-def run_wtdbg2(fastq, wtdbg2_out, thread):
+def run_wtdbg2(fastq, wtdbg2_out, thread, presets):
     prefix = os.path.splitext(fastq)[0]
     command = "wtdbg2 -x "+presets+" -q -g 30k -t "+str(thread)+" -i "+fastq+" -fo "+prefix
     subprocess.call(command, shell = True)
