@@ -66,18 +66,21 @@ def main():
 
 def get_args():
     parser = argparse.ArgumentParser(description="Script to detect TEs in long read data")
+    optional = parser._action_groups.pop()
+    required = parser.add_argument_group("required arguments")
 
     ## required ##
-    parser.add_argument("-i", "--read", type=str, help="reads in fasta/fastq format", required=True)
-    parser.add_argument("-r", "--reference", type=str, help="reference genome in fasta format", required=True)
-    parser.add_argument("-l", "--library", type=str, help="TE consensus sequences in fasta format", required=True)
+    required.add_argument("-i", "--read", type=str, help="reads in fasta/fastq format", required=True)
+    required.add_argument("-r", "--reference", type=str, help="reference genome in fasta format", required=True)
+    required.add_argument("-l", "--library", type=str, help="TE consensus sequences in fasta format", required=True)
 
     ## optional ##
-    parser.add_argument("-x", "--presets", type=str, help="parameter presets for different sequencing technologies", required=False)
-    parser.add_argument("-o", "--out", type=str, help="directory to output data (default = '.')", required=False)
-    parser.add_argument("-t", "--thread", type=int, help="max cpu threads to use (default = '1')", required=False)
-    parser.add_argument("-g", "--gap", type=int, help="max gap size for flanking sequence alignment (default = '20')", required=False)
-    parser.add_argument("-p", "--overlap", type=int, help="max overlap size for flanking sequence alignment (default = '20')", required=False)
+    optional.add_argument("-x", "--presets", type=str, help="parameter presets for different sequencing technologies", required=False)
+    optional.add_argument("-o", "--out", type=str, help="directory to output data (default = '.')", required=False)
+    optional.add_argument("-t", "--thread", type=int, help="max cpu threads to use (default = '1')", required=False)
+    optional.add_argument("-g", "--gap", type=int, help="max gap size for flanking sequence alignment (default = '20')", required=False)
+    optional.add_argument("-p", "--overlap", type=int, help="max overlap size for flanking sequence alignment (default = '20')", required=False)
+    parser._action_groups.append(optional)
     args = parser.parse_args()
 
     # checks if in files exist
