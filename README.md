@@ -28,7 +28,7 @@ conda install -y minimap2
 ```
 git clone git@github.com:bergmanlab/TELR.git
 cd TELR
-python3 main.py --help</pre>
+python3 main.py --help
 ```
 
 ## Parameters
@@ -50,7 +50,7 @@ optional arguments:
   -h, --help
       show this help message and exit
   -x PRESETS, --presets PRESETS
-      parameter presets for different sequencing technologies
+      parameter presets for different sequencing technologies (default = 'pacbio')
   -o OUT, --out OUT
       directory to output data (default = '.')
   -t THREAD, --thread THREAD
