@@ -11,6 +11,8 @@ You can use conda to install dependencies and create running environment for TEL
 ```
 conda create -n TELR_env
 conda activate TELR_env
+conda install -y biopython
+conda install -c conda-forge -y pandas
 conda install -y repeatmasker=4.0.7
 conda install -y samtools=1.9
 conda install -y bcftools=1.9
@@ -20,7 +22,7 @@ conda install -y sniffles=1.0.11
 conda install -y wtdbg
 conda install -y seqtk
 conda install -y minimap2
-conda install -c conda-forge -y pandas
+
 ```
 2. Install TELR
 ```
