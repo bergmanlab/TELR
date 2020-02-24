@@ -75,7 +75,7 @@ def get_args():
     required.add_argument("-l", "--library", type=str, help="TE consensus sequences in fasta format", required=True)
 
     ## optional ##
-    optional.add_argument("-x", "--presets", type=str, help="parameter presets for different sequencing technologies", required=False)
+    optional.add_argument("-x", "--presets", type=str, help="parameter presets for different sequencing technologies (default = 'pacbio')", required=False)
     optional.add_argument("-o", "--out", type=str, help="directory to output data (default = '.')", required=False)
     optional.add_argument("-t", "--thread", type=int, help="max cpu threads to use (default = '1')", required=False)
     optional.add_argument("-g", "--gap", type=int, help="max gap size for flanking sequence alignment (default = '20')", required=False)
