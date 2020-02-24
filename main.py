@@ -17,26 +17,27 @@ import re
 
 def main():
     args = get_args()
+    print("CMD: ", ' '.join(sys.argv), "\n")
     sample_name = os.path.splitext(os.path.basename(args.read))[0]
 
     # Alignment
     start_time = time.time()
     bam = alignment(args.read, args.reference, args.out, sample_name, args.thread, args.presets)
     proc_time = time.time() - start_time
-    print("Alignment time:", proc_time)
+    print("Alignment time:", proc_time, "\n")
 
     # SV detection
     start_time = time.time()
     vcf = run_sniffle(bam, args.out, sample_name, args.thread)
     proc_time = time.time() - start_time
-    print("SV detection time:", proc_time)
+    print("SV detection time:", proc_time, "\n")
 
     # Sniffle output parsing
     # vcf = args.out+"/"+sample_name+".vcf"
     start_time = time.time()
     vcf_parsed, contig_reads_dir = sniffle_parse(vcf, args.out, sample_name, args.read, args.library, args.thread)
     proc_time = time.time() - start_time
-    print("VCF parsing time:", proc_time)
+    print("SV parsing time:", proc_time, "\n")
 
     # local assembly on every insertion cluster
     # contig_reads_dir=args.out+"/"+"contig_reads"
@@ -44,7 +45,7 @@ def main():
     start_time = time.time()
     contig_assembly_dir = local_assembly(contig_reads_dir, vcf_parsed, args.out, args.read, args.thread, args.presets)
     proc_time = time.time() - start_time
-    print("Local assembly time:", proc_time)
+    print("Local assembly time:", proc_time, "\n")
     
     # annotate TEs using different method, extract flanking sequence and annotate TE family
     # contig_assembly_dir=args.out+"/"+"contig_assembly"
@@ -52,7 +53,7 @@ def main():
     start_time = time.time()
     flank_fa, flank_bed, family_annotation, te_fa = annotate_contig(contig_assembly_dir, args.library, vcf_parsed, args.out, sample_name, args.thread, args.presets)
     proc_time = time.time() - start_time
-    print("Contig annotation time:", proc_time)
+    print("Contig annotation time:", proc_time, "\n")
 
     # map contig back to the reference
     # family_annotation = args.out+"/"+sample_name+".te2contig_rm.merge.bed"
@@ -62,7 +63,9 @@ def main():
     start_time = time.time()
     find_te(flank_bed, flank_fa, args.reference, family_annotation, te_fa, args.out, sample_name, args.gap, args.overlap, args.presets)
     proc_time = time.time() - start_time
-    print("Flanking alignment time:", proc_time)
+    print("Flanking alignment time:", proc_time, "\n")
+
+    print("TELR finished!")
 
 def get_args():
     parser = argparse.ArgumentParser(description="Script to detect TEs in long read data")
@@ -142,20 +145,17 @@ def alignment(read, reference, out, sample_name, thread, presets):
                                     "--rg-id", sample_name, \
                                     "--rg-sm", sample_name, \
                                     "--rg-lb", "pb", "--no-progress"], stdout=output)
-        print ("Done\n")
+        # print ("Done\n")
         
     sorted_bam=out+"/"+sample_name+"_sort.bam"
     sorted_bam_idx=sorted_bam+".bai"
-    if os.path.isfile(sorted_bam) and os.path.isfile(sorted_bam_idx):
-        print ("Sorted indexed read alignment exist")
-    else:
-        print ("Generating sorted indexed read alignment...")
-        command="samtools sort -@ "+str(thread)+" -o "+sorted_bam+" "+tmp_bam
-        subprocess.call(command, shell=True)
-        command="samtools index -@ "+str(thread)+" "+sorted_bam
-        subprocess.call(command, shell=True)
-        os.remove(tmp_bam)
-        print ("Done\n")
+    print ("Sort and index read alignment...")
+    command="samtools sort -@ "+str(thread)+" -o "+sorted_bam+" "+tmp_bam
+    subprocess.call(command, shell=True)
+    command="samtools index -@ "+str(thread)+" "+sorted_bam
+    subprocess.call(command, shell=True)
+    os.remove(tmp_bam)
+    print ("Done\n")
 
     out_bam = sorted_bam
     if os.path.isfile(out_bam) == False:
@@ -197,15 +197,15 @@ def sniffle_parse(vcf, out, sample_name, raw_reads, TE_library, thread):
     
     # constrct fasta from parsed vcf file
     ins_seqs=out+"/"+sample_name+".ins.fasta"
-    print ("Generating VCF sequences...")
+    # print ("Generating VCF sequences...")
     vcf2fasta(vcf_parsed, ins_seqs)
-    print ("Done\n")
+    # print ("Done\n")
 
     # run RM on the inserted seqeunce
     ins_rm_out=ins_seqs+".out.gff"
     print ("Generating VCF sequences repeatmasker output ...")
     subprocess.call(["RepeatMasker", "-dir", out, "-gff", "-s", "-nolow", "-no_is", "-xsmall", "-e", "ncbi", "-lib", TE_library, "-pa", str(thread), ins_seqs])
-    print ("Done\n")
+    # print ("Done\n")
 
     # extract VCF sequences that contain TEs 
     with open(ins_rm_out, "r") as input:
@@ -243,31 +243,31 @@ def sniffle_parse(vcf, out, sample_name, raw_reads, TE_library, thread):
         subprocess.call(command, stdout=output, shell=True)
 
     # filter raw reads using read list
-    print ("Filter raw reads around TE insertions...")
+    # print ("Filter raw reads around TE insertions...")
     sub_fa=out+"/"+sample_name+".subreads.fa"
-    start_time = time.time()
+    # start_time = time.time()
     command = "seqtk subseq "+raw_reads+" "+ids_unique+" | seqtk seq -a"
     with open(sub_fa, "w") as output:
         subprocess.call(command, stdout=output, shell=True)
-    proc_time = time.time() - start_time
-    print("filter raw read time:", proc_time)
-    print ("Done\n")
+    # proc_time = time.time() - start_time
+    # print("filter raw read time:", proc_time)
+    # print ("Done\n")
 
     # reorder
-    print ("Reorder reads...")
+    # print ("Reorder reads...")
     sub_fa_reorder=out+"/"+sample_name+".subreads.reorder.fa"
-    start_time = time.time()
+    # start_time = time.time()
     extract_reads(sub_fa, ids, sub_fa_reorder)
-    proc_time = time.time() - start_time
-    print("reorder filtered reads time:", proc_time)
-    print ("Done\n")
+    # proc_time = time.time() - start_time
+    # print("reorder filtered reads time:", proc_time)
+    # print ("Done\n")
 
     # separate reads into multiple files, using csplit
-    print ("Split reads by cluster...")
+    # print ("Split reads by cluster...")
     work_dir=os.getcwd()
-    print ("current working dir:"+work_dir)
+    # print ("current working dir:"+work_dir)
     os.chdir(contig_reads_dir)
-    print ("New working dir:"+os.getcwd())
+    # print ("New working dir:"+os.getcwd())
     m = []
     k = 1
     with open(vcf_parsed_filtered,"r") as input:
@@ -285,12 +285,12 @@ def sniffle_parse(vcf, out, sample_name, raw_reads, TE_library, thread):
         index=" ".join(str(i) for i in m)
         command="csplit -s -f contig -n 1 "+sub_fa_reorder+" "+index
         subprocess.call(command, shell=True)
-        print ("Done\n")
+        # print ("Done\n")
 
     os.remove(sub_fa)
     os.remove(sub_fa_reorder)
     os.chdir(work_dir)
-    print ("New working dir:"+os.getcwd())
+    # print ("New working dir:"+os.getcwd())
 
     return vcf_parsed_filtered, contig_reads_dir
 
@@ -320,21 +320,19 @@ def run_wtdbg2(fastq, wtdbg2_out, thread, presets):
     prefix = os.path.splitext(fastq)[0]
     command = "wtdbg2 -x "+presets+" -q -g 30k -t "+str(thread)+" -i "+fastq+" -fo "+prefix
     subprocess.call(command, shell = True)
-    # subprocess.call(["wtdbg2", "-x", "rs", "-q", "-g", "30k", "-t", str(thread), "-i", fastq, "-fo", prefix])
     contig_layout=prefix+".ctg.lay.gz"
     if os.path.isfile(contig_layout) and os.stat(contig_layout).st_size != 0:
         cns_thread = str(min(thread, 4))
-        command = "wtpoa-cns -t "+cns_thread+" -i "+contig_layout+" -fo "+wtdbg2_out
+        command = "wtpoa-cns -q -t "+cns_thread+" -i "+contig_layout+" -fo "+wtdbg2_out
         subprocess.call(command, shell = True)
     else:
-        print("assembly failed for "+fastq+"\n")
-    # subprocess.call(["wtpoa-cns", "-q", "-t", str(thread), "-i", contig_layout, "-fo", wtdbg2_out])
-
-    # if os.path.isfile(wtdbg2_out) == False:
-    #     sys.stderr.write("wtdbg2 failed for "+prefix+" , exiting..."+"\n")
-    #     sys.exit(1)
+        print("assembly failed for "+prefix+"\n")
+    if os.path.isfile(wtdbg2_out) == False:
+        sys.stderr.write("building consensus failed for "+prefix+" , exiting..."+"\n")
+        sys.exit(1)
     
 def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets):
+    print("Generating contig annotation...")
     if presets == "ont":
         presets_minimap2 = "map-ont"
     else:
@@ -358,16 +356,16 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets)
                             output_list.write(contig_name+"\n")
 
     # map sequence to contigs
-    print ("Map VCF sequences to contigs...")
+    # print ("Map VCF sequences to contigs...")
     seq2contig_out=out+"/"+"seq2contig.paf"
     if os.path.isfile(seq2contig_out):
         os.remove(seq2contig_out)
 
     # constrct fasta from parsed vcf file
     ins_seqs=out+"/"+sample_name+".ins.filter.fasta"
-    print ("Generating filtered VCF sequences...")
+    # print ("Generating filtered VCF sequences...")
     vcf2fasta(vcf, ins_seqs)
-    print ("Done\n")
+    # print ("Done\n")
 
     with open(vcf, "r") as input:
         for line in input:
@@ -380,7 +378,7 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets)
             subject=asm_dir+"/"+contig_name+".fa"
             if os.path.isfile(subject):
                 with open(seq2contig_out, "a") as output:
-                    subprocess.call(["minimap2", "-cx", presets_minimap2, "--secondary=no", subject, query], stdout=output)
+                    subprocess.call(["minimap2", "-cx", presets_minimap2, "--secondary=no", "-v", "0", subject, query], stdout=output)
             # if sv_len=="999999999":
             #     seq2contig(query, subject, seq2contig_out)
             # else:
@@ -411,7 +409,7 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets)
                     subprocess.call(["samtools", "faidx", merge_contigs, contig_name], stdout=output)
             # map TE library to contig using minimap2 map-pb -p 0.8 -c
             with open(te2contig_out, "a") as output:
-                    subprocess.call(["minimap2", "-cx", presets_minimap2, contig, TE_library, "-t", str(thread)], stdout=output)
+                    subprocess.call(["minimap2", "-cx", presets_minimap2, contig, TE_library, "-v", "0", "-t", str(thread)], stdout=output)
             # remove contig file
             os.remove(contig)
     # convert to bed format
@@ -426,10 +424,10 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets)
     # Use VCF sequence alignment to filter minimap2 TE-contig alignment
     te2contig_filter_raw=out+"/"+sample_name+".te2contig_filter.tsv"
     command="bedtools intersect -a "+te2contig_bed+" -b "+seq2contig_bed+" -wao"
-    print ("Filter minTE-contigimap2 alignment...")
+    # print ("Filter TE-contig alignment...")
     with open(te2contig_filter_raw, "w") as output:
         subprocess.call(command, shell = True, stdout=output)
-    print ("Done")
+    # print ("Done")
 
     # filter and merge
     ## get rid of -1 and make it into bed format
@@ -487,7 +485,7 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets)
 
     ## parse and merge
     te2contig_rm=out+"/"+sample_name+".te2contig_rm.bed"
-    print ("Repeatmask TE sequences repeatmasker...")
+    # print ("Repeatmask TE sequences...")
     with open(te_rm_out, "r") as input, open(te2contig_rm, "w") as output:
         for line in input:
             if "##" not in line:
@@ -501,7 +499,7 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets)
                 score = entry[5]
                 out_line="\t".join([contig_name, start, end, family, score, strand])
                 output.write(out_line+"\n")
-    print("Done\n")
+    # print("Done\n")
 
     te2contig_rm_merge=out+"/"+sample_name+".te2contig_rm.merge.bed"
     command="bedtools merge -c 4,6 -o distinct -delim \"|\" -i "+te2contig_rm
@@ -520,7 +518,7 @@ def find_te(flank_bed, flank_seq, ref, family_annotation, te_fa, out, sample_nam
     mm2_out=out+"/"+sample_name+".mm2.paf"
     print ("Align flanking sequence to reference...")
     with open(mm2_out, "w") as output:
-        subprocess.call(["minimap2", "-cx", presets_minimap2, ref, flank_seq], stdout=output)
+        subprocess.call(["minimap2", "-cx", presets_minimap2, "-v", "0", ref, flank_seq], stdout=output)
     print ("Done\n")
 
     # read family and strand annotation into dict
@@ -713,7 +711,6 @@ def vcf2fasta(vcf, out):
             entry = line.replace('\n', '').split("\t")
             coord='_'.join([entry[0],entry[1],entry[2]])
             output.write(">"+coord+"\n")
-            print(entry[7])
             output.write(entry[7]+"\n")
 
 def unique(list1): 
@@ -760,8 +757,8 @@ def mkdir(dir):
         os.mkdir(dir)
     except OSError:
         print ("Creation of the directory %s failed" % dir)
-    else:
-        print ("Successfully created the directory %s " % dir)
+    # else:
+    #     print ("Successfully created the directory %s " % dir)
 
 def get_flank_seqs(contig_len, bed, contigs, flank_bed, flank_len=500):
     # get flanking coordinates
