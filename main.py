@@ -190,7 +190,9 @@ def sniffle_parse(vcf, out, sample_name, raw_reads, TE_library, thread):
     with open(vcf_parsed, "w") as output:
         subprocess.call(command, stdout=output, shell=True)
     # remove redundancy in parsed vcf
-    remove_vcf_redundancy(vcf_parsed)
+    vcf_unique=out+"/"+sample_name+".vcf.reduced"
+    remove_vcf_redundancy(vcf_parsed, vcf_unique)
+    vcf_parsed=vcf_unique
     print ("Done\n")
     
     # constrct fasta from parsed vcf file
@@ -262,8 +264,10 @@ def sniffle_parse(vcf, out, sample_name, raw_reads, TE_library, thread):
 
     # separate reads into multiple files, using csplit
     print ("Split reads by cluster...")
+    work_dir=os.getcwd()
+    print ("current working dir:"+work_dir)
     os.chdir(contig_reads_dir)
-    print(os.getcwd())
+    print ("New working dir:"+os.getcwd())
     m = []
     k = 1
     with open(vcf_parsed_filtered,"r") as input:
@@ -272,14 +276,21 @@ def sniffle_parse(vcf, out, sample_name, raw_reads, TE_library, thread):
             read_list = entry[8].split(",")
             k = k + 2*(len(read_list))
             m.append(k)
-    m = m[:-1]
-    index=" ".join(str(i) for i in m)
-    command="csplit -s -f contig -n 1 "+sub_fa_reorder+" "+index
-    subprocess.call(command, shell=True)
-    print ("Done\n")
+    if len(m) == 1:
+        subprocess.call(["cp", sub_fa_reorder, "contig0"])
+    elif len(m) == 0:
+        print ("No insertion detected, exiting...")
+    else:
+        m = m[:-1]
+        index=" ".join(str(i) for i in m)
+        command="csplit -s -f contig -n 1 "+sub_fa_reorder+" "+index
+        subprocess.call(command, shell=True)
+        print ("Done\n")
 
     os.remove(sub_fa)
     os.remove(sub_fa_reorder)
+    os.chdir(work_dir)
+    print ("New working dir:"+os.getcwd())
 
     return vcf_parsed_filtered, contig_reads_dir
 
@@ -312,7 +323,8 @@ def run_wtdbg2(fastq, wtdbg2_out, thread, presets):
     # subprocess.call(["wtdbg2", "-x", "rs", "-q", "-g", "30k", "-t", str(thread), "-i", fastq, "-fo", prefix])
     contig_layout=prefix+".ctg.lay.gz"
     if os.path.isfile(contig_layout) and os.stat(contig_layout).st_size != 0:
-        command = "wtpoa-cns -t "+"4"+" -i "+contig_layout+" -fo "+wtdbg2_out
+        cns_thread = str(min(thread, 4))
+        command = "wtpoa-cns -t "+cns_thread+" -i "+contig_layout+" -fo "+wtdbg2_out
         subprocess.call(command, shell = True)
     else:
         print("assembly failed for "+fastq+"\n")
@@ -399,7 +411,7 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets)
                     subprocess.call(["samtools", "faidx", merge_contigs, contig_name], stdout=output)
             # map TE library to contig using minimap2 map-pb -p 0.8 -c
             with open(te2contig_out, "a") as output:
-                    subprocess.call(["minimap2", "-cx", presets_minimap2, contig, TE_library, "-t", str(thread)], stdout=output, stderr=subprocess.DEVNULL)
+                    subprocess.call(["minimap2", "-cx", presets_minimap2, contig, TE_library, "-t", str(thread)], stdout=output)
             # remove contig file
             os.remove(contig)
     # convert to bed format
@@ -480,11 +492,14 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets)
         for line in input:
             if "##" not in line:
                 entry = line.replace('\n', '').split("\t")
-                contigs = entry[0].replace(':', '-').split("-")
+                contig_name = entry[0].rsplit(':', 1)[0]
+                start = entry[0].rsplit(':', 1)[1].split("-")[0]
+                end = entry[0].rsplit(':', 1)[1].split("-")[1]
+                # contigs = entry[0].replace(':', '-').split("-")
                 family = re.sub('Target \"Motif:|\".*', '', entry[8])
                 strand = entry[6]
                 score = entry[5]
-                out_line="\t".join([contigs[0], contigs[1], contigs[2], family, score, strand])
+                out_line="\t".join([contig_name, start, end, family, score, strand])
                 output.write(out_line+"\n")
     print("Done\n")
 
@@ -524,7 +539,7 @@ def find_te(flank_bed, flank_seq, ref, family_annotation, te_fa, out, sample_nam
     te_len_dict = dict()
     with open(te_fa, "r") as input:
         for record in SeqIO.parse(input, "fasta"):
-            contig_name = re.sub('>|:.*', '', record.id)
+            contig_name = record.id.rsplit(':', 1)[0]
             te_len_dict[contig_name] = len(record.seq)
     
     # read flanking info into dict
@@ -541,7 +556,8 @@ def find_te(flank_bed, flank_seq, ref, family_annotation, te_fa, out, sample_nam
     print ("Generating final TE annotation...")
     header = ["flank_name", "flank_len", "flank_start", "flank_end", "flank_strand", "chr", "start", "end"]
     df = pd.read_csv(mm2_out, delimiter="\t", usecols=[0,1,2,3,4,5,7,8], names=header)
-    df['contig_name'] = df.flank_name.str.replace(':.*', '', regex=True)
+    # df['contig_name'] = df.flank_name.str.replace(':.*', '', regex=True)
+    df['contig_name'] = [x.rsplit(":", 1)[0] for x in df["flank_name"]]
     df['flank_end'] = df['flank_name'].map(flank_dict).replace('_.*', '', regex=True)
     # remove multi hit
     df.drop_duplicates(subset='flank_name', keep=False, inplace = True)
@@ -620,7 +636,7 @@ def find_te(flank_bed, flank_seq, ref, family_annotation, te_fa, out, sample_nam
         os.remove(final_te_seqs)
     with open(te_fa, "r") as input, open(final_te_seqs, "a") as output:
         for record in SeqIO.parse(input, "fasta"):
-            contig_name = (record.id).split(":")[0]
+            contig_name = record.id.rsplit(':', 1)[0]
             if contig_name in contig_dict:
                 chr = contig_dict[contig_name][0]
                 start = contig_dict[contig_name][1]
@@ -697,6 +713,7 @@ def vcf2fasta(vcf, out):
             entry = line.replace('\n', '').split("\t")
             coord='_'.join([entry[0],entry[1],entry[2]])
             output.write(">"+coord+"\n")
+            print(entry[7])
             output.write(entry[7]+"\n")
 
 def unique(list1): 
@@ -718,11 +735,11 @@ def id_merge(strings):
     id_string=','.join(unique(ids))
     return(id_string)
 
-def remove_vcf_redundancy(vcf):
+def remove_vcf_redundancy(vcf_in, vcf_out):
     header = ["chr", "start", "end", "length", "coverage", "AF", "ID", "seq", "ids", "filter"]
-    df = pd.read_csv(vcf, delimiter="\t", names=header)
+    df = pd.read_csv(vcf_in, delimiter="\t", names=header)
     df2 = df.groupby(['chr', 'start', 'end']).agg({'length': 'first', 'coverage': 'sum', 'AF': af_sum, 'ID': 'first', 'seq': 'first', 'ids': id_merge, 'filter': 'first'}).reset_index()
-    df2.to_csv(vcf, sep='\t', header=False, index=False)
+    df2.to_csv(vcf_out, sep='\t', header=False, index=False)
 
 def filter_vcf(vcf, dict, out, cov=0):
     with open(vcf, "r") as input, open(out, "w") as output:
