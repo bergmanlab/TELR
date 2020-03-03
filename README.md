@@ -22,6 +22,7 @@ conda install -y sniffles=1.0.11
 conda install -y wtdbg
 conda install -y seqtk
 conda install -y minimap2
+conda install -y svim=1.3
 ```
 2. Install TELR
 ```
@@ -56,12 +57,14 @@ optional arguments:
       show this help message and exit
   -x PRESETS, --presets PRESETS
       parameter presets for different sequencing technologies (default = 'pacbio')
+  -p, --polish
+      if provided then do contig polishing (default = False)
   -o OUT, --out OUT
       directory to output data (default = '.')
   -t THREAD, --thread THREAD
       max cpu threads to use (default = '1')
   -g GAP, --gap GAP
       max gap size for flanking sequence alignment (default = '20')
-  -p OVERLAP, --overlap OVERLAP
+  -v OVERLAP, --overlap OVERLAP
       max overlap size for flanking sequence alignment (default = '20')
 ```
