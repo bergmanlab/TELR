@@ -10,6 +10,7 @@ from Bio import SeqIO
 import pandas as pd
 import numpy as np
 import re
+from multiprocessing import Process, Pool
 
 # import utility as utl
 
@@ -302,6 +303,7 @@ def local_assembly(contig_reads_dir, vcf, out, raw_reads, thread, presets, polis
 
     print ("Assemble contigs...")
     k = 0
+    asm_pa_list=[]
     with open(vcf, "r") as input:
         for line in input:
             entry = line.replace('\n', '').split("\t")
@@ -310,12 +312,27 @@ def local_assembly(contig_reads_dir, vcf, out, raw_reads, thread, presets, polis
             # rename contig reads
             contig_reads_rename=contig_reads_dir + "/" + contig_name + ".reads.fa"
             os.rename(contig_reads, contig_reads_rename)
-            run_wtdbg2(contig_reads_rename, contig_assembly_dir, contig_name, thread, presets_wtdbg2, presets_minimap2, polish)
+            asm_pa = [contig_reads_rename, contig_assembly_dir, contig_name, thread=1, presets_wtdbg2, presets_minimap2, polish]
+            asm_pa_list.append(asm_pa)
+            # run_wtdbg2(contig_reads_rename, contig_assembly_dir, contig_name, thread, presets_wtdbg2, presets_minimap2, polish)
             k = k + 1
+    # run assembly in parallel
+    pool = Pool(processes=thread)
+    pool.map(run_wtdbg2, asm_pa_list)
+    pool.close()
+    pool.join()
     print ("Done\n")
     return(contig_assembly_dir)
 
-def run_wtdbg2(reads, asm_dir, contig_name, thread, presets_wtdbg2, presets_minimap2, polish):
+def run_wtdbg2(args):
+    reads = args[0]
+    asm_dir = args[1]
+    contig_name = args[2]
+    thread = args[3]
+    presets_wtdbg2 = args[4]
+    presets_minimap2 = args[5]
+    polish = args[6]
+
     prefix = reads.replace('.reads.fa', '')
     command = "wtdbg2 -x "+presets_wtdbg2+" -q -g 30k -t "+str(thread)+" -i "+reads+" -fo "+prefix
     subprocess.call(command, shell = True)
@@ -338,7 +355,7 @@ def run_wtdbg2(reads, asm_dir, contig_name, thread, presets_wtdbg2, presets_mini
             subprocess.call(command, shell = True)
         else:
             # move raw consensus to asm dir
-            os.name(consensus, consensus_final)
+            os.rename(consensus, consensus_final)
     else:
         print("assembly failed for "+prefix+"\n")
     if os.path.isfile(consensus_final) == False:
