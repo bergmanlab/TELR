@@ -28,7 +28,7 @@ def main():
 
     # SV detection
     start_time = time.time()
-    vcf = run_sniffle(bam, args.out, sample_name, args.thread)
+    vcf = run_sniffle(bam, args.reference, args.out, sample_name, args.thread)
     proc_time = time.time() - start_time
     print("SV detection time:", proc_time, "\n")
 
@@ -43,7 +43,7 @@ def main():
     # contig_reads_dir=args.out+"/"+"contig_reads"
     # vcf_parsed=args.out+"/"+sample_name+".vcf.parsed.filtered"
     start_time = time.time()
-    contig_assembly_dir = local_assembly(contig_reads_dir, vcf_parsed, args.out, args.read, args.thread, args.presets)
+    contig_assembly_dir = local_assembly(contig_reads_dir, vcf_parsed, args.out, args.read, args.thread, args.presets, args.polish)
     proc_time = time.time() - start_time
     print("Local assembly time:", proc_time, "\n")
     
@@ -79,10 +79,11 @@ def get_args():
 
     ## optional ##
     optional.add_argument("-x", "--presets", type=str, help="parameter presets for different sequencing technologies (default = 'pacbio')", required=False)
+    optional.add_argument("-p", "--polish", action='store_true', help="directory to output data (default = False)", required=False)
     optional.add_argument("-o", "--out", type=str, help="directory to output data (default = '.')", required=False)
     optional.add_argument("-t", "--thread", type=int, help="max cpu threads to use (default = '1')", required=False)
     optional.add_argument("-g", "--gap", type=int, help="max gap size for flanking sequence alignment (default = '20')", required=False)
-    optional.add_argument("-p", "--overlap", type=int, help="max overlap size for flanking sequence alignment (default = '20')", required=False)
+    optional.add_argument("-v", "--overlap", type=int, help="max overlap size for flanking sequence alignment (default = '20')", required=False)
     parser._action_groups.append(optional)
     args = parser.parse_args()
 
@@ -164,17 +165,18 @@ def alignment(read, reference, out, sample_name, thread, presets):
     else:
         return(out_bam)
 
-def run_sniffle(bam, out, sample_name, thread):
-    vcf=out+"/"+sample_name+".vcf"
-    if os.path.isfile(vcf):
-        print ("Sniffle output exist")
+def run_sniffle(bam, reference, out, sample_name, thread, svim = False):
+    print ("Generating SV output...")
+    if svim:
+        subprocess.call(["svim", "alignment", "--insertion_sequences", "--read_names", "--sample", sample_name, "--duplications_as_insertions", out, bam, reference])
+        vcf = out+"/"+"variants.vcf"
     else:
-        print ("Generating sniffle output...")
+        vcf = out+"/"+sample_name+".vcf"
         command="sniffles -n -1 --genotype --report_seq --report_BND --threads "+str(thread)+" -m "+bam+" -v "+vcf
         subprocess.call(command, shell=True)
-        print ("Done\n")
+    print ("Done\n")
     if os.path.isfile(vcf) == False:
-            sys.stderr.write("Sniffles failed...exiting....\n")
+            sys.stderr.write("SV detection failed...exiting....\n")
             sys.exit(1)
     else:
         return(vcf)
@@ -189,21 +191,21 @@ def sniffle_parse(vcf, out, sample_name, raw_reads, TE_library, thread):
     command="bcftools query -i \'SVTYPE=\"INS\" & ALT!=\"<INS>\"\' -f "+query_str+" "+vcf
     with open(vcf_parsed, "w") as output:
         subprocess.call(command, stdout=output, shell=True)
+    #TODO check whether vcf file contains insertions, quit if 0
     # remove redundancy in parsed vcf
     vcf_unique=out+"/"+sample_name+".vcf.reduced"
     remove_vcf_redundancy(vcf_parsed, vcf_unique)
+    os.remove(vcf_parsed)
     vcf_parsed=vcf_unique
     print ("Done\n")
     
     # constrct fasta from parsed vcf file
     ins_seqs=out+"/"+sample_name+".ins.fasta"
-    # print ("Generating VCF sequences...")
     vcf2fasta(vcf_parsed, ins_seqs)
-    # print ("Done\n")
 
     # run RM on the inserted seqeunce
     ins_rm_out=ins_seqs+".out.gff"
-    print ("Generating VCF sequences repeatmasker output ...")
+    print ("Repeatmask VCF sequences...")
     subprocess.call(["RepeatMasker", "-dir", out, "-gff", "-s", "-nolow", "-no_is", "-xsmall", "-e", "ncbi", "-lib", TE_library, "-pa", str(thread), ins_seqs])
     # print ("Done\n")
 
@@ -222,6 +224,8 @@ def sniffle_parse(vcf, out, sample_name, raw_reads, TE_library, thread):
     # filter parsed VCF using TE-sequence list and 
     vcf_parsed_filtered=out+"/"+sample_name+".vcf.parsed.filtered"
     filter_vcf(vcf_parsed, te_seqs_dict, vcf_parsed_filtered)
+    #TODO check how many TEs in filtered set, quit if 0
+    os.remove(vcf_parsed)
 
     # constrct fasta from parsed filtered vcf file
     ins_te_seqs=out+"/"+sample_name+".ins.te.fasta"
@@ -243,27 +247,16 @@ def sniffle_parse(vcf, out, sample_name, raw_reads, TE_library, thread):
         subprocess.call(command, stdout=output, shell=True)
 
     # filter raw reads using read list
-    # print ("Filter raw reads around TE insertions...")
     sub_fa=out+"/"+sample_name+".subreads.fa"
-    # start_time = time.time()
     command = "seqtk subseq "+raw_reads+" "+ids_unique+" | seqtk seq -a"
     with open(sub_fa, "w") as output:
         subprocess.call(command, stdout=output, shell=True)
-    # proc_time = time.time() - start_time
-    # print("filter raw read time:", proc_time)
-    # print ("Done\n")
 
-    # reorder
-    # print ("Reorder reads...")
+    # reorder reads
     sub_fa_reorder=out+"/"+sample_name+".subreads.reorder.fa"
-    # start_time = time.time()
     extract_reads(sub_fa, ids, sub_fa_reorder)
-    # proc_time = time.time() - start_time
-    # print("reorder filtered reads time:", proc_time)
-    # print ("Done\n")
 
     # separate reads into multiple files, using csplit
-    # print ("Split reads by cluster...")
     work_dir=os.getcwd()
     # print ("current working dir:"+work_dir)
     os.chdir(contig_reads_dir)
@@ -287,6 +280,8 @@ def sniffle_parse(vcf, out, sample_name, raw_reads, TE_library, thread):
         subprocess.call(command, shell=True)
         # print ("Done\n")
 
+    os.remove(ids)
+    os.remove(ids_unique)
     os.remove(sub_fa)
     os.remove(sub_fa_reorder)
     os.chdir(work_dir)
@@ -294,14 +289,16 @@ def sniffle_parse(vcf, out, sample_name, raw_reads, TE_library, thread):
 
     return vcf_parsed_filtered, contig_reads_dir
 
-def local_assembly(contig_reads_dir, vcf, out, raw_reads, thread, presets):
+def local_assembly(contig_reads_dir, vcf, out, raw_reads, thread, presets, polish):
     contig_assembly_dir=out+"/"+"contig_assembly"
     mkdir(contig_assembly_dir)
 
     if presets == "ont":
         presets_wtdbg2 = "ont"
+        presets_minimap2 = "map-ont"
     else:
         presets_wtdbg2 = "rs"
+        presets_minimap2 = "map-pb"
 
     print ("Assemble contigs...")
     k = 0
@@ -309,27 +306,43 @@ def local_assembly(contig_reads_dir, vcf, out, raw_reads, thread, presets):
         for line in input:
             entry = line.replace('\n', '').split("\t")
             contig_name = "_".join([entry[0], entry[1], entry[2]])
-            wtdbg2_out = contig_assembly_dir + "/" + contig_name + ".fa"
             contig_reads=contig_reads_dir + "/contig" + str(k)
-            k=k+1
-            run_wtdbg2(contig_reads, wtdbg2_out, thread, presets_wtdbg2)
+            # rename contig reads
+            contig_reads_rename=contig_reads_dir + "/" + contig_name + ".reads.fa"
+            os.rename(contig_reads, contig_reads_rename)
+            run_wtdbg2(contig_reads_rename, contig_assembly_dir, contig_name, thread, presets_wtdbg2, presets_minimap2, polish)
+            k = k + 1
     print ("Done\n")
     return(contig_assembly_dir)
 
-def run_wtdbg2(fastq, wtdbg2_out, thread, presets):
-    prefix = os.path.splitext(fastq)[0]
-    command = "wtdbg2 -x "+presets+" -q -g 30k -t "+str(thread)+" -i "+fastq+" -fo "+prefix
+def run_wtdbg2(reads, asm_dir, contig_name, thread, presets_wtdbg2, presets_minimap2, polish):
+    prefix = reads.replace('.reads.fa', '')
+    command = "wtdbg2 -x "+presets_wtdbg2+" -q -g 30k -t "+str(thread)+" -i "+reads+" -fo "+prefix
     subprocess.call(command, shell = True)
     contig_layout=prefix+".ctg.lay.gz"
     if os.path.isfile(contig_layout) and os.stat(contig_layout).st_size != 0:
+        # derive consensus
         cns_thread = str(min(thread, 4))
-        command = "wtpoa-cns -q -t "+cns_thread+" -i "+contig_layout+" -fo "+wtdbg2_out
+        contig_raw=prefix+".ctg.lay.gz"
+        consensus = prefix + ".raw.fa"
+        command = "wtpoa-cns -q -t "+cns_thread+" -i "+contig_layout+" -fo "+consensus
         subprocess.call(command, shell = True)
+        consensus_final = asm_dir + "/" + contig_name + ".cns.fa"
+        if polish:
+            # polish consensus
+            polish_thread = str(min(thread, 4))
+            bam = asm_dir + "/" + contig_name + ".bam"
+            command = "minimap2 -t " + polish_thread + " -ax " + presets_minimap2 + " -r2k " + consensus + " " + reads + " | samtools sort -@" + polish_thread + " > " + bam
+            subprocess.call(command, shell = True)
+            command = "samtools view -F0x900 " + bam + " | wtpoa-cns -t " + polish_thread + " -d " + consensus + " -i - -fo " + consensus_final
+            subprocess.call(command, shell = True)
+        else:
+            # move raw consensus to asm dir
+            os.name(consensus, consensus_final)
     else:
         print("assembly failed for "+prefix+"\n")
-    if os.path.isfile(wtdbg2_out) == False:
-        sys.stderr.write("building consensus failed for "+prefix+" , exiting..."+"\n")
-        sys.exit(1)
+    if os.path.isfile(consensus_final) == False:
+        print("building consensus failed for "+prefix+"\n")
     
 def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets):
     print("Generating contig annotation...")
@@ -344,8 +357,8 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets)
     # print ("Generate merged contig file...")
     with open(merge_contigs, "w") as output_contigs, open(contig_list, "w") as output_list:
         for file in os.listdir(asm_dir):
-            if ".fa" in file and os.stat(asm_dir+"/"+file).st_size > 0:
-                contig_name=os.path.splitext(file)[0]
+            if ".cns.fa" in file and os.stat(asm_dir+"/"+file).st_size > 0:
+                contig_name = file.replace('.cns.fa', '')
                 with open(asm_dir+"/"+file, "rU") as handle:
                     records = SeqIO.parse(handle, "fasta")
                     for record in records:
@@ -375,14 +388,10 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets)
             sv_len=entry[3]
             query=out+"/"+contig_name+".seq.fa"
             create_fa(contig_name, vcf_seq, query)
-            subject=asm_dir+"/"+contig_name+".fa"
+            subject=asm_dir+"/"+contig_name+".cns.fa"
             if os.path.isfile(subject):
                 with open(seq2contig_out, "a") as output:
                     subprocess.call(["minimap2", "-cx", presets_minimap2, "--secondary=no", "-v", "0", subject, query], stdout=output)
-            # if sv_len=="999999999":
-            #     seq2contig(query, subject, seq2contig_out)
-            # else:
-            #     seq2contig(query, subject, seq2contig_out)
             os.remove(query)
     seq2contig_bed=out+"/"+"seq2contig.bed"
     ## covert to bed format
