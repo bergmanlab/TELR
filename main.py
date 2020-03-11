@@ -80,7 +80,7 @@ def get_args():
 
     ## optional ##
     optional.add_argument("-x", "--presets", type=str, help="parameter presets for different sequencing technologies (default = 'pacbio')", required=False)
-    optional.add_argument("-p", "--polish", action='store_true', help="if provided then do contig polishing (default = False)", required=False)
+    optional.add_argument("-p", "--polish", type=int, help="number of contig polishing (default = 1)", required=False)
     optional.add_argument("-o", "--out", type=str, help="directory to output data (default = '.')", required=False)
     optional.add_argument("-t", "--thread", type=int, help="max cpu threads to use (default = '1')", required=False)
     optional.add_argument("-g", "--gap", type=int, help="max gap size for flanking sequence alignment (default = '20')", required=False)
@@ -205,10 +205,10 @@ def sniffle_parse(vcf, out, sample_name, raw_reads, TE_library, thread):
     vcf2fasta(vcf_parsed, ins_seqs)
 
     # run RM on the inserted seqeunce
-    ins_rm_out=ins_seqs+".out.gff"
     print ("Repeatmask VCF sequences...")
     subprocess.call(["RepeatMasker", "-dir", out, "-gff", "-s", "-nolow", "-no_is", "-xsmall", "-e", "ncbi", "-lib", TE_library, "-pa", str(thread), ins_seqs])
-    # print ("Done\n")
+    print ("Done\n")
+    ins_rm_out=ins_seqs+".out.gff"
 
     # extract VCF sequences that contain TEs 
     with open(ins_rm_out, "r") as input:
@@ -312,9 +312,9 @@ def local_assembly(contig_reads_dir, vcf, out, raw_reads, thread, presets, polis
             # rename contig reads
             contig_reads_rename=contig_reads_dir + "/" + contig_name + ".reads.fa"
             os.rename(contig_reads, contig_reads_rename)
-            asm_pa = [contig_reads_rename, contig_assembly_dir, contig_name, thread=1, presets_wtdbg2, presets_minimap2, polish]
+            thread_asm=1
+            asm_pa = [contig_reads_rename, contig_assembly_dir, contig_name, thread_asm, presets_wtdbg2, presets_minimap2, polish]
             asm_pa_list.append(asm_pa)
-            # run_wtdbg2(contig_reads_rename, contig_assembly_dir, contig_name, thread, presets_wtdbg2, presets_minimap2, polish)
             k = k + 1
     # run assembly in parallel
     pool = Pool(processes=thread)
@@ -345,21 +345,35 @@ def run_wtdbg2(args):
         command = "wtpoa-cns -q -t "+cns_thread+" -i "+contig_layout+" -fo "+consensus
         subprocess.call(command, shell = True)
         consensus_final = asm_dir + "/" + contig_name + ".cns.fa"
-        if polish:
-            # polish consensus
-            polish_thread = str(min(thread, 4))
-            bam = asm_dir + "/" + contig_name + ".bam"
-            command = "minimap2 -t " + polish_thread + " -ax " + presets_minimap2 + " -r2k " + consensus + " " + reads + " | samtools sort -@" + polish_thread + " > " + bam
-            subprocess.call(command, shell = True)
-            command = "samtools view -F0x900 " + bam + " | wtpoa-cns -t " + polish_thread + " -d " + consensus + " -i - -fo " + consensus_final
-            subprocess.call(command, shell = True)
+        if polish > 0:
+            polish_contig(prefix, reads, consensus, consensus_final, thread, presets_minimap2, polish)
         else:
             # move raw consensus to asm dir
             os.rename(consensus, consensus_final)
     else:
         print("assembly failed for "+prefix+"\n")
-    if os.path.isfile(consensus_final) == False:
-        print("building consensus failed for "+prefix+"\n")
+
+
+def polish_contig(prefix, reads, raw_contig, polished_contig, thread, preset, round):
+    # polish consensus
+    polish_thread = str(min(thread, 4))
+    bam = raw_contig + ".bam"
+    k = 0
+    while True:
+        tmp_contig = raw_contig + ".tmp"
+        command = "minimap2 -t " + polish_thread + " -ax " + preset + " -r2k " + raw_contig + " " + reads + " | samtools sort -@" + polish_thread + " > " + bam
+        subprocess.call(command, shell = True)
+        command = "samtools view -F0x900 " + bam + " | wtpoa-cns -t " + polish_thread + " -d " + raw_contig + " -i - -fo " + tmp_contig
+        subprocess.call(command, shell = True)
+        raw_contig = tmp_contig
+        k = k + 1
+        print(k)
+        if k >= round:
+            break
+    if os.path.isfile(tmp_contig) and os.stat(tmp_contig).st_size != 0:
+        os.rename(tmp_contig, polished_contig)
+    else:
+        print("polishing failed for "+prefix+"\n")
     
 def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets):
     print("Generating contig annotation...")
@@ -405,11 +419,15 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets)
             sv_len=entry[3]
             query=out+"/"+contig_name+".seq.fa"
             create_fa(contig_name, vcf_seq, query)
-            subject=asm_dir+"/"+contig_name+".cns.fa"
+            subject = out+"/"+contig_name+".fa"
+            with open(subject, "w") as output:
+                    subprocess.call(["samtools", "faidx", merge_contigs, contig_name], stdout=output)
+            # subject=asm_dir+"/"+contig_name+".cns.fa"
             if os.path.isfile(subject):
                 with open(seq2contig_out, "a") as output:
                     subprocess.call(["minimap2", "-cx", presets_minimap2, "--secondary=no", "-v", "0", subject, query], stdout=output)
             os.remove(query)
+            os.remove(subject)
     seq2contig_bed=out+"/"+"seq2contig.bed"
     ## covert to bed format
     with open(seq2contig_out, "r") as input, open(seq2contig_bed, "w") as output:
@@ -626,8 +644,9 @@ def find_te(flank_bed, flank_seq, ref, family_annotation, te_fa, out, sample_nam
                 output.write(line+"\n")
     
     te_report_final = out+"/"+sample_name+".final.bed"
+    te_report_more = out+"/"+sample_name+".final.more.tsv"
     contig_dict = dict()
-    with open(te_report_tmp_merge, "r") as input, open(te_report_final, "w") as output:
+    with open(te_report_tmp_merge, "r") as input, open(te_report_final, "w") as output, open(te_report_more, "w") as more:
         for line in input:
             entry = line.replace('\n', '').split("\t")
             chr = entry[0]
@@ -653,11 +672,13 @@ def find_te(flank_bed, flank_seq, ref, family_annotation, te_fa, out, sample_nam
             contig_dict[contig_name] = [chr, start, end, family, te_strand]
             out_line = '\t'.join([chr, start, end, family, support_type, strand])
             output.write(out_line+"\n")
-
+            out_line = '\t'.join([chr, start, end, family, contig_name])
+            more.write(out_line+"\n")
     # generate TE sequence fasta
     final_te_seqs = out+"/"+sample_name+".final.fa"
     if os.path.isfile(final_te_seqs):
         os.remove(final_te_seqs)
+
     with open(te_fa, "r") as input, open(final_te_seqs, "a") as output:
         for record in SeqIO.parse(input, "fasta"):
             contig_name = record.id.rsplit(':', 1)[0]
