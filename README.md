@@ -58,7 +58,7 @@ optional arguments:
   -x PRESETS, --presets PRESETS
       parameter presets for different sequencing technologies (default = 'pacbio')
   -p, --polish
-      if provided then do contig polishing (default = False)
+      provide rounds of contig polishing (default = 1)
   -o OUT, --out OUT
       directory to output data (default = '.')
   -t THREAD, --thread THREAD

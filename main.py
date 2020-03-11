@@ -80,7 +80,7 @@ def get_args():
 
     ## optional ##
     optional.add_argument("-x", "--presets", type=str, help="parameter presets for different sequencing technologies (default = 'pacbio')", required=False)
-    optional.add_argument("-p", "--polish", type=int, help="number of contig polishing (default = 1)", required=False)
+    optional.add_argument("-p", "--polish", type=int, help="rounds of contig polishing (default = 1)", required=False)
     optional.add_argument("-o", "--out", type=str, help="directory to output data (default = '.')", required=False)
     optional.add_argument("-t", "--thread", type=int, help="max cpu threads to use (default = '1')", required=False)
     optional.add_argument("-g", "--gap", type=int, help="max gap size for flanking sequence alignment (default = '20')", required=False)
@@ -119,6 +119,9 @@ def get_args():
 
     if args.thread is None:
         args.thread = 1
+
+    if args.polish is None:
+        args.polish = 1
     
     if args.gap is None:
         args.gap = 20
