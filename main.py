@@ -370,7 +370,6 @@ def polish_contig(prefix, reads, raw_contig, polished_contig, thread, preset, ro
         subprocess.call(command, shell = True)
         raw_contig = tmp_contig
         k = k + 1
-        print(k)
         if k >= round:
             break
     if os.path.isfile(tmp_contig) and os.stat(tmp_contig).st_size != 0:
@@ -393,7 +392,7 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets)
         for file in os.listdir(asm_dir):
             if ".cns.fa" in file and os.stat(asm_dir+"/"+file).st_size > 0:
                 contig_name = file.replace('.cns.fa', '')
-                with open(asm_dir+"/"+file, "rU") as handle:
+                with open(asm_dir+"/"+file, "r") as handle:
                     records = SeqIO.parse(handle, "fasta")
                     for record in records:
                         if record.id == 'ctg1':
@@ -598,6 +597,7 @@ def find_te(flank_bed, flank_seq, ref, family_annotation, te_fa, out, sample_nam
 
     # prase minimap2 output and report
     te_report_tmp = out+"/"+sample_name+".tmp.gff"
+    te_report_filter_out = out+"/"+sample_name+".contig.remove.txt"
     print ("Generating final TE annotation...")
     header = ["flank_name", "flank_len", "flank_start", "flank_end", "flank_strand", "chr", "start", "end"]
     df = pd.read_csv(mm2_out, delimiter="\t", usecols=[0,1,2,3,4,5,7,8], names=header)
@@ -610,6 +610,10 @@ def find_te(flank_bed, flank_seq, ref, family_annotation, te_fa, out, sample_nam
     df = df.groupby('contig_name').filter(lambda x: x['chr'].nunique() == 1 and x['flank_strand'].nunique() == 1)
     # add TE family info
     df['te_family'] = df['contig_name'].map(family_dict)
+    remove_contigs = df[df['te_family'].isnull()].drop_duplicates(subset = 'contig_name', keep='last', ignore_index = True)['contig_name']
+    if not remove_contigs.empty:
+        remove_contigs.to_csv(te_report_filter_out, sep = '\t', index=False, header=True)
+    df.dropna(subset=["te_family"], inplace = True)  # remove contig TE sequences that can not be repeatmasked
     # add TE strand info
     df['te_strand'] = df['contig_name'].map(strand_dict)
     # add TE sequence length info
@@ -807,8 +811,8 @@ def mkdir(dir):
         os.mkdir(dir)
     except OSError:
         print ("Creation of the directory %s failed" % dir)
-    # else:
-    #     print ("Successfully created the directory %s " % dir)
+    else:
+        print ("Successfully created the directory %s " % dir)
 
 def get_flank_seqs(contig_len, bed, contigs, flank_bed, flank_len=500):
     # get flanking coordinates
