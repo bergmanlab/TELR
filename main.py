@@ -338,26 +338,43 @@ def run_wtdbg2(args):
 
     prefix = reads.replace('.reads.fa', '')
     command = "wtdbg2 -x "+presets_wtdbg2+" -q -g 30k -t "+str(thread)+" -i "+reads+" -fo "+prefix
-    subprocess.call(command, shell = True)
+    try:
+        subprocess.run(command, shell = True, timeout = 60)
+    except subprocess.TimeoutExpired:
+        print("fail to build contig layout for contig: " + contig_name)
+        return
+
     contig_layout=prefix+".ctg.lay.gz"
-    if os.path.isfile(contig_layout) and os.stat(contig_layout).st_size != 0:
+    if check_exist(contig_layout):
         # derive consensus
         cns_thread = str(min(thread, 4))
         contig_raw=prefix+".ctg.lay.gz"
         consensus = prefix + ".raw.fa"
         command = "wtpoa-cns -q -t "+cns_thread+" -i "+contig_layout+" -fo "+consensus
-        subprocess.call(command, shell = True)
-        consensus_final = asm_dir + "/" + contig_name + ".cns.fa"
-        if polish > 0:
-            polish_contig(prefix, reads, consensus, consensus_final, thread, presets_minimap2, polish)
+        try:
+            subprocess.run(command, shell = True, timeout = 60)
+        except subprocess.TimeoutExpired:
+            print("fail to assemble contig: " + contig_name)
+            return
+        if check_exist(consensus):
+            consensus_final = asm_dir + "/" + contig_name + ".cns.fa"
+            if polish > 0:
+                polish_contig(prefix, reads, consensus, consensus_final, thread, presets_minimap2, polish, contig_name)
+            else:
+                # move raw consensus to asm dir
+                os.rename(consensus, consensus_final)
         else:
-            # move raw consensus to asm dir
-            os.rename(consensus, consensus_final)
+            print("Initial assembly fail for "+prefix+"\n")
     else:
-        print("assembly failed for "+prefix+"\n")
+        print("Build contig layout fail for "+prefix+"\n")
 
+def check_exist(file):
+    if os.path.isfile(file) and os.stat(file).st_size != 0:
+        return True
+    else:
+        return False
 
-def polish_contig(prefix, reads, raw_contig, polished_contig, thread, preset, round):
+def polish_contig(prefix, reads, raw_contig, polished_contig, thread, preset, round, contig_name):
     # polish consensus
     polish_thread = str(min(thread, 4))
     bam = raw_contig + ".bam"
@@ -365,9 +382,17 @@ def polish_contig(prefix, reads, raw_contig, polished_contig, thread, preset, ro
     while True:
         tmp_contig = raw_contig + ".tmp"
         command = "minimap2 -t " + polish_thread + " -ax " + preset + " -r2k " + raw_contig + " " + reads + " | samtools sort -@" + polish_thread + " > " + bam
-        subprocess.call(command, shell = True)
+        try:
+            subprocess.run(command, shell = True, timeout = 60, stdout = subprocess.DEVNULL, stderr = subprocess.STDOUT)
+        except subprocess.TimeoutExpired:
+            print("fail to map reads to contig: " + contig_name)
+            return
         command = "samtools view -F0x900 " + bam + " | wtpoa-cns -t " + polish_thread + " -d " + raw_contig + " -i - -fo " + tmp_contig
-        subprocess.call(command, shell = True)
+        try:
+            subprocess.run(command, shell = True, timeout = 60, stdout = subprocess.DEVNULL, stderr = subprocess.STDOUT)
+        except subprocess.TimeoutExpired:
+            print("fail to polish contig: " + contig_name)
+            return
         raw_contig = tmp_contig
         k = k + 1
         if k >= round:
@@ -375,7 +400,8 @@ def polish_contig(prefix, reads, raw_contig, polished_contig, thread, preset, ro
     if os.path.isfile(tmp_contig) and os.stat(tmp_contig).st_size != 0:
         os.rename(tmp_contig, polished_contig)
     else:
-        print("polishing failed for "+prefix+"\n")
+        print("polishing failed for "+contig_name+"\n")
+    return
     
 def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets):
     print("Generating contig annotation...")
