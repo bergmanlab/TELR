@@ -21,20 +21,20 @@ def main():
     print("CMD: ", ' '.join(sys.argv), "\n")
     sample_name = os.path.splitext(os.path.basename(args.read))[0]
 
-    # Alignment
-    start_time = time.time()
-    bam = alignment(args.read, args.reference, args.out, sample_name, args.thread, args.presets)
-    proc_time = time.time() - start_time
-    print("Alignment time:", proc_time, "\n")
+    # # Alignment
+    # start_time = time.time()
+    # bam = alignment(args.read, args.reference, args.out, sample_name, args.thread, args.presets)
+    # proc_time = time.time() - start_time
+    # print("Alignment time:", proc_time, "\n")
 
-    # SV detection
-    start_time = time.time()
-    vcf = run_sniffle(bam, args.reference, args.out, sample_name, args.thread)
-    proc_time = time.time() - start_time
-    print("SV detection time:", proc_time, "\n")
+    # # SV detection
+    # start_time = time.time()
+    # vcf = run_sniffle(bam, args.reference, args.out, sample_name, args.thread)
+    # proc_time = time.time() - start_time
+    # print("SV detection time:", proc_time, "\n")
 
     # Sniffle output parsing
-    # vcf = args.out+"/"+sample_name+".vcf"
+    vcf = args.out+"/"+sample_name+".vcf"
     start_time = time.time()
     vcf_parsed, contig_reads_dir = sniffle_parse(vcf, args.out, sample_name, args.read, args.library, args.thread)
     proc_time = time.time() - start_time
@@ -337,7 +337,7 @@ def run_wtdbg2(args):
     polish = args[6]
 
     prefix = reads.replace('.reads.fa', '')
-    command = "wtdbg2 -x "+presets_wtdbg2+" -q -g 30k -t "+str(thread)+" -i "+reads+" -fo "+prefix
+    command = "wtdbg2 -x "+presets_wtdbg2+" -q -AS 1 -g 30k -t "+str(thread)+" -i "+reads+" -fo "+prefix
     try:
         subprocess.run(command, shell = True, timeout = 60)
     except subprocess.TimeoutExpired:
