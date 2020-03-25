@@ -339,7 +339,7 @@ def run_wtdbg2(args):
     prefix = reads.replace('.reads.fa', '')
     command = "wtdbg2 -x "+presets_wtdbg2+" -q -AS 1 -g 30k -t "+str(thread)+" -i "+reads+" -fo "+prefix
     try:
-        subprocess.run(command, shell = True, timeout = 60)
+        subprocess.run(command, shell = True, timeout = 300)
     except subprocess.TimeoutExpired:
         print("fail to build contig layout for contig: " + contig_name)
         return
@@ -352,7 +352,7 @@ def run_wtdbg2(args):
         consensus = prefix + ".raw.fa"
         command = "wtpoa-cns -q -t "+cns_thread+" -i "+contig_layout+" -fo "+consensus
         try:
-            subprocess.run(command, shell = True, timeout = 60)
+            subprocess.run(command, shell = True, timeout = 300)
         except subprocess.TimeoutExpired:
             print("fail to assemble contig: " + contig_name)
             return
@@ -383,13 +383,13 @@ def polish_contig(prefix, reads, raw_contig, polished_contig, thread, preset, ro
         tmp_contig = raw_contig + ".tmp"
         command = "minimap2 -t " + polish_thread + " -ax " + preset + " -r2k " + raw_contig + " " + reads + " | samtools sort -@" + polish_thread + " > " + bam
         try:
-            subprocess.run(command, shell = True, timeout = 60, stdout = subprocess.DEVNULL, stderr = subprocess.STDOUT)
+            subprocess.run(command, shell = True, timeout = 300, stdout = subprocess.DEVNULL, stderr = subprocess.STDOUT)
         except subprocess.TimeoutExpired:
             print("fail to map reads to contig: " + contig_name)
             return
         command = "samtools view -F0x900 " + bam + " | wtpoa-cns -t " + polish_thread + " -d " + raw_contig + " -i - -fo " + tmp_contig
         try:
-            subprocess.run(command, shell = True, timeout = 60, stdout = subprocess.DEVNULL, stderr = subprocess.STDOUT)
+            subprocess.run(command, shell = True, timeout = 300, stdout = subprocess.DEVNULL, stderr = subprocess.STDOUT)
         except subprocess.TimeoutExpired:
             print("fail to polish contig: " + contig_name)
             return
