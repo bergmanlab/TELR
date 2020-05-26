@@ -2,12 +2,11 @@
     <img src="https://github.com/bergmanlab/TELR/blob/master/TELR.png?raw=true" alt="TELR"/>
 </p>
 
-## TELR
-TELR (pronounced Teller) is a fast non-reference transposable element (TE) detector from long read sequencing data (PacBio or Oxford Nanopore).
+## Introducation
+TELR (pronounced Teller) is a fast non-reference transposable element (TE) detector from long read sequencing data (PacBio or Oxford Nanopore). It uses 
 
-## Installation
+## Install dependencies
 You can use conda to install dependencies and create running environment for TELR.
-1. install all dependencies
 ```
 conda create -n TELR_env python=3.6 -y
 conda activate TELR_env
@@ -24,22 +23,23 @@ conda install -y seqtk
 conda install -y minimap2
 conda install -y svim=1.3
 ```
-2. Install TELR
+
+## Quick Start
 ```
 git clone git@github.com:bergmanlab/TELR.git
 cd TELR
-./main.py --help
+./telr.py --help
 ```
 
 ## Running on a test dataset
 ```
 cd test
-../main.py -o test_output -i reads.fasta -r ref_38kb.fasta -l library.fasta
+../telr.py -o test_output -i reads.fasta -r ref_38kb.fasta -l library.fasta
 ```
 
 ## Parameters
 ```
-usage: main.py [-h] -i READ -r REFERENCE -l LIBRARY [-x PRESETS] [-o OUT]
+usage: telr.py [-h] -i READ -r REFERENCE -l LIBRARY [-x PRESETS] [-o OUT]
                [-t THREAD] [-g GAP] [-p OVERLAP]
 
 Script to detect TEs in long read data
@@ -68,3 +68,5 @@ optional arguments:
   -v OVERLAP, --overlap OVERLAP
       max overlap size for flanking sequence alignment (default = '20')
 ```
+
+## Output
