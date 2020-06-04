@@ -22,6 +22,8 @@ conda install -y wtdbg
 conda install -y seqtk
 conda install -y minimap2
 conda install -y svim=1.3
+conda install -c bioconda -y mummer
+conda install -c conda-forge gnuplot
 ```
 
 ## Quick Start
