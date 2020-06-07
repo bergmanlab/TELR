@@ -79,17 +79,22 @@ def main():
     telr_bed = args.telr_dir + "/" + prefix + '.final.bed'
     telr_contigs = args.telr_dir + "/" + prefix + '.contigs.fa'
     telr_bed = args.telr_dir + '/' + prefix + ".final.bed"
-    telr_meta = args.telr_dir + '/' + prefix + ".final.meta.bed"
+    telr_meta = args.telr_dir + '/' + prefix + ".final.meta.tsv"
     telr_contig_te = args.telr_dir +"/" + prefix + ".te2contig_filter.bed"
     telr_family = args.telr_dir + "/" + prefix + ".te2contig_rm.merge.bed"
 
     # filter genome 1 TE annotation by focus regions and families
     ## TODO: check annotation file format?
-    annotation_filter = args.out + "/" + sample_name + ".annotation.filter.gff"
-    filter_annotation(args.annotation1, annotation_filter, args.out, sample_name, region = args.region1, discard_family = args.discard_family)
-    annotation_filter_bed = args.out + "/" + sample_name + ".annotation.filter.bed"
-    liftover.gff_to_bed(annotation_filter, annotation_filter_bed)
-    annotation_set = get_set(annotation_filter_bed)
+    if "bed" in args.annotation1:
+        annotation_filter = args.out + "/" + sample_name + ".annotation.filter.bed"
+        filter_annotation(args.annotation1, annotation_filter, args.out, sample_name, region = args.region1, discard_family = args.discard_family)
+    else:
+        annotation_filter = args.out + "/" + sample_name + ".annotation.filter.gff"
+        filter_annotation(args.annotation1, annotation_filter, args.out, sample_name, region = args.region1, discard_family = args.discard_family)
+        annotation_filter_bed = args.out + "/" + sample_name + ".annotation.filter.bed"
+        liftover.gff_to_bed(annotation_filter, annotation_filter_bed)
+        annotation_filter = annotation_filter_bed
+    annotation_set = get_set(annotation_filter)
     out_line = "annotated TEs in genome 1: " + str(len(annotation_set))
     write_report(stat_summary, out_line)
 
@@ -111,7 +116,7 @@ def main():
     write_report(stat_summary, out_line)
 
     # liftover from one genome to another
-    te_lift, te_lift_meta = liftover.lift_annotation(fasta1 = args.fasta1, fasta2 = args.fasta2, bed = annotation_filter_bed, sample_name = sample_name, out_dir = args.out, preset = preset, overlap = overlap, gap = gap, flank_len = 500)
+    te_lift, te_lift_meta = liftover.lift_annotation(fasta1 = args.fasta1, fasta2 = args.fasta2, bed = annotation_filter, sample_name = sample_name, out_dir = args.out, preset = preset, overlap = overlap, gap = gap, flank_len = 500)
 
     # remove reference lifted annotations that overlap with genome2 TE annotations
     te_lift_filter = args.out + "/" + sample_name + ".lift.nonref.bed"
@@ -196,17 +201,15 @@ def main():
     overlap = args.out + "/" + sample_name + ".genome1.overlap.bed"
     window = 3
     with open(overlap, "w") as output:
-        subprocess.call(["bedtools", "window", "-w", str(window), "-a", flank_lift_meta, "-b", annotation_filter_bed], stdout = output)
-    share_annotation_set = set()
+        subprocess.call(["bedtools", "window", "-w", str(window), "-a", flank_lift_meta, "-b", annotation_filter], stdout = output)
     share_telr_lift_contig_set = set()
     with open(overlap, "r") as input:
         for line in input:
             entry = line.replace('\n', '').split("\t")
             family_telr_lift_genome1 = entry[3].lower()
-            family_annotation_genome1 = entry[9].lower()
+            family_annotation_genome1 = entry[10].lower()
             if family_annotation_genome1 in family_telr_lift_genome1:
                 share_telr_lift_contig_set.add(entry[5])
-                share_annotation_set.add('_'.join(entry[7:11]))
     
     out_line = "TEs lifted from TELR contigs supported by genome 1 annotation: " + str(len(share_telr_lift_contig_set))
     write_report(stat_summary, out_line)
@@ -350,13 +353,13 @@ def filter_annotation(file_in, file_out, out_dir, sample_name, region = None, di
     annotation = file_in
     # filter for regions
     if region is not None:
-        region_filter = out_dir + "/" + sample_name + ".te.region_filter.gff"
+        region_filter = out_dir + "/" + sample_name + ".te.region_filter.tmp"
         with open(region_filter, "w") as output:
             subprocess.call(["bedtools", "intersect", "-a", annotation, "-b", region, "-u"], stdout = output)
         annotation = region_filter
     # filter for families
     if discard_family is not None:
-        family_filter = out_dir + "/" + sample_name + ".te.family_filter.gff"
+        family_filter = out_dir + "/" + sample_name + ".te.family_filter.tmp"
         family_list = discard_family.replace(" ", "").split(',')
         with open(family_filter, "w") as output, open(annotation, "r") as input:
             for line in input:
@@ -368,9 +371,10 @@ def filter_annotation(file_in, file_out, out_dir, sample_name, region = None, di
                     output.write(line)
         annotation = family_filter
     shutil.copyfile(annotation, file_out)
-    rm(region_filter)
-    rm(family_filter)
-    
+    if region is not None: 
+        rm(region_filter)
+    if discard_family is not None:
+        rm(family_filter)
 
 def filter_family(file_in, file_out, families):
     family_list = families.replace(" ", "").split(',')
