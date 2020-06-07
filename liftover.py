@@ -175,7 +175,7 @@ def lift_annotation(fasta1, fasta2, bed, sample_name, out_dir = ".", preset = "m
     new_df = df.groupby('ins_name').apply(get_coordinate).reset_index()
     # remove if two flank have gap/overlap bigger than threshold
     new_df = new_df[((new_df['score'] >= 0) & (new_df['end'] - new_df['start'] <= gap)) | ((new_df['score'] <= 0) & (new_df['end'] - new_df['start'] <= overlap)) | (new_df['score'] == 0.5)]
-    new_df.to_csv(te_report_tmp, sep = '\t', index=False, header=False, columns=['chr', 'start', 'end', 'family', 'score', 'strand', 'ins_name', 'te_strand', 'te_len'])
+    new_df.to_csv(te_report_tmp, sep = '\t', index=False, header=False, columns=['chr', 'start', 'end', 'family', 'score', 'strand', 'gap', 'ins_name', 'te_strand', 'te_len'])
 
     # sort gff
     te_report_tmp_sort = out_dir + "/" + sample_name + ".lift.tmp.sort.bed"
@@ -186,7 +186,7 @@ def lift_annotation(fasta1, fasta2, bed, sample_name, out_dir = ".", preset = "m
     # merge overlap/identical entries
     te_report_tmp_merge = out_dir + "/" + sample_name + ".lift.tmp.merge.bed"
     with open(te_report_tmp_merge, "w") as output:
-        command = "bedtools merge -d 0 -o collapse -c 2,3,4,5,6,7,8,9 -delim \",\" -i " + te_report_tmp_sort
+        command = "bedtools merge -d 0 -o collapse -c 2,3,4,5,6,7,8,9,10 -delim \",\" -i " + te_report_tmp_sort
         subprocess.call(command, shell=True, stdout=output)
     
     # output overlapped/identical entries
@@ -194,7 +194,7 @@ def lift_annotation(fasta1, fasta2, bed, sample_name, out_dir = ".", preset = "m
         for line in input:
             entry = line.replace('\n', '').split("\t")
             if "," in entry[3]:
-                output.write(entry[8] + '\t' + 'ins_overlap' + '\n')
+                output.write(entry[9] + '\t' + 'ins_overlap' + '\n')
     
     # find and remove duplicate entries in the remove list
     te_remove_final = out_dir + "/" + sample_name + ".lift.remove.bed"
@@ -208,8 +208,8 @@ def lift_annotation(fasta1, fasta2, bed, sample_name, out_dir = ".", preset = "m
 
     # final report
     te_report = out_dir + "/" + sample_name + ".final.bed"
-    te_report_meta = out_dir + "/" + sample_name + ".final.meta.bed"
-    with open(te_report_tmp_merge, "r") as input, open(te_report, "w") as output, open(te_report_meta, "w") as more:
+    te_report_meta = out_dir + "/" + sample_name + ".final.meta.tsv"
+    with open(te_report_tmp_merge, "r") as input, open(te_report, "w") as report, open(te_report_meta, "w") as meta:
         for line in input:
             entry = line.replace('\n', '').split("\t")
             chr = entry[0]
@@ -221,20 +221,22 @@ def lift_annotation(fasta1, fasta2, bed, sample_name, out_dir = ".", preset = "m
                 family = entry[5].split(",")[idx]
                 support_type = entry[6].split(",")[idx]
                 strand = entry[7].split(",")[idx]
-                ins_name = entry[8].split(",")[idx]
-                te_strand = entry[9].split(",")[idx]
+                gap = entry[8].split(",")[idx]
+                ins_name = entry[9].split(",")[idx]
+                te_strand = entry[10].split(",")[idx]
             else:
                 start = entry[3]
                 end = entry[4]
                 family = entry[5]
                 support_type = entry[6]
                 strand = entry[7]
-                ins_name = entry[8]
-                te_strand = entry[9]
+                gap = entry[8]
+                ins_name = entry[9]
+                te_strand = entry[10]
             out_line = '\t'.join([chr, start, end, family, support_type, strand])
-            output.write(out_line+"\n")
-            out_line = '\t'.join([chr, start, end, family, te_strand, ins_name])
-            more.write(out_line+"\n")
+            report.write(out_line+"\n")
+            out_line = '\t'.join([chr, start, end, family, te_strand, ins_name, gap])
+            meta.write(out_line+"\n")
     
     # print ("Done")
 
@@ -247,7 +249,6 @@ def lift_annotation(fasta1, fasta2, bed, sample_name, out_dir = ".", preset = "m
     os.remove(te_report_tmp_sort)
     os.remove(te_report_tmp_merge)
     os.remove(mm2_out)
-    # print ("Done")
 
     print("Lift over workflow finished!\n")
 
@@ -268,7 +269,8 @@ def get_coordinate(df_group):
         strand = "-"
     # determine coordinate
     if df_group.flank_name.nunique() == 1:
-        score = 0.5
+        score = 1
+        gap = 0
         if flank_strand == '+':
             if df_group['flank_side'].tolist()[0] == 'LEFT':
                 start = end = df_group['end'].tolist()[0]
@@ -287,11 +289,13 @@ def get_coordinate(df_group):
             end = df_group.loc[df_group['flank_side'] == 'LEFT', 'start'].iloc[0]
             start = df_group.loc[df_group['flank_side'] == 'RIGHT', 'end'].iloc[0]
         if start > end: # when there are overlaps
-            score = end - start
+            gap = end - start
             start, end = end, start
+            score = 2
         else:
-            score = end - start
-    return pd.Series([chr, start, end, family, score, strand, te_strand, te_len], index=['chr', 'start', 'end', 'family', 'score', 'strand', 'te_strand', 'te_len'])
+            gap = end - start
+            score = 3
+    return pd.Series([chr, start, end, family, score, strand, gap, te_strand, te_len], index=['chr', 'start', 'end', 'family', 'score', 'strand', 'gap', 'te_strand', 'te_len'])
 
 
 def gff_to_bed(gff, bed):
