@@ -17,7 +17,7 @@ conda install -y samtools=1.9
 conda install -y bcftools=1.9
 conda install -y bedtools
 conda install -y ngmlr=0.2.7
-conda install -y sniffles=1.0.11
+conda install -y sniffles=1.0.12
 conda install -y wtdbg
 conda install -y seqtk
 conda install -y minimap2
