@@ -12,6 +12,7 @@ import numpy as np
 import re
 from multiprocessing import Process, Pool
 import liftover
+import json
 
 # python3 telr.py -o $output_dir -i $read_path -r $reference_path -l $te_library_path -t 16 -x pacbio
 
@@ -121,7 +122,7 @@ def main():
     # contig_assembly_dir=args.out+"/"+"contig_assembly"
     # vcf_parsed=args.out+"/"+sample_name+".vcf.parsed.filtered"
     start_time = time.time()
-    te_contigs_annotation, family_annotation, te_fa, merge_contigs = annotate_contig(contig_assembly_dir, args.library, vcf_parsed, args.out, sample_name, args.thread, args.presets)
+    te_contigs_annotation, family_annotation, te_freq, te_fa, merge_contigs = annotate_contig(contig_assembly_dir, args.library, vcf_parsed, args.out, sample_name, args.thread, args.presets)
     proc_time = time.time() - start_time
     print("Contig annotation time:", proc_time, "\n")
 
@@ -131,7 +132,7 @@ def main():
     # te_fa=args.out+"/"+sample_name+".te.fa"
     # merge_contigs=args.out+"/"+sample_name+".contigs.fa"
     start_time = time.time()
-    find_te(merge_contigs, reference, te_contigs_annotation, family_annotation, te_fa, args.out, sample_name, args.gap, args.overlap, args.presets)
+    find_te(merge_contigs, reference, te_contigs_annotation, family_annotation, te_freq, te_fa, args.out, sample_name, args.gap, args.overlap, args.presets)
     proc_time = time.time() - start_time
     print("Flanking alignment time:", proc_time, "\n")
 
@@ -142,6 +143,8 @@ def parse_input(input_reads, input_reference, sample_name, out_dir):
     input_reads_copy = out_dir + '/' + os.path.basename(input_reads)
     if not os.path.isabs(input_reads):
         input_reads = os.getcwd() + '/' + input_reads
+    if os.path.islink(input_reads_copy):
+        os.remove(input_reads_copy)
     try:
         os.symlink(input_reads, input_reads_copy)
     except Exception as e:
@@ -151,6 +154,8 @@ def parse_input(input_reads, input_reference, sample_name, out_dir):
     input_reference_copy = out_dir + '/' + os.path.basename(input_reference)
     if not os.path.isabs(input_reference):
         input_reference = os.getcwd() + '/' + input_reference
+    if os.path.islink(input_reference_copy):
+        os.remove(input_reference_copy)
     try:
         os.symlink(input_reference, input_reference_copy)
     except Exception as e:
@@ -249,7 +254,9 @@ def detect_sv(bam, reference, out, sample_name, thread, svim = False):
         vcf = out + "/" + "variants.vcf"
     else:
         vcf = out + "/" + sample_name + ".vcf"
-        command="sniffles -n -1 --genotype --report_seq --report_BND --threads " + str(thread) + " -m " + bam + " -v " + vcf
+        # command="sniffles -n -1 --genotype --report_seq --report_BND --threads " + str(thread) + " -m " + bam + " -v " + vcf
+        command="sniffles -n -1 --report_BND --threads " + str(thread) + " -m " + bam + " -v " + vcf
+        print(command)
         try:
             subprocess.call(command, shell=True)
         except Exception as e:
@@ -632,24 +639,30 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets)
     with open(te2contig_rm_merge, "w") as output:
         subprocess.call(command, shell = True, stdout=output)
     
+    # build frequency dict
+    te_freq = dict()
+    with open(vcf, "r") as input:
+        for line in input:
+            entry = line.replace('\n', '').split("\t")
+            contig_name = "_".join([entry[0], entry[1], entry[2]])
+            freq = entry[5]
+            te_freq[contig_name] = freq
     
-    return te2contig_filter_bed, te2contig_rm_merge, te_fa, merge_contigs
+    return te2contig_filter_bed, te2contig_rm_merge, te_freq, te_fa, merge_contigs
     
-def find_te(contigs, ref, te_contigs_annotation, family_annotation, te_fa, out, sample_name, gap, overlap, presets):
+def find_te(contigs, ref, te_contigs_annotation, family_annotation, te_freq, te_fa, out, sample_name, gap, overlap, presets):
     if presets == "ont":
         presets_minimap2 = "map-ont"
     else:
         presets_minimap2 = "map-pb"
 
     # lift over
-    te_report, te_report_meta = liftover.lift_annotation(fasta1 = contigs, fasta2 = ref, bed = te_contigs_annotation, sample_name = sample_name, out_dir = out, preset = presets_minimap2, overlap = overlap, gap = gap, flank_len = 500, family_rm = family_annotation)
+    report_meta = liftover.lift_annotation(fasta1 = contigs, fasta2 = ref, bed = te_contigs_annotation, sample_name = sample_name, out_dir = out, preset = presets_minimap2, overlap = overlap, gap = gap, flank_len = 500, family_rm = family_annotation, freq = te_freq)
 
     # convert meta to dict
     ins_dict = dict()
-    with open(te_report_meta, "r") as input:
-        for line in input:
-            entry = line.replace('\n', '').split("\t")
-            ins_dict[entry[5]] = [entry[0], entry[1], entry[2], entry[3], entry[4]]
+    for item in report_meta:
+        ins_dict[item['ins_name']] = item
 
     # generate TE sequence fasta
     final_te_seqs = out+"/"+sample_name+".final.fa"
@@ -660,16 +673,24 @@ def find_te(contigs, ref, te_contigs_annotation, family_annotation, te_fa, out, 
         for record in SeqIO.parse(input, "fasta"):
             ins_name = record.id
             if ins_name in ins_dict:
-                chr = ins_dict[ins_name][0]
-                start = ins_dict[ins_name][1]
-                end = ins_dict[ins_name][2]
-                family = ins_dict[ins_name][3]
-                te_strand = ins_dict[ins_name][4]
+                chr = ins_dict[ins_name]['chr']
+                start = ins_dict[ins_name]['start']
+                end = ins_dict[ins_name]['end']
+                family = ins_dict[ins_name]['family']
+                te_strand = ins_dict[ins_name]['te_strand']
                 record.id = chr+"_"+str(start)+"_"+str(end)+"#"+family
                 if te_strand == "+" or te_strand == ".":
                     output.write(">"+record.id+"\n"+str(record.seq)+"\n")
                 else:
                     output.write(">"+record.id+"\n"+str(record.seq.reverse_complement())+"\n")
+    
+    # write meta data in json format
+    for item in report_meta:
+        del item['ins_name']
+        del item['te_strand']
+    report_json = out + "/" + sample_name + ".final.json"
+    with open(report_json, 'w') as output:
+        json.dump(report_meta, output, indent=4, sort_keys=False)
 
 def create_fa(header, seq, out):
     with open(out, "w") as output:
@@ -737,6 +758,10 @@ def filter_vcf(vcf, dict, out, cov=0):
                     output.write(line)
 
 def mkdir(dir):
+    # check 
+    if os.path.isdir(dir):
+        print("Directory %s exists" % dir)
+        return
     try:
         os.mkdir(dir)
     except OSError:

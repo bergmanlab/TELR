@@ -61,7 +61,7 @@ def main():
     # call liftover function
     te_report, te_report_meta = lift_annotation(args.fasta1, args.fasta2, ins_bed, sample_name, args.out, args.preset, args.overlap, args.gap, args.length)
 
-def lift_annotation(fasta1, fasta2, bed, sample_name, out_dir = ".", preset = "map-pb", overlap = 25, gap = 30000, flank_len = 500, family_rm = None):
+def lift_annotation(fasta1, fasta2, bed, sample_name, out_dir = ".", preset = "map-pb", overlap = 25, gap = 30000, flank_len = 500, family_rm = None, freq = None):
     print("Starting lift over workflow...")
 
     # for each annotation, extract flanking sequence, map to another genome, check the distance
@@ -99,6 +99,12 @@ def lift_annotation(fasta1, fasta2, bed, sample_name, out_dir = ".", preset = "m
             te_len = int(entry[2]) - int(entry[1])
             te_len_dict[ins_name] = te_len
             contig_ins_dict[entry[0]] = ins_name
+
+    if freq is not None:
+        freq_dict = dict()
+        for item in freq.keys():
+            ins_name = contig_ins_dict[item]
+            freq_dict[ins_name] = freq[item]
 
     if family_rm is not None:
         family_dict = dict()
@@ -166,6 +172,11 @@ def lift_annotation(fasta1, fasta2, bed, sample_name, out_dir = ".", preset = "m
         rm_df['type'] = "multi_strand"
         rm_df.to_csv(te_remove_tmp, sep = '\t', index=False, header=False, columns=['ins_name', 'type'], mode = 'a')
     df = df.groupby('ins_name').filter(lambda x: x['chr'].nunique() == 1 and x['flank_strand'].nunique() == 1)
+    # add frequency info
+    if freq is not None:
+        df['te_freq'] = df['ins_name'].map(freq_dict)
+    else:
+        df['te_freq'] = NA
     # add TE family info
     df['te_family'] = df['ins_name'].map(family_dict)
     df.dropna(subset=["te_family"], inplace = True)  # remove annotation without family annotation
@@ -175,7 +186,7 @@ def lift_annotation(fasta1, fasta2, bed, sample_name, out_dir = ".", preset = "m
     new_df = df.groupby('ins_name').apply(get_coordinate).reset_index()
     # remove if two flank have gap/overlap bigger than threshold
     new_df = new_df[((new_df['score'] >= 0) & (new_df['end'] - new_df['start'] <= gap)) | ((new_df['score'] <= 0) & (new_df['end'] - new_df['start'] <= overlap)) | (new_df['score'] == 0.5)]
-    new_df.to_csv(te_report_tmp, sep = '\t', index=False, header=False, columns=['chr', 'start', 'end', 'family', 'score', 'strand', 'gap', 'ins_name', 'te_strand', 'te_len'])
+    new_df.to_csv(te_report_tmp, sep = '\t', index=False, header=False, columns=['chr', 'start', 'end', 'family', 'score', 'strand', 'gap', 'ins_name', 'te_strand', 'te_len', 'te_freq'])
 
     # sort gff
     te_report_tmp_sort = out_dir + "/" + sample_name + ".lift.tmp.sort.bed"
@@ -186,7 +197,7 @@ def lift_annotation(fasta1, fasta2, bed, sample_name, out_dir = ".", preset = "m
     # merge overlap/identical entries
     te_report_tmp_merge = out_dir + "/" + sample_name + ".lift.tmp.merge.bed"
     with open(te_report_tmp_merge, "w") as output:
-        command = "bedtools merge -d 0 -o collapse -c 2,3,4,5,6,7,8,9,10 -delim \",\" -i " + te_report_tmp_sort
+        command = "bedtools merge -d 0 -o collapse -c 2,3,4,5,6,7,8,9,10,11 -delim \",\" -i " + te_report_tmp_sort
         subprocess.call(command, shell=True, stdout=output)
     
     # output overlapped/identical entries
@@ -207,14 +218,15 @@ def lift_annotation(fasta1, fasta2, bed, sample_name, out_dir = ".", preset = "m
                 te_remove_set.add(entry[0])
 
     # final report
-    te_report = out_dir + "/" + sample_name + ".final.bed"
-    te_report_meta = out_dir + "/" + sample_name + ".final.meta.tsv"
-    with open(te_report_tmp_merge, "r") as input, open(te_report, "w") as report, open(te_report_meta, "w") as meta:
+    report_bed_path = out_dir + "/" + sample_name + ".final.bed"
+    report_full = []
+
+    with open(te_report_tmp_merge, "r") as input, open(report_bed_path, "w") as output:
         for line in input:
             entry = line.replace('\n', '').split("\t")
-            chr = entry[0]
+            chromosome = entry[0]
             if "," in entry[3]:
-                len_list = entry[10].split(",")
+                len_list = entry[11].split(",")
                 idx = len_list.index(max(len_list))
                 start = entry[3].split(",")[idx]
                 end = entry[4].split(",")[idx]
@@ -224,6 +236,7 @@ def lift_annotation(fasta1, fasta2, bed, sample_name, out_dir = ".", preset = "m
                 gap = entry[8].split(",")[idx]
                 ins_name = entry[9].split(",")[idx]
                 te_strand = entry[10].split(",")[idx]
+                te_freq = entry[12].split(",")[idx]
             else:
                 start = entry[3]
                 end = entry[4]
@@ -233,26 +246,26 @@ def lift_annotation(fasta1, fasta2, bed, sample_name, out_dir = ".", preset = "m
                 gap = entry[8]
                 ins_name = entry[9]
                 te_strand = entry[10]
-            out_line = '\t'.join([chr, start, end, family, support_type, strand])
-            report.write(out_line+"\n")
-            out_line = '\t'.join([chr, start, end, family, te_strand, ins_name, gap])
-            meta.write(out_line+"\n")
-    
-    # print ("Done")
+                te_freq = entry[12]
+            support_freq = '_'.join([str(support_type), str(te_freq)])
+            out_line = '\t'.join([chromosome, start, end, family, support_freq, strand])
+            output.write(out_line+"\n")
+            te_id = ins_name.split(':')[0]
+            report_full.append({'ins_name': ins_name, 'ID': te_id, 'chr': chromosome, 'start': int(start), 'end': int(end), 'family': family, 'support_type': int(support_type), 'strand': strand, 'te_strand': strand, 'frequency': float(te_freq)})
 
     # clean files
     print ("Clean tmp files...")
-    os.remove(flank_fa)
-    os.remove(flank_bed)
-    os.remove(te_remove_tmp)
-    os.remove(te_report_tmp)
-    os.remove(te_report_tmp_sort)
-    os.remove(te_report_tmp_merge)
-    os.remove(mm2_out)
+    # os.remove(flank_fa)
+    # os.remove(flank_bed)
+    # os.remove(te_remove_tmp)
+    # os.remove(te_report_tmp)
+    # os.remove(te_report_tmp_sort)
+    # os.remove(te_report_tmp_merge)
+    # os.remove(mm2_out)
 
     print("Lift over workflow finished!\n")
 
-    return te_report, te_report_meta
+    return report_full
 
 def get_coordinate(df_group):
     chr = df_group['chr'].tolist()[0]
@@ -260,6 +273,7 @@ def get_coordinate(df_group):
     te_strand = df_group['te_strand'].tolist()[0]
     flank_strand = df_group['flank_strand'].tolist()[0]
     te_len = df_group['te_len'].tolist()[0]
+    te_freq = df_group['te_freq'].tolist()[0]
     # determine final strand
     if te_strand == ".":
         strand = "."
@@ -295,7 +309,7 @@ def get_coordinate(df_group):
         else:
             gap = end - start
             score = 3
-    return pd.Series([chr, start, end, family, score, strand, gap, te_strand, te_len], index=['chr', 'start', 'end', 'family', 'score', 'strand', 'gap', 'te_strand', 'te_len'])
+    return pd.Series([chr, start, end, family, score, strand, gap, te_strand, te_len, te_freq], index=['chr', 'start', 'end', 'family', 'score', 'strand', 'gap', 'te_strand', 'te_len', 'te_freq'])
 
 
 def gff_to_bed(gff, bed):
