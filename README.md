@@ -74,4 +74,5 @@ optional arguments:
 ## Output
 The results of TELE pipeline are output to the directory <output>.
 - `<sample>.final.bed`: non-reference TE insertion annotation predicted by TELR pipeline in bed format (0-based).
-- `<sample>.final.fa`: TE insertion sequences from local assembly of reads supporting TE insertions.
+- `<sample>.final.json`: non-reference TE insertion annotation predicted by TELR pipeline in json format (0-based).
+- `<sample>.final.fa`: TE insertion sequences extracted from local assembly of reads supporting TE insertions.
