@@ -13,61 +13,7 @@ import re
 from multiprocessing import Process, Pool
 import liftover
 
-# import utility as utl
-
 # python3 telr.py -o $output_dir -i $read_path -r $reference_path -l $te_library_path -t 16 -x pacbio
-
-def main():
-    args = get_args()
-    print("CMD: ", ' '.join(sys.argv), "\n")
-    sample_name = os.path.splitext(os.path.basename(args.read))[0]
-
-    # Alignment
-    start_time = time.time()
-    bam = alignment(args.read, args.reference, args.out, sample_name, args.thread, args.presets)
-    proc_time = time.time() - start_time
-    print("Alignment time:", proc_time, "\n")
-
-    # SV detection
-    start_time = time.time()
-    vcf = run_sniffle(bam, args.reference, args.out, sample_name, args.thread)
-    proc_time = time.time() - start_time
-    print("SV detection time:", proc_time, "\n")
-
-    # Sniffle output parsing
-    # vcf = args.out+"/"+sample_name+".vcf"
-    start_time = time.time()
-    vcf_parsed, contig_reads_dir = sniffle_parse(vcf, args.out, sample_name, args.read, args.library, args.thread)
-    proc_time = time.time() - start_time
-    print("SV parsing time:", proc_time, "\n")
-
-    # local assembly on every insertion cluster
-    # contig_reads_dir=args.out+"/"+"contig_reads"
-    # vcf_parsed=args.out+"/"+sample_name+".vcf.parsed.filtered"
-    start_time = time.time()
-    contig_assembly_dir = local_assembly(contig_reads_dir, vcf_parsed, args.out, args.read, args.thread, args.presets, args.polish)
-    proc_time = time.time() - start_time
-    print("Local assembly time:", proc_time, "\n")
-    
-    # annotate TEs using different method, extract flanking sequence and annotate TE family
-    # contig_assembly_dir=args.out+"/"+"contig_assembly"
-    # vcf_parsed=args.out+"/"+sample_name+".vcf.parsed.filtered"
-    start_time = time.time()
-    te_contigs_annotation, family_annotation, te_fa, merge_contigs = annotate_contig(contig_assembly_dir, args.library, vcf_parsed, args.out, sample_name, args.thread, args.presets)
-    proc_time = time.time() - start_time
-    print("Contig annotation time:", proc_time, "\n")
-
-    # map contig back to the reference
-    # te_contigs_annotation = args.out+"/"+sample_name+".te2contig_filter.bed"
-    # family_annotation = args.out+"/"+sample_name+".te2contig_rm.merge.bed"
-    # te_fa=args.out+"/"+sample_name+".te.fa"
-    # merge_contigs=args.out+"/"+sample_name+".contigs.fa"
-    start_time = time.time()
-    find_te(merge_contigs, args.reference, te_contigs_annotation, family_annotation, te_fa, args.out, sample_name, args.gap, args.overlap, args.presets)
-    proc_time = time.time() - start_time
-    print("Flanking alignment time:", proc_time, "\n")
-
-    print("TELR finished!")
 
 def get_args():
     parser = argparse.ArgumentParser(description="Script to detect TEs in long read data")
@@ -75,7 +21,7 @@ def get_args():
     required = parser.add_argument_group("required arguments")
 
     ## required ##
-    required.add_argument("-i", "--read", type=str, help="reads in fasta/fastq format", required=True)
+    required.add_argument("-i", "--reads", type=str, help="reads in fasta/fastq format or read alignments in bam format", required=True)
     required.add_argument("-r", "--reference", type=str, help="reference genome in fasta format", required=True)
     required.add_argument("-l", "--library", type=str, help="TE consensus sequences in fasta format", required=True)
 
@@ -88,10 +34,11 @@ def get_args():
     optional.add_argument("-v", "--overlap", type=int, help="max overlap size for flanking sequence alignment (default = '20')", required=False)
     parser._action_groups.append(optional)
     args = parser.parse_args()
+    # TODO: remove intermediate files
 
     # checks if in files exist
     try:
-        test = open(args.read, 'r')
+        test = open(args.reads, 'r')
     except Exception as e:
         print(e)
         sys.exit(1)
@@ -132,17 +79,130 @@ def get_args():
 
     return args
 
+def main():
+    args = get_args()
+    print("CMD: ", ' '.join(sys.argv), "\n")
+    sample_name = os.path.splitext(os.path.basename(args.reads))[0]
+    reads, reference, fasta, skip_alignment = parse_input(args.reads, args.reference, sample_name, args.out)
+
+    # Alignment
+    if not skip_alignment:
+        start_time = time.time()
+        bam = alignment(fasta, reference, args.out, sample_name, args.thread, args.presets)
+        proc_time = time.time() - start_time
+        print("Alignment time:", proc_time, "\n")
+    else:
+        print("Alignment provided, sort and index BAM...")
+        bam = args.out + "/" + sample_name + "_sort.bam"
+        sort_index_bam(reads, bam, args.thread)
+
+    # SV detection
+    start_time = time.time()
+    vcf = detect_sv(bam, reference, args.out, sample_name, args.thread)
+    proc_time = time.time() - start_time
+    print("SV detection time:", proc_time, "\n")
+
+    # Sniffle output parsing
+    # vcf = args.out+"/"+sample_name+".vcf"
+    start_time = time.time()
+    vcf_parsed, contig_reads_dir = sniffle_parse(vcf, args.out, sample_name, fasta, args.library, args.thread)
+    proc_time = time.time() - start_time
+    print("SV parsing time:", proc_time, "\n")
+
+    # local assembly on every insertion cluster
+    # contig_reads_dir=args.out+"/"+"contig_reads"
+    # vcf_parsed=args.out+"/"+sample_name+".vcf.parsed.filtered"
+    start_time = time.time()
+    contig_assembly_dir = local_assembly(contig_reads_dir, vcf_parsed, args.out, fasta, args.thread, args.presets, args.polish)
+    proc_time = time.time() - start_time
+    print("Local assembly time:", proc_time, "\n")
+    
+    # annotate TEs using different method, extract flanking sequence and annotate TE family
+    # contig_assembly_dir=args.out+"/"+"contig_assembly"
+    # vcf_parsed=args.out+"/"+sample_name+".vcf.parsed.filtered"
+    start_time = time.time()
+    te_contigs_annotation, family_annotation, te_fa, merge_contigs = annotate_contig(contig_assembly_dir, args.library, vcf_parsed, args.out, sample_name, args.thread, args.presets)
+    proc_time = time.time() - start_time
+    print("Contig annotation time:", proc_time, "\n")
+
+    # map contig back to the reference
+    # te_contigs_annotation = args.out+"/"+sample_name+".te2contig_filter.bed"
+    # family_annotation = args.out+"/"+sample_name+".te2contig_rm.merge.bed"
+    # te_fa=args.out+"/"+sample_name+".te.fa"
+    # merge_contigs=args.out+"/"+sample_name+".contigs.fa"
+    start_time = time.time()
+    find_te(merge_contigs, reference, te_contigs_annotation, family_annotation, te_fa, args.out, sample_name, args.gap, args.overlap, args.presets)
+    proc_time = time.time() - start_time
+    print("Flanking alignment time:", proc_time, "\n")
+
+    print("TELR finished!")
+
+def parse_input(input_reads, input_reference, sample_name, out_dir):
+    # create symbolic link for the input file
+    input_reads_copy = out_dir + '/' + os.path.basename(input_reads)
+    if not os.path.isabs(input_reads):
+        input_reads = os.getcwd() + '/' + input_reads
+    try:
+        os.symlink(input_reads, input_reads_copy)
+    except Exception as e:
+        print(e)
+        sys.exit(1)
+
+    input_reference_copy = out_dir + '/' + os.path.basename(input_reference)
+    if not os.path.isabs(input_reference):
+        input_reference = os.getcwd() + '/' + input_reference
+    try:
+        os.symlink(input_reference, input_reference_copy)
+    except Exception as e:
+        print(e)
+        sys.exit(1)
+    
+    sample_suffix = os.path.basename(input_reads_copy).split('.')[-1]
+    if sample_suffix == 'bam' or sample_suffix == 'cram':
+        print("Read alignment file is provided")
+        skip_alignment = True
+        tmp_fasta = out_dir + '/' + sample_name + '.tmp.fasta'
+        bam2fasta(input_reads_copy, tmp_fasta)
+        fasta = out_dir + '/' + sample_name + '.telr.fasta'
+        make_unique_fasta(tmp_fasta, fasta)
+        os.remove(tmp_fasta)
+    elif sample_suffix == 'fasta' or sample_suffix == 'fastq' or sample_suffix == 'fa' or sample_suffix == 'fq':
+        print("Raw read file is provided")
+        skip_alignment = False
+        fasta = input_reads_copy
+    else:
+        print("input reads/alignments format not recognized, exiting...")
+        sys.exit(1)
+    
+    return input_reads_copy, input_reference_copy, fasta, skip_alignment
+
+def make_unique_fasta(fasta, new_fasta):
+    records = set()
+    with open(new_fasta, "w") as output_handle:
+        for record in SeqIO.parse(fasta, "fasta"):
+            if record.id not in records:
+                records.add(record.id)
+                SeqIO.write(record, output_handle, 'fasta')
+
+def bam2fasta(bam, fasta):
+    print("Converting bam to fasta...")
+    try:
+        with open(fasta, "w") as output:
+            subprocess.call(["samtools", "fasta", bam], stdout = output)
+    except Exception as e:
+        print(e)
+        print("Conversion failed, check input bam file, exiting...")
+        sys.exit(1)
+
 def alignment(read, reference, out, sample_name, thread, presets):
     if presets == "ont":
         presets_nglmr = "ont"
     else:
         presets_nglmr = "pacbio"
-    tmp_bam=out+"/"+sample_name+"_tmp.bam"
-    if os.path.isfile(tmp_bam):
-        print ("Raw read alignment exist")
-    else:
-        print ("Generating raw read alignment...")
-        with open(tmp_bam,"w") as output:
+    bam = out + "/" + sample_name + ".tmp.bam"
+    print ("Generating raw read alignment...")
+    try:
+        with open(bam, "w") as output:
             subprocess.call(["ngmlr", \
                                     "-r", reference, \
                                     "-q", read, \
@@ -151,37 +211,54 @@ def alignment(read, reference, out, sample_name, thread, presets):
                                     "--rg-id", sample_name, \
                                     "--rg-sm", sample_name, \
                                     "--rg-lb", "pb", "--no-progress"], stdout=output)
-        # print ("Done\n")
-        
-    sorted_bam=out+"/"+sample_name+"_sort.bam"
-    sorted_bam_idx=sorted_bam+".bai"
-    print ("Sort and index read alignment...")
-    command="samtools sort -@ "+str(thread)+" -o "+sorted_bam+" "+tmp_bam
-    subprocess.call(command, shell=True)
-    command="samtools index -@ "+str(thread)+" "+sorted_bam
-    subprocess.call(command, shell=True)
-    os.remove(tmp_bam)
-    print ("Done\n")
+                                    # TODO: change rg-lb
+    except Exception as e:
+        print(e)
+        print("Read alignment (ngmlr) failed, check input reads, exiting...")
+        sys.exit(1)
 
-    out_bam = sorted_bam
-    if os.path.isfile(out_bam) == False:
-            sys.stderr.write("NGMLR failed...exiting....\n")
+    sorted_bam = out + "/" + sample_name + "_sort.bam"
+    sort_index_bam(bam, sorted_bam, thread)
+
+    if os.path.isfile(sorted_bam) == False:
+            sys.stderr.write("BAM file from read alignment step failed, exiting....\n")
             sys.exit(1)
     else:
-        return(out_bam)
+        return(sorted_bam)
 
-def run_sniffle(bam, reference, out, sample_name, thread, svim = False):
+def sort_index_bam(bam, sorted_bam, thread):
+    print ("Sort and index read alignment...")
+    try:
+        subprocess.call(["samtools", "sort", "-@", str(thread), "-o", sorted_bam, bam])
+        subprocess.call(["samtools", "index", "-@", str(thread), sorted_bam])
+    except Exception as e:
+        print(e)
+        print("Sort and index bam file failed, exiting....")
+        sys.exit(1)
+    print ("Done\n")
+
+def detect_sv(bam, reference, out, sample_name, thread, svim = False):
     print ("Generating SV output...")
     if svim:
-        subprocess.call(["svim", "alignment", "--insertion_sequences", "--read_names", "--sample", sample_name, "--duplications_as_insertions", out, bam, reference])
-        vcf = out+"/"+"variants.vcf"
+        try:
+            subprocess.call(["svim", "alignment", "--insertion_sequences", "--read_names", "--sample", sample_name, "--duplications_as_insertions", out, bam, reference])
+        except Exception as e:
+            print(e)
+            print("svim run failed, please check input bam file, exiting....")
+            sys.exit(1)
+        vcf = out + "/" + "variants.vcf"
     else:
-        vcf = out+"/"+sample_name+".vcf"
-        command="sniffles -n -1 --genotype --report_seq --report_BND --threads "+str(thread)+" -m "+bam+" -v "+vcf
-        subprocess.call(command, shell=True)
+        vcf = out + "/" + sample_name + ".vcf"
+        command="sniffles -n -1 --genotype --report_seq --report_BND --threads " + str(thread) + " -m " + bam + " -v " + vcf
+        try:
+            subprocess.call(command, shell=True)
+        except Exception as e:
+            print(e)
+            print("sniffles run failed, please check input bam file, exiting....")
+            sys.exit(1)
     print ("Done\n")
     if os.path.isfile(vcf) == False:
-            sys.stderr.write("SV detection failed...exiting....\n")
+            sys.stderr.write("VCF file from SV detection not found, exiting....\n")
             sys.exit(1)
     else:
         return(vcf)
@@ -237,6 +314,7 @@ def sniffle_parse(vcf, out, sample_name, raw_reads, TE_library, thread):
     vcf2fasta(vcf_parsed_filtered, ins_te_seqs)
 
     # extract read IDs
+    # TODO: convert to set?
     ids = out+"/"+sample_name+".ids"
     with open(vcf_parsed_filtered, "r") as input, open(ids, "w") as output:
         for line in input:
@@ -429,17 +507,11 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets)
                             output_list.write(contig_name+"\n")
 
     # map sequence to contigs
-    # print ("Map VCF sequences to contigs...")
     seq2contig_out=out+"/"+"seq2contig.paf"
     if os.path.isfile(seq2contig_out):
         os.remove(seq2contig_out)
 
-    # constrct fasta from parsed vcf file
-    ins_seqs=out+"/"+sample_name+".ins.filter.fasta"
-    # print ("Generating filtered VCF sequences...")
-    vcf2fasta(vcf, ins_seqs)
-    # print ("Done\n")
-
+    # TODO: consider that some contigs might not exist
     with open(vcf, "r") as input:
         for line in input:
             entry = line.replace('\n', '').split("\t")
