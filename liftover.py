@@ -59,9 +59,9 @@ def main():
     sample_name = os.path.splitext(os.path.basename(args.fasta1))[0]
     
     # call liftover function
-    te_report, te_report_meta = lift_annotation(args.fasta1, args.fasta2, ins_bed, sample_name, args.out, args.preset, args.overlap, args.gap, args.length)
+    te_report, te_report_meta = annotation_liftover(args.fasta1, args.fasta2, ins_bed, sample_name, args.out, args.preset, args.overlap, args.gap, args.length)
 
-def lift_annotation(fasta1, fasta2, bed, sample_name, out_dir = ".", preset = "map-pb", overlap = 25, gap = 30000, flank_len = 500, family_rm = None, freq = None):
+def annotation_liftover(fasta1, fasta2, bed, sample_name, out_dir = ".", preset = "map-pb", overlap = 25, gap = 30000, flank_len = 500, family_rm = None, freq = None):
     print("Starting lift over workflow...")
 
     # for each annotation, extract flanking sequence, map to another genome, check the distance
@@ -103,8 +103,9 @@ def lift_annotation(fasta1, fasta2, bed, sample_name, out_dir = ".", preset = "m
     if freq is not None:
         freq_dict = dict()
         for item in freq.keys():
-            ins_name = contig_ins_dict[item]
-            freq_dict[ins_name] = freq[item]
+            if item in contig_ins_dict.keys():
+                ins_name = contig_ins_dict[item]
+                freq_dict[ins_name] = freq[item]
 
     if family_rm is not None:
         family_dict = dict()

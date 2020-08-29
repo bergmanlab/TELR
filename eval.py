@@ -10,6 +10,7 @@ import pandas as pd
 import re
 import liftover
 import glob
+from utility import rm_file, mkdir
 
 '''
 A script to evaluate TELR predictions by using two different strategies
@@ -69,7 +70,7 @@ def main():
     gap = 20
 
     stat_summary = args.out + "/" + "stat.summary.txt"
-    rm(stat_summary)
+    rm_file(stat_summary)
 
     # telr output files
     telr_bed = []
@@ -151,7 +152,7 @@ def main():
     out_line = "non-ref TEs only in TELR set: " + str(len(telr_only_contig_set))
     write_report(stat_summary, out_line)
 
-    rm(overlap)
+    rm_file(overlap)
 
     ################## TELR flanks mapped to genome 1 ###################
     print("Lift flanking sequences from TELR contigs to genome 1...")
@@ -217,7 +218,7 @@ def main():
     out_line = "TEs lifted from TELR contigs not supported by genome 1 annotation: " + str(len(telr_lift_only_set))
     write_report(stat_summary, out_line)
 
-    rm(overlap)
+    rm_file(overlap)
 
     #TODO compare sequence quality for all the overlapped?
 
@@ -239,12 +240,12 @@ def main():
     telr_check_contigs = args.out + "/" + sample_name + ".check.contig.fa"
     with open(telr_check_contigs, "w") as output:
         subprocess.call(["seqtk", "subseq", telr_contigs, telr_check_contig_list], stdout = output)
-    rm(telr_check_contig_list)
+    rm_file(telr_check_contig_list)
 
     telr_check_align = args.out + "/" + sample_name + ".check.contig.paf"
     with open(telr_check_align, "w") as output:
         subprocess.call(["minimap2", "-cx", preset, "-v", "0", "--secondary=no", args.fasta1, telr_check_contigs], stdout = output)
-    rm(telr_check_contigs)
+    rm_file(telr_check_contigs)
 
     # select full length mapped contig, compare using dnadiff and make mummer plot
     telr_check_align_contig_set = set()
@@ -268,11 +269,11 @@ def main():
                 mdelta = prefix_mummer + '.mdelta'
                 subprocess.call(["mummerplot", "-p", prefix_mummer, "-s", "medium", "-f", "--png", mdelta, "--color"], stdout = subprocess.DEVNULL, stderr = subprocess.STDOUT)
                 clean_mummer(prefix_mummer)
-                rm(genome1_extract_fa)
-                rm(contig_fa)
+                rm_file(genome1_extract_fa)
+                rm_file(contig_fa)
                 
     telr_no_align_set = telr_check_contig_set.difference(telr_check_align_contig_set)
-    rm(telr_check_align)
+    rm_file(telr_check_align)
 
     # generate contig summary file
     contig_summary = args.out + "/" + "contig.summary.tsv"
@@ -317,18 +318,18 @@ def write_report(file, line):
         output.write(line + '\n')
 
 def clean_mummer(prefix):
-    rm(prefix + '.mdelta')
-    rm(prefix + '.mcoords')
-    rm(prefix + '.gp')
-    rm(prefix + '.fplot')
-    rm(prefix + '.filter')
-    rm(prefix + '.delta')
-    rm(prefix + '.1delta')
-    rm(prefix + '.1coords')
-    rm(prefix + '.rplot')
-    rm(prefix + '.rdiff')
-    rm(prefix + '.qdiff')
-    rm(prefix + '.snps')
+    rm_file(prefix + '.mdelta')
+    rm_file(prefix + '.mcoords')
+    rm_file(prefix + '.gp')
+    rm_file(prefix + '.fplot')
+    rm_file(prefix + '.filter')
+    rm_file(prefix + '.delta')
+    rm_file(prefix + '.1delta')
+    rm_file(prefix + '.1coords')
+    rm_file(prefix + '.rplot')
+    rm_file(prefix + '.rdiff')
+    rm_file(prefix + '.qdiff')
+    rm_file(prefix + '.snps')
 
 def extract_seq(fa, chr, start, end, out):
     with open(out, "w") as output:
@@ -372,9 +373,9 @@ def filter_annotation(file_in, file_out, out_dir, sample_name, region = None, di
         annotation = family_filter
     shutil.copyfile(annotation, file_out)
     if region is not None: 
-        rm(region_filter)
+        rm_file(region_filter)
     if discard_family is not None:
-        rm(family_filter)
+        rm_file(family_filter)
 
 def filter_family(file_in, file_out, families):
     family_list = families.replace(" ", "").split(',')
@@ -386,16 +387,6 @@ def filter_family(file_in, file_out, families):
                     write = False
             if write:
                 output.write(line)
-
-def mkdir(dir):
-    try:
-        os.mkdir(dir)
-    except OSError:
-        print ("Creation of the directory %s failed" % dir)
-
-def rm(file):
-    if os.path.exists(file):
-        os.remove(file)
 
 def check_lines(file):
     fname = os.path.basename(file)
