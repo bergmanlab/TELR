@@ -8,22 +8,32 @@ import subprocess
 import numpy as np
 import re
 
+
 def get_args():
-    parser = argparse.ArgumentParser(description="Script to lift annotation from one genome to another")
+    parser = argparse.ArgumentParser(
+        description="Script to lift annotation from one genome to another")
 
     ## required ##
-    parser.add_argument("-a", "--fasta1", type=str, help="genome 1", required=True)
-    parser.add_argument("-b", "--fasta2", type=str, help="genome 2", required=True)
-    parser.add_argument("-i", "--bed", type=str, help="annotation file for genome 1 in bed/gff format (default = 'bed')", required=True)
-    parser.add_argument("-v", "--overlap", type=int, help="maximum overlap (default = '30000')", required=False)
-    parser.add_argument("-g", "--gap", type=int, help="maximum gap (default = '25')", required=False)
-    parser.add_argument("-x", "--preset", type=str, help="preset (default = 'map-pb')", required=False)
-    parser.add_argument("-l", "--length", type=int, help="flanking sequence length (default = '500')", required=False)
-    parser.add_argument("-o", "--out", type=str, help="output dir", required=False)
+    parser.add_argument("-a", "--fasta1", type=str,
+                        help="genome 1", required=True)
+    parser.add_argument("-b", "--fasta2", type=str,
+                        help="genome 2", required=True)
+    parser.add_argument("-i", "--bed", type=str,
+                        help="annotation file for genome 1 in bed/gff format (default = 'bed')", required=True)
+    parser.add_argument("-v", "--overlap", type=int,
+                        help="maximum overlap (default = '30000')", required=False)
+    parser.add_argument("-g", "--gap", type=int,
+                        help="maximum gap (default = '25')", required=False)
+    parser.add_argument("-x", "--preset", type=str,
+                        help="preset (default = 'map-pb')", required=False)
+    parser.add_argument("-l", "--length", type=int,
+                        help="flanking sequence length (default = '500')", required=False)
+    parser.add_argument("-o", "--out", type=str,
+                        help="output dir", required=False)
 
     args = parser.parse_args()
 
-     # checks if in files exist
+    # checks if in files exist
     try:
         test = open(args.fasta1, 'r')
     except Exception as e:
@@ -41,27 +51,30 @@ def get_args():
 
     if args.gap is None:
         args.gap = 30000
-    
+
     if args.length is None:
         args.length = 500
-    
+
     if args.preset is None:
         args.preset = 'map-pb'
-    
+
     if args.out is None:
         args.out = "."
-    
+
     return args
+
 
 def main():
     args = get_args()
-    
-    sample_name = os.path.splitext(os.path.basename(args.fasta1))[0]
-    
-    # call liftover function
-    te_report, te_report_meta = annotation_liftover(args.fasta1, args.fasta2, ins_bed, sample_name, args.out, args.preset, args.overlap, args.gap, args.length)
 
-def annotation_liftover(fasta1, fasta2, bed, sample_name, out_dir = ".", preset = "map-pb", overlap = 25, gap = 30000, flank_len = 500, family_rm = None, freq = None):
+    sample_name = os.path.splitext(os.path.basename(args.fasta1))[0]
+
+    # call liftover function
+    te_report, te_report_meta = annotation_liftover(
+        args.fasta1, args.fasta2, ins_bed, sample_name, args.out, args.preset, args.overlap, args.gap, args.length)
+
+
+def annotation_liftover(fasta1, fasta2, bed, sample_name, out_dir=".", preset="map-pb", overlap=25, gap=30000, flank_len=500, family_rm=None, freq=None):
     print("Starting lift over workflow...")
 
     # for each annotation, extract flanking sequence, map to another genome, check the distance
@@ -74,19 +87,21 @@ def annotation_liftover(fasta1, fasta2, bed, sample_name, out_dir = ".", preset 
     flank_bed = out_dir + "/" + sample_name + ".flank.bed"
     get_flank_bed(ins_bed, fasta1, flank_bed, flank_len)
 
-    ## extract flanking sequences
+    # extract flanking sequences
     flank_fa = out_dir + "/" + sample_name + ".flank.fa"
-    print ("Generating flanking sequences...")
+    print("Generating flanking sequences...")
     with open(flank_fa, "w") as output:
-        subprocess.call(["bedtools", "getfasta", "-fi", fasta1, "-bed", flank_bed], stdout=output)
+        subprocess.call(["bedtools", "getfasta", "-fi", fasta1,
+                         "-bed", flank_bed], stdout=output)
     # print ("Done")
 
-    ## map to another genome
+    # map to another genome
     # minimap2 way
     mm2_out = out_dir + "/" + sample_name + ".flank.paf"
-    print ("Align flanking sequence to reference...")
+    print("Align flanking sequence to reference...")
     with open(mm2_out, "w") as output:
-        subprocess.call(["minimap2", "-cx", preset, "-v", "0", "--secondary=no", fasta2, flank_fa], stdout=output)
+        subprocess.call(["minimap2", "-cx", preset, "-v", "0",
+                         "--secondary=no", fasta2, flank_fa], stdout=output)
     # print ("Done")
 
     # read family, strand and TE length info into dict
@@ -131,9 +146,9 @@ def annotation_liftover(fasta1, fasta2, bed, sample_name, out_dir = ".", preset 
                     strand_dict[ins_name] = "."
                 else:
                     strand_dict[ins_name] = entry[4]
-    
+
     # read flanking info into dict
-    flank_side_dict = dict() # used later for flanking sequence extraction
+    flank_side_dict = dict()  # used later for flanking sequence extraction
     flank_ins_dict = dict()
     with open(flank_bed, "r") as input:
         for line in input:
@@ -142,37 +157,47 @@ def annotation_liftover(fasta1, fasta2, bed, sample_name, out_dir = ".", preset 
             flank_end = entry[3]
             flank_side_dict[flank_name] = flank_end
             flank_ins_dict[flank_name] = entry[4]
-    
+
     # process the mapped paf
-    print ("Parsing flanking sequence alignments...")
+    print("Parsing flanking sequence alignments...")
     te_remove_tmp = out_dir + "/" + sample_name + ".lift.remove.tmp.tsv"
     te_report_tmp = out_dir + "/" + sample_name + ".lift.pass.tmp.tsv"
     test_tmp = out_dir + "/" + sample_name + ".lift.test.tmp.tsv"
-    header = ["flank_name", "flank_len", "flank_start", "flank_end", "flank_strand", "chr", "start", "end"]
-    df = pd.read_csv(mm2_out, delimiter="\t", usecols=[0,1,2,3,4,5,7,8], names=header)
+    header = ["flank_name", "flank_len", "flank_start",
+              "flank_end", "flank_strand", "chr", "start", "end"]
+    df = pd.read_csv(mm2_out, delimiter="\t", usecols=[
+                     0, 1, 2, 3, 4, 5, 7, 8], names=header)
     df['ins_name'] = df['flank_name'].map(flank_ins_dict)
-    df['flank_side'] = df['flank_name'].map(flank_side_dict).replace('_.*', '', regex=True)
+    df['flank_side'] = df['flank_name'].map(
+        flank_side_dict).replace('_.*', '', regex=True)
     # filter out alignments on wrong chromosomes
-    if "chr" in df.iloc[0]['flank_name']: # TODO: optional, and check name like bed sytle
-        df['chr_flank'] = df['flank_name'].replace(':.*', '', regex=True).replace('_.*', '', regex=True)
+    # TODO: optional, and check name like bed sytle
+    if "chr" in df.iloc[0]['flank_name']:
+        df['chr_flank'] = df['flank_name'].replace(
+            ':.*', '', regex=True).replace('_.*', '', regex=True)
         rm_df = df.copy().query('chr_flank != chr')
         if len(rm_df) > 0:
             rm_df['type'] = "chr_mismatch"
-            rm_df.to_csv(te_remove_tmp, sep = '\t', index=False, header=False, columns=['ins_name', 'type'])
+            rm_df.to_csv(te_remove_tmp, sep='\t', index=False,
+                         header=False, columns=['ins_name', 'type'])
         df.query('chr_flank == chr', inplace=True)
         df.drop(['chr_flank'], inplace=True, axis=1)
     # remove multi hit
     rm_df = df.copy()[df.duplicated(subset='flank_name', keep='first')]
     if len(rm_df) > 0:
         rm_df['type'] = "multi_hit"
-        rm_df.to_csv(te_remove_tmp, sep = '\t', index=False, header=False, columns=['ins_name', 'type'], mode = 'a')
-    df.drop_duplicates(subset='flank_name', keep=False, inplace = True)
+        rm_df.to_csv(te_remove_tmp, sep='\t', index=False,
+                     header=False, columns=['ins_name', 'type'], mode='a')
+    df.drop_duplicates(subset='flank_name', keep=False, inplace=True)
     # remove if two flank map to different chr or strand
-    rm_df = df.copy().groupby('ins_name').filter(lambda x: x['chr'].nunique() > 1 or x['flank_strand'].nunique() > 1)
+    rm_df = df.copy().groupby('ins_name').filter(
+        lambda x: x['chr'].nunique() > 1 or x['flank_strand'].nunique() > 1)
     if len(rm_df) > 0:
         rm_df['type'] = "multi_strand"
-        rm_df.to_csv(te_remove_tmp, sep = '\t', index=False, header=False, columns=['ins_name', 'type'], mode = 'a')
-    df = df.groupby('ins_name').filter(lambda x: x['chr'].nunique() == 1 and x['flank_strand'].nunique() == 1)
+        rm_df.to_csv(te_remove_tmp, sep='\t', index=False,
+                     header=False, columns=['ins_name', 'type'], mode='a')
+    df = df.groupby('ins_name').filter(
+        lambda x: x['chr'].nunique() == 1 and x['flank_strand'].nunique() == 1)
     # add frequency info
     if freq is not None:
         df['te_freq'] = df['ins_name'].map(freq_dict)
@@ -180,14 +205,17 @@ def annotation_liftover(fasta1, fasta2, bed, sample_name, out_dir = ".", preset 
         df['te_freq'] = NA
     # add TE family info
     df['te_family'] = df['ins_name'].map(family_dict)
-    df.dropna(subset=["te_family"], inplace = True)  # remove annotation without family annotation
+    # remove annotation without family annotation
+    df.dropna(subset=["te_family"], inplace=True)
     df['te_strand'] = df['ins_name'].map(strand_dict)
     df['te_len'] = df['ins_name'].map(te_len_dict)
     # group and summarize by contig
     new_df = df.groupby('ins_name').apply(get_coordinate).reset_index()
     # remove if two flank have gap/overlap bigger than threshold
-    new_df = new_df[((new_df['score'] >= 0) & (new_df['end'] - new_df['start'] <= gap)) | ((new_df['score'] <= 0) & (new_df['end'] - new_df['start'] <= overlap)) | (new_df['score'] == 0.5)]
-    new_df.to_csv(te_report_tmp, sep = '\t', index=False, header=False, columns=['chr', 'start', 'end', 'family', 'score', 'strand', 'gap', 'ins_name', 'te_strand', 'te_len', 'te_freq'])
+    new_df = new_df[((new_df['score'] >= 0) & (new_df['end'] - new_df['start'] <= gap)) | (
+        (new_df['score'] <= 0) & (new_df['end'] - new_df['start'] <= overlap)) | (new_df['score'] == 0.5)]
+    new_df.to_csv(te_report_tmp, sep='\t', index=False, header=False, columns=[
+                  'chr', 'start', 'end', 'family', 'score', 'strand', 'gap', 'ins_name', 'te_strand', 'te_len', 'te_freq'])
 
     # sort gff
     te_report_tmp_sort = out_dir + "/" + sample_name + ".lift.tmp.sort.bed"
@@ -200,14 +228,14 @@ def annotation_liftover(fasta1, fasta2, bed, sample_name, out_dir = ".", preset 
     with open(te_report_tmp_merge, "w") as output:
         command = "bedtools merge -d 0 -o collapse -c 2,3,4,5,6,7,8,9,10,11 -delim \",\" -i " + te_report_tmp_sort
         subprocess.call(command, shell=True, stdout=output)
-    
+
     # output overlapped/identical entries
     with open(te_report_tmp_merge, "r") as input, open(te_remove_tmp, "a") as output:
         for line in input:
             entry = line.replace('\n', '').split("\t")
             if "," in entry[3]:
                 output.write(entry[9] + '\t' + 'ins_overlap' + '\n')
-    
+
     # find and remove duplicate entries in the remove list
     te_remove_final = out_dir + "/" + sample_name + ".lift.remove.bed"
     te_remove_set = set()
@@ -249,13 +277,15 @@ def annotation_liftover(fasta1, fasta2, bed, sample_name, out_dir = ".", preset 
                 te_strand = entry[10]
                 te_freq = entry[12]
             support_freq = '_'.join([str(support_type), str(te_freq)])
-            out_line = '\t'.join([chromosome, start, end, family, support_freq, strand])
+            out_line = '\t'.join(
+                [chromosome, start, end, family, support_freq, strand])
             output.write(out_line+"\n")
             te_id = ins_name.split(':')[0]
-            report_full.append({'ins_name': ins_name, 'ID': te_id, 'chr': chromosome, 'start': int(start), 'end': int(end), 'family': family, 'support_type': int(support_type), 'strand': strand, 'te_strand': strand, 'frequency': float(te_freq)})
+            report_full.append({'ins_name': ins_name, 'ID': te_id, 'chr': chromosome, 'start': int(start), 'end': int(
+                end), 'family': family, 'support_type': int(support_type), 'strand': strand, 'te_strand': strand, 'frequency': float(te_freq)})
 
     # clean files
-    print ("Clean tmp files...")
+    print("Clean tmp files...")
     # os.remove(flank_fa)
     # os.remove(flank_bed)
     # os.remove(te_remove_tmp)
@@ -267,6 +297,7 @@ def annotation_liftover(fasta1, fasta2, bed, sample_name, out_dir = ".", preset 
     print("Lift over workflow finished!\n")
 
     return report_full
+
 
 def get_coordinate(df_group):
     chr = df_group['chr'].tolist()[0]
@@ -291,19 +322,23 @@ def get_coordinate(df_group):
                 start = end = df_group['end'].tolist()[0]
             else:
                 start = end = df_group['start'].tolist()[0]
-        else:  
+        else:
             if df_group['flank_side'].tolist()[0] == 'LEFT':
                 start = end = df_group['start'].tolist()[0]
             else:
                 start = end = df_group['end'].tolist()[0]
     else:
         if flank_strand == '+':
-            start = df_group.loc[df_group['flank_side'] == 'LEFT', 'end'].iloc[0]
-            end = df_group.loc[df_group['flank_side'] == 'RIGHT', 'start'].iloc[0]
+            start = df_group.loc[df_group['flank_side']
+                                 == 'LEFT', 'end'].iloc[0]
+            end = df_group.loc[df_group['flank_side']
+                               == 'RIGHT', 'start'].iloc[0]
         else:
-            end = df_group.loc[df_group['flank_side'] == 'LEFT', 'start'].iloc[0]
-            start = df_group.loc[df_group['flank_side'] == 'RIGHT', 'end'].iloc[0]
-        if start > end: # when there are overlaps
+            end = df_group.loc[df_group['flank_side']
+                               == 'LEFT', 'start'].iloc[0]
+            start = df_group.loc[df_group['flank_side']
+                                 == 'RIGHT', 'end'].iloc[0]
+        if start > end:  # when there are overlaps
             gap = end - start
             start, end = end, start
             score = 2
@@ -336,8 +371,10 @@ def gff_to_bed(gff, bed):
             else:
                 family = entry[2]
             score = "."
-            out_line = '\t'.join([entry[0], entry[3], entry[4], family, score, entry[6]])
+            out_line = '\t'.join(
+                [entry[0], entry[3], entry[4], family, score, entry[6]])
             output.write(out_line + '\n')
+
 
 def get_flank_bed(gff, genome, flank_bed, flank_len=500):
     # get genome size
@@ -350,8 +387,8 @@ def get_flank_bed(gff, genome, flank_bed, flank_len=500):
             genome_len_dict[entry[0]] = int(entry[1])
 
     # get flanking coordinates
-    write_flank1=False
-    write_flank2=False
+    write_flank1 = False
+    write_flank2 = False
     with open(gff, "r") as input, open(flank_bed, "w") as output:
         for line in input:
             entry = line.replace('\n', '').split("\t")
@@ -363,27 +400,32 @@ def get_flank_bed(gff, genome, flank_bed, flank_len=500):
             flank1_end = aln_start - 1
             if flank1_end - flank_len > 0:
                 flank1_start = flank1_end - flank_len
-                write_flank1=True
+                write_flank1 = True
             else:
-                flank1_start=0
-                write_flank1=False
+                flank1_start = 0
+                write_flank1 = False
                 print("flank1 out of boundary for: " + ins_name)
-            flank2_start=aln_end + 1
+            flank2_start = aln_end + 1
             if flank2_start + flank_len < contig_size - 1:
                 flank2_end = flank2_start + flank_len
-                write_flank2=True
+                write_flank2 = True
             else:
                 flank2_end = contig_size-1
-                write_flank2=False
+                write_flank2 = False
                 print("flank2 out of boundary for: " + ins_name)
-                
-            if write_flank1 and write_flank2:
-                output.write('\t'.join([contig_name, str(flank1_start), str(flank1_end), "LEFT_P", ins_name]) + '\n')
-                output.write('\t'.join([contig_name, str(flank2_start), str(flank2_end), "RIGHT_P", ins_name]) + '\n')
-            elif write_flank1:
-                output.write('\t'.join([contig_name, str(flank1_start), str(flank1_end), "LEFT_S", ins_name]) + '\n')
-            elif write_flank2:
-                output.write('\t'.join([contig_name, str(flank2_start), str(flank2_end), "RIGHT_S", ins_name]) + '\n')
 
-if __name__ == "__main__":                
+            if write_flank1 and write_flank2:
+                output.write('\t'.join([contig_name, str(flank1_start), str(
+                    flank1_end), "LEFT_P", ins_name]) + '\n')
+                output.write('\t'.join([contig_name, str(flank2_start), str(
+                    flank2_end), "RIGHT_P", ins_name]) + '\n')
+            elif write_flank1:
+                output.write('\t'.join([contig_name, str(flank1_start), str(
+                    flank1_end), "LEFT_S", ins_name]) + '\n')
+            elif write_flank2:
+                output.write('\t'.join([contig_name, str(flank2_start), str(
+                    flank2_end), "RIGHT_S", ins_name]) + '\n')
+
+
+if __name__ == "__main__":
     main()

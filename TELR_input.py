@@ -4,23 +4,34 @@ import os
 import subprocess
 from Bio import SeqIO
 
+
 def get_args():
-    parser = argparse.ArgumentParser(description="Script to detect TEs in long read data")
+    parser = argparse.ArgumentParser(
+        description="Script to detect TEs in long read data")
     optional = parser._action_groups.pop()
     required = parser.add_argument_group("required arguments")
 
-    ## required ##
-    required.add_argument("-i", "--reads", type=str, help="reads in fasta/fastq format or read alignments in bam format", required=True)
-    required.add_argument("-r", "--reference", type=str, help="reference genome in fasta format", required=True)
-    required.add_argument("-l", "--library", type=str, help="TE consensus sequences in fasta format", required=True)
+    # required
+    required.add_argument("-i", "--reads", type=str,
+                          help="reads in fasta/fastq format or read alignments in bam format", required=True)
+    required.add_argument("-r", "--reference", type=str,
+                          help="reference genome in fasta format", required=True)
+    required.add_argument("-l", "--library", type=str,
+                          help="TE consensus sequences in fasta format", required=True)
 
-    ## optional ##
-    optional.add_argument("-x", "--presets", type=str, help="parameter presets for different sequencing technologies (default = 'pacbio')", required=False)
-    optional.add_argument("-p", "--polish", type=int, help="rounds of contig polishing (default = 1)", required=False)
-    optional.add_argument("-o", "--out", type=str, help="directory to output data (default = '.')", required=False)
-    optional.add_argument("-t", "--thread", type=int, help="max cpu threads to use (default = '1')", required=False)
-    optional.add_argument("-g", "--gap", type=int, help="max gap size for flanking sequence alignment (default = '20')", required=False)
-    optional.add_argument("-v", "--overlap", type=int, help="max overlap size for flanking sequence alignment (default = '20')", required=False)
+    # optional
+    optional.add_argument("-x", "--presets", type=str,
+                          help="parameter presets for different sequencing technologies (default = 'pacbio')", required=False)
+    optional.add_argument("-p", "--polish", type=int,
+                          help="rounds of contig polishing (default = 1)", required=False)
+    optional.add_argument("-o", "--out", type=str,
+                          help="directory to output data (default = '.')", required=False)
+    optional.add_argument("-t", "--thread", type=int,
+                          help="max cpu threads to use (default = '1')", required=False)
+    optional.add_argument("-g", "--gap", type=int,
+                          help="max gap size for flanking sequence alignment (default = '20')", required=False)
+    optional.add_argument("-v", "--overlap", type=int,
+                          help="max overlap size for flanking sequence alignment (default = '20')", required=False)
     parser._action_groups.append(optional)
     args = parser.parse_args()
     # TODO: remove intermediate files
@@ -59,7 +70,7 @@ def get_args():
 
     if args.polish is None:
         args.polish = 1
-    
+
     if args.gap is None:
         args.gap = 20
 
@@ -67,6 +78,7 @@ def get_args():
         args.overlap = 20
 
     return args
+
 
 def parse_input(input_reads, input_reference, sample_name, out_dir):
     # create symbolic link for the input file
@@ -91,7 +103,7 @@ def parse_input(input_reads, input_reference, sample_name, out_dir):
     except Exception as e:
         print(e)
         sys.exit(1)
-    
+
     sample_suffix = os.path.basename(input_reads_copy).split('.')[-1]
     if sample_suffix == 'bam' or sample_suffix == 'cram':
         print("Read alignment file is provided")
@@ -108,18 +120,20 @@ def parse_input(input_reads, input_reference, sample_name, out_dir):
     else:
         print("input reads/alignments format not recognized, exiting...")
         sys.exit(1)
-    
+
     return input_reads_copy, input_reference_copy, fasta, skip_alignment
+
 
 def bam2fasta(bam, fasta):
     print("Converting bam to fasta...")
     try:
         with open(fasta, "w") as output:
-            subprocess.call(["samtools", "fasta", bam], stdout = output)
+            subprocess.call(["samtools", "fasta", bam], stdout=output)
     except Exception as e:
         print(e)
         print("Conversion failed, check input bam file, exiting...")
         sys.exit(1)
+
 
 def rm_fasta_redundancy(fasta, new_fasta):
     records = set()
