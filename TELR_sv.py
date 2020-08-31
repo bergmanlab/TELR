@@ -1,187 +1,122 @@
 import sys
 import os
 import subprocess
-from Bio import SeqIO
 import pandas as pd
-from TELR_utility import mkdir
+import logging
+import time
+from TELR_utility import mkdir, format_time
 
 
 def detect_sv(bam, reference, out, sample_name, thread, svim=False):
-    print("Generating SV output...")
+    """
+    Detect structural variants from BAM file using Sniffles or SVIM
+    """
+    logging.info("Detecting SVs from BAM file...")
+    start_time = time.time()
     if svim:
         try:
             subprocess.call(["svim", "alignment", "--insertion_sequences", "--read_names",
                              "--sample", sample_name, "--duplications_as_insertions", out, bam, reference])
         except Exception as e:
             print(e)
-            print("svim run failed, please check input bam file, exiting....")
+            logging.exception("Detecting SVs using SVIM failed, exiting...")
             sys.exit(1)
-        vcf = out + "/" + "variants.vcf"
+        vcf = os.path.join(out, "variants.vcf")
     else:
-        vcf = out + "/" + sample_name + ".vcf"
-        # command="sniffles -n -1 --genotype --report_seq --report_BND --threads " + str(thread) + " -m " + bam + " -v " + vcf
-        command = "sniffles -n -1 --report_BND --threads " + \
-            str(thread) + " -m " + bam + " -v " + vcf
+        vcf = os.path.join(out, sample_name + ".vcf")
         try:
-            subprocess.call(command, shell=True)
+            subprocess.call(["sniffles", "-n", "-1", "--report_BND",
+                             "--threads", str(thread), "-m", bam, "-v", vcf])
         except Exception as e:
             print(e)
-            print("sniffles run failed, please check input bam file, exiting....")
+            logging.exception(
+                "Detecting SVs using Sniffles failed, exiting...")
             sys.exit(1)
-    print("Done\n")
-    if os.path.isfile(vcf) == False:
-        sys.stderr.write("VCF file from SV detection not found, exiting....\n")
+    proc_time = time.time() - start_time
+    if os.path.isfile(vcf) is False:
+        sys.stderr.write("SV detection output not found, exiting...\n")
         sys.exit(1)
     else:
+        logging.info("SV detection finished in " + format_time(proc_time))
         return(vcf)
 
 
-def sniffle_parse(vcf, out, sample_name, raw_reads, TE_library, thread):
-    contig_reads_dir = out+"/"+"contig_reads"
-    mkdir(contig_reads_dir)
+def vcf_parse_filter(vcf, vcf_parsed, out, sample_name, te_library, thread):
+    """Parse and filter for insertions from VCF file"""
+    logging.info("Parse structural variant VCF...")
 
-    vcf_parsed = out+"/"+sample_name+".vcf.parsed"
-    print("Generating parsed sniffle VCF...")
+    vcf_parsed_tmp = vcf + '.parsed.tmp'
+    parse_vcf(vcf, vcf_parsed_tmp)
+    filter_ins(vcf_parsed_tmp, vcf_parsed,
+               te_library, out, sample_name, thread)
+    os.remove(vcf_parsed_tmp)
+
+    # # constrct fasta from parsed filtered vcf file
+    # ins_te_seqs = os.path.join(out, sample_name+".ins.te.fasta")
+    # write_ins_seqs(vcf_filtered, ins_te_seqs)
+
+
+def parse_vcf(vcf, vcf_parsed):
+    vcf_parsed_tmp = vcf_parsed + '.tmp'
     query_str = "\"%CHROM\\t%POS\\t%END\\t%SVLEN\\t%RE\\t%AF\\t%ID\\t%ALT\\t%RNAMES\\t%FILTER\n\""
     command = "bcftools query -i \'SVTYPE=\"INS\"\' -f "+query_str+" "+vcf
-    print(command)
-    with open(vcf_parsed, "w") as output:
+    with open(vcf_parsed_tmp, "w") as output:
         subprocess.call(command, stdout=output, shell=True)
     # TODO check whether vcf file contains insertions, quit if 0
     # remove redundancy in parsed vcf
-    vcf_unique = out+"/"+sample_name+".vcf.reduced"
-    rm_vcf_redundancy(vcf_parsed, vcf_unique)
-    # os.remove(vcf_parsed)
-    vcf_parsed = vcf_unique
-    print("Done\n")
-
-    # constrct fasta from parsed vcf file
-    ins_seqs = out+"/"+sample_name+".ins.fasta"
-    vcf2fasta(vcf_parsed, ins_seqs)
-
-    # run RM on the inserted seqeunce
-    print("Repeatmask VCF sequences...")
-    subprocess.call(["RepeatMasker", "-dir", out, "-gff", "-s", "-nolow", "-no_is",
-                     "-xsmall", "-e", "ncbi", "-lib", TE_library, "-pa", str(thread), ins_seqs])
-    print("Done\n")
-    ins_rm_out = ins_seqs+".out.gff"
-
-    # extract VCF sequences that contain TEs
-    with open(ins_rm_out, "r") as input:
-        te_seqs_dict = dict()
-        for line in input:
-            if "RepeatMasker" in line:
-                entry = line.replace('\n', '').split("\t")
-                seq_len = int(entry[4]) - int(entry[3])
-                if entry[0] in te_seqs_dict:
-                    te_seqs_dict[entry[0]] = seq_len + te_seqs_dict[entry[0]]
-                else:
-                    te_seqs_dict[entry[0]] = seq_len
-
-    # filter parsed VCF using TE-sequence list and
-    vcf_parsed_filtered = out+"/"+sample_name+".vcf.parsed.filtered"
-    filter_vcf(vcf_parsed, te_seqs_dict, vcf_parsed_filtered)
-    # TODO check how many TEs in filtered set, quit if 0
-    # os.remove(vcf_parsed)
-
-    # constrct fasta from parsed filtered vcf file
-    ins_te_seqs = out+"/"+sample_name+".ins.te.fasta"
-    vcf2fasta(vcf_parsed_filtered, ins_te_seqs)
-
-    # extract read IDs
-    # TODO: convert to set?
-    ids = out+"/"+sample_name+".ids"
-    with open(vcf_parsed_filtered, "r") as input, open(ids, "w") as output:
-        for line in input:
-            entry = line.replace('\n', '').split("\t")
-            read_list = entry[8].split(",")
-            for read in read_list:
-                output.write(read+"\n")
-
-    # generate unique ID list
-    ids_unique = ids+".unique"
-    command = "cat "+ids+" |sort|uniq"
-    with open(ids_unique, "w") as output:
-        subprocess.call(command, stdout=output, shell=True)
-
-    # filter raw reads using read list
-    sub_fa = out+"/"+sample_name+".subreads.fa"
-    command = "seqtk subseq "+raw_reads+" "+ids_unique+" | seqtk seq -a"
-    with open(sub_fa, "w") as output:
-        subprocess.call(command, stdout=output, shell=True)
-
-    # reorder reads
-    sub_fa_reorder = out+"/"+sample_name+".subreads.reorder.fa"
-    extract_reads(sub_fa, ids, sub_fa_reorder)
-
-    # separate reads into multiple files, using csplit
-    work_dir = os.getcwd()
-    # print ("current working dir:"+work_dir)
-    os.chdir(contig_reads_dir)
-    # print ("New working dir:"+os.getcwd())
-    m = []
-    k = 1
-    with open(vcf_parsed_filtered, "r") as input:
-        for line in input:
-            entry = line.replace('\n', '').split("\t")
-            read_list = entry[8].split(",")
-            k = k + 2*(len(read_list))
-            m.append(k)
-    if len(m) == 1:
-        subprocess.call(["cp", sub_fa_reorder, "contig0"])
-    elif len(m) == 0:
-        print("No insertion detected, exiting...")
-    else:
-        m = m[:-1]
-        index = " ".join(str(i) for i in m)
-        command = "csplit -s -f contig -n 1 "+sub_fa_reorder+" "+index
-        subprocess.call(command, shell=True)
-        # print ("Done\n")
-
-    os.remove(ids)
-    os.remove(ids_unique)
-    os.remove(sub_fa)
-    os.remove(sub_fa_reorder)
-    os.chdir(work_dir)
-    # print ("New working dir:"+os.getcwd())
-
-    return vcf_parsed_filtered, contig_reads_dir
+    rm_vcf_redundancy(vcf_parsed_tmp, vcf_parsed)
+    os.remove(vcf_parsed_tmp)
+    return vcf_parsed
 
 
 def rm_vcf_redundancy(vcf_in, vcf_out):
     header = ["chr", "start", "end", "length",
-              "coverage", "AF", "ID", "seq", "ids", "filter"]
+              "coverage", "AF", "ID", "seq", "reads", "filter"]
     df = pd.read_csv(vcf_in, delimiter="\t", names=header)
     df2 = df.groupby(['chr', 'start', 'end']).agg(
-        {'length': 'first', 'coverage': 'sum', 'AF': af_sum, 'ID': 'first', 'seq': 'first', 'ids': id_merge, 'filter': 'first'}).reset_index()
+        {'length': 'first', 'coverage': 'sum', 'AF': af_sum, 'ID': 'first', 'seq': 'first', 'reads': id_merge, 'filter': 'first'}).reset_index()
     df2.to_csv(vcf_out, sep='\t', header=False, index=False)
 
 
-def filter_vcf(vcf, dict, out, cov=0):
-    with open(vcf, "r") as input, open(out, "w") as output:
+def filter_ins(ins, ins_filtered, te_library, out, sample_name, thread=1):
+    """
+    Filter insertion sequences from Sniffles VCF by repeatmasking with TE concensus
+    """
+    # constrct fasta from parsed vcf file
+    ins_seqs = os.path.join(out, sample_name+".vcf_ins.fasta")
+    write_ins_seqs(ins, ins_seqs)
+
+    # run RM on the inserted seqeunce
+    repeatmasker_dir = os.path.join(out, "vcf_ins_repeatmask")
+    mkdir(repeatmasker_dir)
+    try:
+        subprocess.call(["RepeatMasker", "-dir", repeatmasker_dir, "-gff", "-s", "-nolow",
+                         "-no_is", "-xsmall", "-e", "ncbi", "-lib", te_library, "-pa", str(thread), ins_seqs])
+        ins_repeatmasked = os.path.join(
+            repeatmasker_dir, os.path.basename(ins_seqs)+".out.gff")
+        open(ins_repeatmasked, 'r')
+    except Exception as e:
+        print(e)
+        print("Repeatmasking VCF insertion sequences failed, exiting...")
+        sys.exit(1)
+
+    # extract VCF sequences that contain TEs
+    with open(ins_repeatmasked, "r") as input:
+        te_contig_set = {
+            line.replace('\n', '').split("\t")[0]
+            for line in input
+            if "RepeatMasker" in line}
+
+    with open(ins, "r") as input, open(ins_filtered, "w") as output:
         for line in input:
             entry = line.replace('\n', '').split("\t")
             contig_name = "_".join([entry[0], entry[1], entry[2]])
-            length = entry[3]
-            if length == "999999999":
-                length = 999
-            else:
-                length = int(length)
-            if contig_name in dict:
-                # no VCF sequence TE coverage filtering for now
-                if dict[contig_name] >= cov * length:
-                    output.write(line)
+            # TODO: maybe add filter for insertion sequences covered by TE?
+            if contig_name in te_contig_set:
+                output.write(line)
 
 
-def extract_reads(reads, list, out):
-    record_dict = SeqIO.index(reads, "fasta")
-    with open(out, "wb") as output_handle, open(list, "r") as ID:
-        for entry in ID:
-            entry = entry.replace('\n', '')
-            output_handle.write(record_dict.get_raw(entry))
-
-
-def vcf2fasta(vcf, out):
+def write_ins_seqs(vcf, out):
     with open(vcf, "r") as input, open(out, "w") as output:
         for line in input:
             entry = line.replace('\n', '').split("\t")

@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timedelta
 
 
 def rm_file(file):
@@ -23,3 +24,13 @@ def check_exist(file):
         return True
     else:
         return False
+
+
+def format_time(time):
+    d = datetime(1, 1, 1) + timedelta(seconds=time)
+    if d.hour == 0 and d.minute == 0:
+        return("%d seconds" % (d.second))
+    elif d.hour == 0 and d.minute != 0:
+        return("%d minutes %d seconds" % (d.minute, d.second))
+    else:
+        return("%d hours %d minutes %d seconds" % (d.hour, d.minute, d.second))

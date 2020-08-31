@@ -1,50 +1,61 @@
 import sys
 import os
 import subprocess
+import logging
+import time
+from TELR_utility import format_time
 
 
-def alignment(read, reference, out, sample_name, thread, presets):
+def alignment(bam, read, reference, out, sample_name, thread, presets):
+    """
+    This function takes raw reads and performs read alignment using ngmlr.
+    """
     if presets == "ont":
-        presets_nglmr = "ont"
+        presets = "ont"
+        label = 'ont'
     else:
-        presets_nglmr = "pacbio"
-    bam = out + "/" + sample_name + ".tmp.bam"
-    print("Generating raw read alignment...")
+        presets = "pacbio"
+        label = 'pb'
+    bam_tmp = out + "/" + sample_name + ".tmp.bam"
+
+    logging.info("Start alignment...")
+    start_time = time.time()
+
     try:
-        with open(bam, "w") as output:
+        with open(bam_tmp, "w") as output:
             subprocess.call(["ngmlr",
                              "-r", reference,
                              "-q", read,
-                             "-x", presets_nglmr,
+                             "-x", presets,
                              "-t", str(thread),
                              "--rg-id", sample_name,
                              "--rg-sm", sample_name,
-                             "--rg-lb", "pb", "--no-progress"], stdout=output)
-            # TODO: change rg-lb
+                             "--rg-lb", label, "--no-progress"], stdout=output)
     except Exception as e:
         print(e)
         print("Read alignment (ngmlr) failed, check input reads, exiting...")
         sys.exit(1)
+    proc_time = time.time() - start_time
+    logging.info("Alignment finished in " + format_time(proc_time))
 
-    sorted_bam = out + "/" + sample_name + "_sort.bam"
-    sort_index_bam(bam, sorted_bam, thread)
-
-    if os.path.isfile(sorted_bam) is False:
+    sort_index_bam(bam_tmp, bam, thread)
+    if os.path.isfile(bam) is False:
         sys.stderr.write(
-            "BAM file from read alignment step failed, exiting....\n")
+            "Sorted and indexed BAM file does not exist, exiting...\n")
         sys.exit(1)
-    else:
-        return(sorted_bam)
+    os.remove(bam_tmp)
 
 
 def sort_index_bam(bam, sorted_bam, thread):
-    print("Sort and index read alignment...")
+    """
+    Sort and index bam file
+    """
+    logging.info("Sort and index BAM...")
     try:
         subprocess.call(["samtools", "sort", "-@",
                          str(thread), "-o", sorted_bam, bam])
         subprocess.call(["samtools", "index", "-@", str(thread), sorted_bam])
     except Exception as e:
         print(e)
-        print("Sort and index bam file failed, exiting....")
+        print("Sort and index BAM file failed, exiting...")
         sys.exit(1)
-    print("Done\n")

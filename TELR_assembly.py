@@ -1,13 +1,21 @@
 import sys
 import os
 import subprocess
+import time
+import logging
+from Bio import SeqIO
 from multiprocessing import Process, Pool
-from TELR_utility import mkdir, check_exist
+from TELR_utility import mkdir, check_exist, format_time
 
 
-def local_assembly(contig_reads_dir, vcf, out, raw_reads, thread, presets, polish):
-    contig_assembly_dir = out+"/"+"contig_assembly"
-    mkdir(contig_assembly_dir)
+def local_assembly(contig_dir, vcf_parsed, out, sample_name, raw_reads, thread, presets, polish):
+    """Perform local assembly using reads from parsed VCF file"""
+
+    # Prepare reads used for local assembly
+    contig_reads_dir = os.path.join(out, "contig_reads")
+    prep_assembly(vcf_parsed, out, sample_name, raw_reads, contig_reads_dir)
+
+    mkdir(contig_dir)
 
     if presets == "ont":
         presets_wtdbg2 = "ont"
@@ -16,10 +24,9 @@ def local_assembly(contig_reads_dir, vcf, out, raw_reads, thread, presets, polis
         presets_wtdbg2 = "rs"
         presets_minimap2 = "map-pb"
 
-    print("Assemble contigs...")
     k = 0
     asm_pa_list = []
-    with open(vcf, "r") as input:
+    with open(vcf_parsed, "r") as input:
         for line in input:
             entry = line.replace('\n', '').split("\t")
             contig_name = "_".join([entry[0], entry[1], entry[2]])
@@ -28,17 +35,83 @@ def local_assembly(contig_reads_dir, vcf, out, raw_reads, thread, presets, polis
             contig_reads_rename = contig_reads_dir + "/" + contig_name + ".reads.fa"
             os.rename(contig_reads, contig_reads_rename)
             thread_asm = 1
-            asm_pa = [contig_reads_rename, contig_assembly_dir, contig_name,
+            asm_pa = [contig_reads_rename, contig_dir, contig_name,
                       thread_asm, presets_wtdbg2, presets_minimap2, polish]
             asm_pa_list.append(asm_pa)
             k = k + 1
     # run assembly in parallel
-    pool = Pool(processes=thread)
-    pool.map(run_wtdbg2, asm_pa_list)
-    pool.close()
-    pool.join()
-    print("Done\n")
-    return(contig_assembly_dir)
+    logging.info("Perform local assembly of non-reference TE loci...")
+    start_time = time.time()
+    try:
+        pool = Pool(processes=thread)
+        pool.map(run_wtdbg2, asm_pa_list)
+        pool.close()
+        pool.join()
+    except Exception as e:
+        print(e)
+        print("Local assembly failed, exiting...")
+        sys.exit(1)
+
+    proc_time = time.time() - start_time
+    logging.info("Local assembly finished in " + format_time(proc_time))
+
+
+def prep_assembly(vcf_parsed, out, sample_name, raw_reads, contig_reads_dir):
+    """Prepare reads for local assembly"""
+    logging.info("Prepare reads for local assembly")
+    # extract read IDs
+    read_ids = os.path.join(out, sample_name+".id")
+    with open(vcf_parsed, "r") as input, open(read_ids, "w") as output:
+        for line in input:
+            entry = line.replace('\n', '').split("\t")
+            read_list = entry[8].split(",")
+            for read in read_list:
+                output.write(read+"\n")
+
+    # generate unique ID list
+    read_ids_unique = read_ids+".unique"
+    command = "cat " + read_ids + " | sort | uniq"
+    with open(read_ids_unique, "w") as output:
+        subprocess.call(command, stdout=output, shell=True)
+
+    # filter raw reads using read list
+    subset_fa = os.path.join(out, sample_name+".subset.fa")
+    command = "seqtk subseq " + raw_reads + \
+        " " + read_ids_unique + " | seqtk seq -a"
+    with open(subset_fa, "w") as output:
+        subprocess.call(command, stdout=output, shell=True)
+
+    # reorder reads
+    subset_fa_reorder = out+"/"+sample_name+".subset.reorder.fa"
+    extract_reads(subset_fa, read_ids, subset_fa_reorder)
+
+    # separate reads into multiple files, using csplit
+    mkdir(contig_reads_dir)
+    csplit_prefix = contig_reads_dir + '/contig'
+    m = []
+    k = 1
+    with open(vcf_parsed, "r") as input:
+        for line in input:
+            entry = line.replace('\n', '').split("\t")
+            read_list = entry[8].split(",")
+            k = k + 2*(len(read_list))
+            m.append(k)
+    if len(m) == 1:
+        subprocess.call(
+            ["cp", subset_fa_reorder, contig_reads_dir + '/contig0'])
+    elif len(m) == 0:
+        print("No insertion detected, exiting...")
+    else:
+        m = m[:-1]
+        index = " ".join(str(i) for i in m)
+        subprocess.call(['csplit', '-s', '-f', csplit_prefix,
+                         '-n', '1', subset_fa_reorder, index])
+
+    # remove tmp files
+    os.remove(read_ids)
+    os.remove(read_ids_unique)
+    os.remove(subset_fa)
+    os.remove(subset_fa_reorder)
 
 
 def run_wtdbg2(args):
@@ -51,10 +124,9 @@ def run_wtdbg2(args):
     polish = args[6]
 
     prefix = reads.replace('.reads.fa', '')
-    command = "wtdbg2 -x "+presets_wtdbg2+" -q -AS 1 -g 30k -t " + \
-        str(thread)+" -i "+reads+" -fo "+prefix
     try:
-        subprocess.run(command, shell=True, timeout=300)
+        subprocess.run(["wtdbg2", "-x", presets_wtdbg2, "-q", "-AS", "1", "-g",
+                        "30k", "-t", str(thread), "-i", reads, "-fo", prefix], timeout=300)
     except subprocess.TimeoutExpired:
         print("fail to build contig layout for contig: " + contig_name)
         return
@@ -63,11 +135,10 @@ def run_wtdbg2(args):
     if check_exist(contig_layout):
         # derive consensus
         cns_thread = str(min(thread, 4))
-        contig_raw = prefix+".ctg.lay.gz"
         consensus = prefix + ".raw.fa"
-        command = "wtpoa-cns -q -t "+cns_thread+" -i "+contig_layout+" -fo "+consensus
         try:
-            subprocess.run(command, shell=True, timeout=300)
+            subprocess.run(["wtpoa-cns", "-q", "-t", cns_thread,
+                            "-i", contig_layout, "-fo", consensus], timeout=300)
         except subprocess.TimeoutExpired:
             print("fail to assemble contig: " + contig_name)
             return
@@ -117,3 +188,11 @@ def polish_contig(prefix, reads, raw_contig, polished_contig, thread, preset, ro
     else:
         print("polishing failed for "+contig_name+"\n")
     return
+
+
+def extract_reads(reads, list, out):
+    record_dict = SeqIO.index(reads, "fasta")
+    with open(out, "wb") as output_handle, open(list, "r") as ID:
+        for entry in ID:
+            entry = entry.replace('\n', '')
+            output_handle.write(record_dict.get_raw(entry))

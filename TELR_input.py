@@ -2,7 +2,9 @@ import argparse
 import sys
 import os
 import subprocess
+import logging
 from Bio import SeqIO
+from TELR_utility import mkdir
 
 
 def get_args():
@@ -41,18 +43,21 @@ def get_args():
         test = open(args.reads, 'r')
     except Exception as e:
         print(e)
+        logging.exception("Can not open input file: " + args.reads)
         sys.exit(1)
 
     try:
         test = open(args.reference, 'r')
     except Exception as e:
         print(e)
+        logging.exception("Can not open input file: " + args.reference)
         sys.exit(1)
 
     try:
         test = open(args.library, 'r')
     except Exception as e:
         print(e)
+        logging.exception("Can not open input file: " + args.library)
         sys.exit(1)
 
     if args.presets is None:
@@ -62,8 +67,7 @@ def get_args():
     if args.out is None:
         args.out = "."
     args.out = os.path.abspath(args.out)
-    if not os.path.exists(args.out):
-        os.mkdir(args.out)
+    mkdir(args.out)
 
     if args.thread is None:
         args.thread = 1
@@ -81,61 +85,83 @@ def get_args():
 
 
 def parse_input(input_reads, input_reference, sample_name, out_dir):
+    """
+    Parse input files. If bam file is provided, convert to fasta format.
+    """
+    logging.info("Parsing input files...")
     # create symbolic link for the input file
-    input_reads_copy = out_dir + '/' + os.path.basename(input_reads)
+    input_reads_copy = os.path.join(out_dir, os.path.basename(input_reads))
     if not os.path.isabs(input_reads):
-        input_reads = os.getcwd() + '/' + input_reads
+        input_reads = os.path.abspath(input_reads)
     if os.path.islink(input_reads_copy):
         os.remove(input_reads_copy)
     try:
         os.symlink(input_reads, input_reads_copy)
     except Exception as e:
         print(e)
+        logging.exception("Create symbolic link for " +
+                          input_reads + " failed")
         sys.exit(1)
 
-    input_reference_copy = out_dir + '/' + os.path.basename(input_reference)
+    input_reference_copy = os.path.join(
+        out_dir, os.path.basename(input_reference))
     if not os.path.isabs(input_reference):
-        input_reference = os.getcwd() + '/' + input_reference
+        input_reference = os.path.abspath(input_reference)
     if os.path.islink(input_reference_copy):
         os.remove(input_reference_copy)
     try:
         os.symlink(input_reference, input_reference_copy)
-    except Exception as e:
-        print(e)
+    except Exception:
+        logging.exception("Create symbolic link for " +
+                          input_reference + " failed")
         sys.exit(1)
 
-    sample_suffix = os.path.basename(input_reads_copy).split('.')[-1]
-    if sample_suffix == 'bam' or sample_suffix == 'cram':
-        print("Read alignment file is provided")
+    reads_filename, reads_extension = os.path.splitext(input_reads_copy)
+    if reads_extension == '.bam':
+        logging.info("BAM file is provided, skip alignment step")
         skip_alignment = True
-        tmp_fasta = out_dir + '/' + sample_name + '.tmp.fasta'
-        bam2fasta(input_reads_copy, tmp_fasta)
-        fasta = out_dir + '/' + sample_name + '.telr.fasta'
-        rm_fasta_redundancy(tmp_fasta, fasta)
-        os.remove(tmp_fasta)
-    elif sample_suffix == 'fasta' or sample_suffix == 'fastq' or sample_suffix == 'fa' or sample_suffix == 'fq':
-        print("Raw read file is provided")
+        fasta = os.path.join(out_dir, sample_name + '.telr.fasta')
+        logging.info("Converting input BAM file to fasta...")
+        bam2fasta(input_reads_copy, fasta)
+    elif reads_extension == '.fasta' or reads_extension == '.fastq' or reads_extension == '.fa' or reads_extension == '.fq':
+        logging.info("Raw reads are provided")
         skip_alignment = False
         fasta = input_reads_copy
     else:
-        print("input reads/alignments format not recognized, exiting...")
+        print("Input reads/alignments format not recognized, exiting...")
+        logging.error("Input format not recognized")
         sys.exit(1)
 
     return input_reads_copy, input_reference_copy, fasta, skip_alignment
 
 
 def bam2fasta(bam, fasta):
-    print("Converting bam to fasta...")
+    """
+    Convert bam to fasta.
+    """
+    fasta_tmp = fasta + '.tmp'
     try:
-        with open(fasta, "w") as output:
+        with open(fasta_tmp, "w") as output:
             subprocess.call(["samtools", "fasta", bam], stdout=output)
     except Exception as e:
         print(e)
-        print("Conversion failed, check input bam file, exiting...")
+        print("BAM to Fasta conversion failed, check input bam file, exiting...")
         sys.exit(1)
+
+    try:
+        rm_fasta_redundancy(fasta_tmp, fasta)
+    except Exception as e:
+        print(e)
+        logging.exception("Remove redundancy in fasta file failed")
+        sys.exit(1)
+    os.remove(fasta_tmp)
 
 
 def rm_fasta_redundancy(fasta, new_fasta):
+    """
+    Remove redundancy in fasta file.
+    If there are multiple IDs, keep the first one.
+    """
     records = set()
     with open(new_fasta, "w") as output_handle:
         for record in SeqIO.parse(fasta, "fasta"):

@@ -3,21 +3,22 @@ import subprocess
 from Bio import SeqIO
 import json
 import re
-
+import logging
+from TELR_utility import mkdir
 from liftover import annotation_liftover
 
 
-def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets):
-    print("Generating contig annotation...")
+def annotate_contig(asm_dir, te_library, vcf, out, sample_name, thread, presets):
+    logging.info("Annotate contigs...")
     if presets == "ont":
-        presets_minimap2 = "map-ont"
+        presets = "map-ont"
     else:
-        presets_minimap2 = "map-pb"
+        presets = "map-pb"
 
     # merge all contigs into a single file
-    merge_contigs = out+"/"+sample_name+".contigs.fa"
-    contig_list = out+"/"+sample_name+".contigs.list"
-    # print ("Generate merged contig file...")
+    merge_contigs = os.path.join(out, sample_name+".contigs.fa")
+    contig_list = os.path.join(out, sample_name+".contigs.list")
+    # TODO: I should do this another way, maybe start from parsed VCF
     with open(merge_contigs, "w") as output_contigs, open(contig_list, "w") as output_list:
         for file in os.listdir(asm_dir):
             if ".cns.fa" in file and os.stat(asm_dir+"/"+file).st_size > 0:
@@ -32,7 +33,7 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets)
                             output_list.write(contig_name+"\n")
 
     # map sequence to contigs
-    seq2contig_out = out+"/"+"seq2contig.paf"
+    seq2contig_out = os.path.join(out, "seq2contig.paf")
     if os.path.isfile(seq2contig_out):
         os.remove(seq2contig_out)
 
@@ -60,15 +61,15 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets)
             if os.path.isfile(subject):
                 with open(seq2contig_out, "a") as output:
                     mm2_output = subprocess.check_output(
-                        ["minimap2", "-cx", presets_minimap2, "--secondary=no", "-v", "0", subject, query])
+                        ["minimap2", "-cx", presets, "--secondary=no", "-v", "0", subject, query])
                     mm2_output_parsed = mm2_output.decode("utf-8")
                     if mm2_output_parsed == "":
                         print(contig_name + ':VCF sequence can not map to contig')
-                    subprocess.call(["minimap2", "-cx", presets_minimap2,
+                    subprocess.call(["minimap2", "-cx", presets,
                                      "--secondary=no", "-v", "0", subject, query], stdout=output)
             os.remove(query)
             os.remove(subject)
-    seq2contig_bed = out+"/"+"seq2contig.bed"
+    seq2contig_bed = os.path.join(out, "seq2contig.bed")
     # covert to bed format
     with open(seq2contig_out, "r") as input, open(seq2contig_bed, "w") as output:
         for line in input:
@@ -78,12 +79,10 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets)
             bed_line = "\t".join(
                 [entry[0], entry[7], entry[8], entry[5], entry[11], entry[4]])
             output.write(bed_line+"\n")
-    print("Done\n")
 
     # map TE library to contigs using minimap2
     # TE-contig alignment
-    te2contig_out = out+"/"+sample_name+".te2contig.paf"
-    print("Generating TE-contig alignment...")
+    te2contig_out = os.path.join(out, sample_name+".te2contig.paf")
     if os.path.isfile(te2contig_out):
         os.remove(te2contig_out)
     with open(contig_list, "r") as input:
@@ -95,31 +94,29 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets)
                     ["samtools", "faidx", merge_contigs, contig_name], stdout=output)
             # map TE library to contig using minimap2 map-pb -p 0.8 -c
             with open(te2contig_out, "a") as output:
-                subprocess.call(["minimap2", "-cx", presets_minimap2, contig,
-                                 TE_library, "-v", "0", "-t", str(thread)], stdout=output)
-            # remove contig file
+                subprocess.call(["minimap2", "-cx", presets, contig,
+                                 te_library, "-v", "0", "-t", str(thread)], stdout=output)
             os.remove(contig)
     # convert to bed format
-    te2contig_bed = out+"/"+sample_name+".te2contig.bed"
+    te2contig_bed = os.path.join(out, sample_name+".te2contig.bed")
     with open(te2contig_out, "r") as input, open(te2contig_bed, "w") as output:
         for line in input:
             entry = line.replace('\n', '').split("\t")
             bed_line = "\t".join(
                 [entry[5], entry[7], entry[8], entry[0], entry[11], entry[4]])
             output.write(bed_line+"\n")
-    print("Done\n")
 
     # Use VCF sequence alignment to filter minimap2 TE-contig alignment
-    te2contig_filter_raw = out+"/"+sample_name+".te2contig_filter.tsv"
+    te2contig_filter_raw = os.path.join(
+        out, sample_name+".te2contig_filter.tsv")
     command = "bedtools intersect -a "+te2contig_bed+" -b "+seq2contig_bed+" -wao"
-    # print ("Filter TE-contig alignment...")
     with open(te2contig_filter_raw, "w") as output:
         subprocess.call(command, shell=True, stdout=output)
-    # print ("Done")
 
     # filter and merge
     # get rid of -1 and make it into bed format
-    te2contig_filter_tmp_bed = out+"/"+sample_name+".te2contig_filter.tmp.bed"
+    te2contig_filter_tmp_bed = os.path.join(
+        out, sample_name+".te2contig_filter.tmp.bed")
     with open(te2contig_filter_raw, "r") as input, open(te2contig_filter_tmp_bed, "w") as output:
         for line in input:
             entry = line.replace('\n', '').split("\t")
@@ -152,16 +149,22 @@ def annotate_contig(asm_dir, TE_library, vcf, out, sample_name, thread, presets)
     with open(te_fa, "w") as output:
         subprocess.call(["bedtools", "getfasta", "-fi", merge_contigs,
                          "-bed", te2contig_filter_bed], stdout=output)
-    te_rm_out = te_fa+".out.gff"
-    print("Generating TE sequences repeatmasking output...")
-    subprocess.call(["RepeatMasker", "-dir", out, "-gff", "-s", "-nolow", "-no_is",
-                     "-xsmall", "-e", "ncbi", "-lib", TE_library, "-pa", str(thread), te_fa])
-    print("Done\n")
+    repeatmasker_dir = os.path.join(out, "contig_te_repeatmask")
+    mkdir(repeatmasker_dir)
+    try:
+        subprocess.call(["RepeatMasker", "-dir", repeatmasker_dir, "-gff", "-s", "-nolow", "-no_is",
+                         "-xsmall", "-e", "ncbi", "-lib", te_library, "-pa", str(thread), te_fa])
+        contig_te_repeatmasked = os.path.join(
+            repeatmasker_dir, os.path.basename(te_fa)+".out.gff")
+        open(contig_te_repeatmasked, 'r')
+    except Exception as e:
+        print(e)
+        print("Repeatmasking contig TE sequences failed, exiting...")
+        sys.exit(1)
 
     ## parse and merge
     te2contig_rm = out+"/"+sample_name+".te2contig_rm.bed"
-    print("Repeatmask TE sequences...")
-    with open(te_rm_out, "r") as input, open(te2contig_rm, "w") as output:
+    with open(contig_te_repeatmasked, "r") as input, open(te2contig_rm, "w") as output:
         for line in input:
             if "##" not in line:
                 entry = line.replace('\n', '').split("\t")
@@ -200,16 +203,26 @@ def seq2contig(seq, contig, out):
                          contig, seq], stdout=output)  # only retain primary alignment
 
 
-def find_te(contigs, ref, te_contigs_annotation, family_annotation, te_freq, te_fa, out, sample_name, gap, overlap, presets):
+# def find_te(contigs, ref, te_contigs_annotation, family_annotation, te_freq, te_fa, out, sample_name, gap, overlap, presets):
+def find_te(contig_dir, vcf_parsed, ref, te_library, out, sample_name, thread, gap, overlap, presets):
+    """
+    Identify non-reference TE insertions in the reference genome using assembled contigs
+    """
     if presets == "ont":
-        presets_minimap2 = "map-ont"
+        presets = "map-ont"
     else:
-        presets_minimap2 = "map-pb"
+        presets = "map-pb"
+
+    # contig annotation
+    te_contigs_annotation, family_annotation, te_freq, te_fa, merge_contigs = annotate_contig(
+        contig_dir, te_library, vcf_parsed, out, sample_name, thread, presets)
 
     # lift over
-    report_meta = annotation_liftover(fasta1=contigs, fasta2=ref, bed=te_contigs_annotation, sample_name=sample_name, out_dir=out,
-                                      preset=presets_minimap2, overlap=overlap, gap=gap, flank_len=500, family_rm=family_annotation, freq=te_freq)
+    logging.info("Map contigs to reference...")
+    report_meta = annotation_liftover(fasta1=merge_contigs, fasta2=ref, bed=te_contigs_annotation, sample_name=sample_name, out_dir=out,
+                                      preset=presets, overlap=overlap, gap=gap, flank_len=500, family_rm=family_annotation, freq=te_freq)
 
+    logging.info("Write output...")
     # convert meta to dict
     ins_dict = dict()
     for item in report_meta:
