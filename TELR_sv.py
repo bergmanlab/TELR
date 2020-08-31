@@ -16,7 +16,7 @@ def detect_sv(vcf_parsed, bam, reference, te_library, out, sample_name, thread, 
     if svim:
         try:
             subprocess.call(["svim", "alignment", "--insertion_sequences", "--read_names",
-                             "--sample", sample_name, "--duplications_as_insertions", out, bam, reference])
+                             "--sample", sample_name, "--interspersed_duplications_as_insertions", out, bam, reference])
         except Exception as e:
             print(e)
             logging.exception("Detecting SVs using SVIM failed, exiting...")
@@ -25,8 +25,8 @@ def detect_sv(vcf_parsed, bam, reference, te_library, out, sample_name, thread, 
     else:
         vcf = os.path.join(out, sample_name + ".vcf")
         try:
-            subprocess.call(["sniffles", "-n", "-1", "--report_BND",
-                             "--threads", str(thread), "-m", bam, "-v", vcf])
+            subprocess.call(["sniffles", "-n", "-1", "--threads",
+                             str(thread), "-m", bam, "-v", vcf])
         except Exception as e:
             print(e)
             logging.exception(
@@ -38,10 +38,9 @@ def detect_sv(vcf_parsed, bam, reference, te_library, out, sample_name, thread, 
         sys.exit(1)
     else:
         logging.info("SV detection finished in " + format_time(proc_time))
-    
+
     # parse VCF from SV detection output to tsv
     vcf_parse_filter(vcf, vcf_parsed, te_library, out, sample_name, thread)
-
 
 
 def vcf_parse_filter(vcf, vcf_parsed, te_library, out, sample_name, thread):
@@ -50,13 +49,9 @@ def vcf_parse_filter(vcf, vcf_parsed, te_library, out, sample_name, thread):
 
     vcf_parsed_tmp = vcf + '.parsed.tmp'
     parse_vcf(vcf, vcf_parsed_tmp)
-    filter_ins(vcf_parsed_tmp, vcf_parsed,
+    filter_vcf(vcf_parsed_tmp, vcf_parsed,
                te_library, out, sample_name, thread)
     os.remove(vcf_parsed_tmp)
-
-    # # constrct fasta from parsed filtered vcf file
-    # ins_te_seqs = os.path.join(out, sample_name+".ins.te.fasta")
-    # write_ins_seqs(vcf_filtered, ins_te_seqs)
 
 
 def parse_vcf(vcf, vcf_parsed):
@@ -81,7 +76,7 @@ def rm_vcf_redundancy(vcf_in, vcf_out):
     df2.to_csv(vcf_out, sep='\t', header=False, index=False)
 
 
-def filter_ins(ins, ins_filtered, te_library, out, sample_name, thread=1):
+def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread=1):
     """
     Filter insertion sequences from Sniffles VCF by repeatmasking with TE concensus
     """
@@ -117,6 +112,7 @@ def filter_ins(ins, ins_filtered, te_library, out, sample_name, thread=1):
             # TODO: maybe add filter for insertion sequences covered by TE?
             if contig_name in te_contig_set:
                 output.write(line)
+    os.remove(ins_seqs)
 
 
 def write_ins_seqs(vcf, out):
