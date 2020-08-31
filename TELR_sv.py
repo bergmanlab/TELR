@@ -4,10 +4,10 @@ import subprocess
 import pandas as pd
 import logging
 import time
-from TELR_utility import mkdir, format_time
+from TELR_utility import mkdir, format_time, create_loci_set
 
 
-def detect_sv(vcf_parsed, bam, reference, te_library, out, sample_name, thread, svim=False):
+def detect_sv(vcf_parsed, bam, reference, te_library, out, sample_name, thread, loci_eval, svim=False):
     """
     Detect structural variants from BAM file using Sniffles or SVIM
     """
@@ -40,23 +40,23 @@ def detect_sv(vcf_parsed, bam, reference, te_library, out, sample_name, thread, 
         logging.info("SV detection finished in " + format_time(proc_time))
 
     # parse VCF from SV detection output to tsv
-    vcf_parse_filter(vcf, vcf_parsed, te_library, out, sample_name, thread)
+    vcf_parse_filter(vcf, vcf_parsed, bam, te_library, out, sample_name, thread, loci_eval)
 
 
-def vcf_parse_filter(vcf, vcf_parsed, te_library, out, sample_name, thread):
+def vcf_parse_filter(vcf, vcf_parsed, bam, te_library, out, sample_name, thread, loci_eval):
     """Parse and filter for insertions from VCF file"""
     logging.info("Parse structural variant VCF...")
 
     vcf_parsed_tmp = vcf + '.parsed.tmp'
-    parse_vcf(vcf, vcf_parsed_tmp)
+    parse_vcf(vcf, vcf_parsed_tmp, bam)
     filter_vcf(vcf_parsed_tmp, vcf_parsed,
-               te_library, out, sample_name, thread)
+               te_library, out, sample_name, thread, loci_eval)
     os.remove(vcf_parsed_tmp)
 
 
-def parse_vcf(vcf, vcf_parsed):
+def parse_vcf(vcf, vcf_parsed, bam):
     vcf_parsed_tmp = vcf_parsed + '.tmp'
-    query_str = "\"%CHROM\\t%POS\\t%END\\t%SVLEN\\t%RE\\t%AF\\t%ID\\t%ALT\\t%RNAMES\\t%FILTER\n\""
+    query_str = "\"%CHROM\\t%POS\\t%END\\t%SVLEN\\t%RE\\t%AF\\t%ID\\t%ALT\\t%RNAMES\\t%FILTER\\t[ %GT]\\t[ %DR]\\t[ %DV]\n\""
     command = "bcftools query -i \'SVTYPE=\"INS\"\' -f "+query_str+" "+vcf
     with open(vcf_parsed_tmp, "w") as output:
         subprocess.call(command, stdout=output, shell=True)
@@ -69,14 +69,14 @@ def parse_vcf(vcf, vcf_parsed):
 
 def rm_vcf_redundancy(vcf_in, vcf_out):
     header = ["chr", "start", "end", "length",
-              "coverage", "AF", "ID", "seq", "reads", "filter"]
+              "coverage", "AF", "ID", "seq", "reads", "filter", "genotype", "ref_count", "alt_count"]
     df = pd.read_csv(vcf_in, delimiter="\t", names=header)
     df2 = df.groupby(['chr', 'start', 'end']).agg(
-        {'length': 'first', 'coverage': 'sum', 'AF': af_sum, 'ID': 'first', 'seq': 'first', 'reads': id_merge, 'filter': 'first'}).reset_index()
+        {'length': 'first', 'coverage': 'sum', 'AF': af_sum, 'ID': 'first', 'seq': 'first', 'reads': id_merge, 'filter': 'first', 'genotype': 'first', 'ref_count': 'sum', 'alt_count': 'sum'}).reset_index()
     df2.to_csv(vcf_out, sep='\t', header=False, index=False)
 
 
-def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread=1):
+def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eval):
     """
     Filter insertion sequences from Sniffles VCF by repeatmasking with TE concensus
     """
@@ -100,7 +100,7 @@ def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread=1):
 
     # extract VCF sequences that contain TEs
     with open(ins_repeatmasked, "r") as input:
-        te_contig_set = {
+        ins_te_loci = {
             line.replace('\n', '').split("\t")[0]
             for line in input
             if "RepeatMasker" in line}
@@ -110,9 +110,16 @@ def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread=1):
             entry = line.replace('\n', '').split("\t")
             contig_name = "_".join([entry[0], entry[1], entry[2]])
             # TODO: maybe add filter for insertion sequences covered by TE?
-            if contig_name in te_contig_set:
+            if contig_name in ins_te_loci:
                 output.write(line)
     os.remove(ins_seqs)
+
+    # report removed loci
+    all_loci = create_loci_set(ins)
+    with open(loci_eval, "a") as output:
+        for locus in all_loci:
+            if locus not in ins_te_loci:
+                output.write('\t'.join([locus, "VCF insertion sequence not repeatmasked"]))
 
 
 def write_ins_seqs(vcf, out):
@@ -142,5 +149,5 @@ def get_unique_list(list1):
 def af_sum(nums):
     sum_nums = sum(nums)
     if sum_nums > 1:
-        sum_nums = int(sum_nums)
+        sum_nums = 1
     return(sum_nums)

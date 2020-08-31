@@ -4,34 +4,39 @@ from Bio import SeqIO
 import json
 import re
 import logging
-from TELR_utility import mkdir
+from TELR_utility import mkdir, create_loci_set
 from liftover import annotation_liftover
+from TELR_output import generate_output
 
 
-def annotate_contig(contig_dir, te_library, vcf_parsed, out, sample_name, thread, presets):
+def annotate_contig(contig_dir, te_library, vcf_parsed, out, sample_name, thread, presets, loci_eval):
     logging.info("Annotate contigs...")
     if presets == "ont":
         presets = "map-ont"
     else:
         presets = "map-pb"
 
-    # merge all contigs into a single file
+    all_loci = create_loci_set(vcf_parsed)
+    assembly_passed_loci = set()
     merge_contigs = os.path.join(out, sample_name+".contigs.fa")
-    contig_list = os.path.join(out, sample_name+".contigs.list")
-    # with open(vcf_parsed, "")
-    # TODO: I should do this another way, maybe start from parsed VCF
-    with open(merge_contigs, "w") as output_contigs, open(contig_list, "w") as output_list:
-        for file in os.listdir(contig_dir):
-            if ".cns.fa" in file and os.stat(contig_dir+"/"+file).st_size > 0:
-                contig_name = file.replace('.cns.fa', '')
-                with open(contig_dir+"/"+file, "r") as handle:
+    with open(merge_contigs, "w") as output:
+        for locus in all_loci:
+            assembly = os.path.join(contig_dir, locus+'.cns.fa')
+            if os.path.isfile(assembly) and os.stat(assembly).st_size > 0:
+                assembly_passed_loci.add(locus)
+                with open(assembly, "r") as handle:
                     records = SeqIO.parse(handle, "fasta")
                     for record in records:
                         if record.id == 'ctg1':
-                            record.id = contig_name
+                            record.id = locus
                             record.description = "len="+str(len(record.seq))
-                            SeqIO.write(record, output_contigs, 'fasta')
-                            output_list.write(contig_name+"\n")
+                            SeqIO.write(record, output, 'fasta')
+
+    # report assembly failed loci
+    with open(loci_eval, "a") as output:
+        for locus in all_loci:
+            if locus not in assembly_passed_loci:
+                output.write('\t'.join([locus, "assembly failed"]))
 
     # map sequence to contigs
     seq2contig_out = os.path.join(out, "seq2contig.paf")
@@ -39,65 +44,65 @@ def annotate_contig(contig_dir, te_library, vcf_parsed, out, sample_name, thread
         os.remove(seq2contig_out)
 
     # TODO: consider that some contigs might not exist
+    seq2contig_passed_loci = set()
     with open(vcf_parsed, "r") as input:
         for line in input:
             entry = line.replace('\n', '').split("\t")
             contig_name = "_".join([entry[0], entry[1], entry[2]])
-            vcf_seq = entry[7]
-            sv_len = entry[3]
-            query = out+"/"+contig_name+".seq.fa"
-            create_fa(contig_name, vcf_seq, query)
-            subject = out+"/"+contig_name+".fa"
-            with open(subject, "w") as output:
-                try:
-                    subprocess.check_output(
-                        ["samtools", "faidx", merge_contigs, contig_name], stderr=subprocess.DEVNULL)
-                except subprocess.CalledProcessError as e:
-                    print(contig_name + ":contig assembly doesn't exist")
-                    continue
-                else:
-                    subprocess.call(
-                        ["samtools", "faidx", merge_contigs, contig_name], stdout=output)
-            # subject=contig_dir+"/"+contig_name+".cns.fa"
-            if os.path.isfile(subject):
-                with open(seq2contig_out, "a") as output:
-                    mm2_output = subprocess.check_output(
-                        ["minimap2", "-cx", presets, "--secondary=no", "-v", "0", subject, query])
-                    mm2_output_parsed = mm2_output.decode("utf-8")
-                    if mm2_output_parsed == "":
-                        print(contig_name + ':VCF sequence can not map to contig')
-                    subprocess.call(["minimap2", "-cx", presets,
-                                     "--secondary=no", "-v", "0", subject, query], stdout=output)
-            os.remove(query)
-            os.remove(subject)
+            if contig_name in assembly_passed_loci:
+                vcf_seq = entry[7]
+                query = os.path.join(out, contig_name+".seq.fa")
+                create_fa(contig_name, vcf_seq, query)
+                subject = os.path.join(out, contig_name+".contig.fa")
+                with open(subject, "w") as output:
+                    try:
+                        subprocess.check_output(
+                            ["samtools", "faidx", merge_contigs, contig_name], stderr=subprocess.DEVNULL)
+                    except subprocess.CalledProcessError:
+                        print(contig_name + ":contig assembly doesn't exist")
+                        continue
+                    else:
+                        subprocess.call(
+                            ["samtools", "faidx", merge_contigs, contig_name], stdout=output)
+                seq2contig_output = subprocess.check_output(
+                    ["minimap2", "-cx", presets, "--secondary=no", "-v", "0", subject, query])
+                seq2contig_output = seq2contig_output.decode("utf-8")
+                if seq2contig_output != "":
+                    seq2contig_passed_loci.add(contig_name)
+                    with open(seq2contig_out, "a") as output:
+                        output.write(seq2contig_output)
+                os.remove(query)
+                os.remove(subject)
     seq2contig_bed = os.path.join(out, "seq2contig.bed")
     # covert to bed format
     with open(seq2contig_out, "r") as input, open(seq2contig_bed, "w") as output:
         for line in input:
             entry = line.replace('\n', '').split("\t")
-            seq_id = entry[0]
-            contig_id = entry[5]
             bed_line = "\t".join(
                 [entry[0], entry[7], entry[8], entry[5], entry[11], entry[4]])
             output.write(bed_line+"\n")
+
+    # report ins-contig failed loci
+    with open(loci_eval, "a") as output:
+        for locus in assembly_passed_loci:
+            if locus not in seq2contig_passed_loci:
+                output.write('\t'.join([locus, "seq-contig failed"]))
 
     # map TE library to contigs using minimap2
     # TE-contig alignment
     te2contig_out = os.path.join(out, sample_name+".te2contig.paf")
     if os.path.isfile(te2contig_out):
         os.remove(te2contig_out)
-    with open(contig_list, "r") as input:
-        for line in input:
-            contig_name = line.replace('\n', '')
-            contig = out+"/"+contig_name+".fa"
-            with open(contig, "w") as output:
-                subprocess.call(
-                    ["samtools", "faidx", merge_contigs, contig_name], stdout=output)
-            # map TE library to contig using minimap2 map-pb -p 0.8 -c
-            with open(te2contig_out, "a") as output:
-                subprocess.call(["minimap2", "-cx", presets, contig,
-                                 te_library, "-v", "0", "-t", str(thread)], stdout=output)
-            os.remove(contig)
+    for locus in seq2contig_passed_loci:
+        contig_fa = os.path.join(out, locus+".fa")
+        with open(contig_fa, "w") as output:
+            subprocess.call(
+                ["samtools", "faidx", merge_contigs, locus], stdout=output)
+        # map TE library to contig using minimap2
+        with open(te2contig_out, "a") as output:
+            subprocess.call(["minimap2", "-cx", presets, contig_fa,
+                             te_library, "-v", "0", "-t", str(thread)], stdout=output)
+        os.remove(contig_fa)
     # convert to bed format
     te2contig_bed = os.path.join(out, sample_name+".te2contig.bed")
     with open(te2contig_out, "r") as input, open(te2contig_bed, "w") as output:
@@ -110,9 +115,9 @@ def annotate_contig(contig_dir, te_library, vcf_parsed, out, sample_name, thread
     # Use VCF sequence alignment to filter minimap2 TE-contig alignment
     te2contig_filter_raw = os.path.join(
         out, sample_name+".te2contig_filter.tsv")
-    command = "bedtools intersect -a "+te2contig_bed+" -b "+seq2contig_bed+" -wao"
     with open(te2contig_filter_raw, "w") as output:
-        subprocess.call(command, shell=True, stdout=output)
+        subprocess.call(["bedtools", "intersect", "-a", te2contig_bed,
+                         "-b", seq2contig_bed, "-wao"], stdout=output)
 
     # filter and merge
     # get rid of -1 and make it into bed format
@@ -121,7 +126,7 @@ def annotate_contig(contig_dir, te_library, vcf_parsed, out, sample_name, thread
     with open(te2contig_filter_raw, "r") as input, open(te2contig_filter_tmp_bed, "w") as output:
         for line in input:
             entry = line.replace('\n', '').split("\t")
-            # the overlap between VCF sequence alignment and TE-contig alingment has to be over 10bp
+            # the overlap between VCF sequence alignment and TE-contig alignment has to be over 10bp
             if int(entry[12]) > 10:
                 out_line = "\t".join(
                     [entry[0], entry[1], entry[2], entry[3], entry[4], entry[5]])
@@ -141,6 +146,8 @@ def annotate_contig(contig_dir, te_library, vcf_parsed, out, sample_name, thread
         subprocess.call(command, shell=True, stdout=output)
 
     # remove tmp files
+    os.remove(te2contig_out)
+    os.remove(seq2contig_bed)
     os.remove(te2contig_filter_raw)
     os.remove(te2contig_filter_tmp_bed)
     os.remove(te2contig_filter_tmp_sort_bed)
@@ -205,7 +212,7 @@ def seq2contig(seq, contig, out):
 
 
 # def find_te(contigs, ref, te_contigs_annotation, family_annotation, te_freq, te_fa, out, sample_name, gap, overlap, presets):
-def find_te(contig_dir, vcf_parsed, ref, te_library, out, sample_name, thread, gap, overlap, presets):
+def find_te(contig_dir, vcf_parsed, ref, te_library, out, sample_name, thread, gap, overlap, presets, loci_eval):
     """
     Identify non-reference TE insertions in the reference genome using assembled contigs
     """
@@ -216,49 +223,14 @@ def find_te(contig_dir, vcf_parsed, ref, te_library, out, sample_name, thread, g
 
     # contig annotation
     te_contigs_annotation, family_annotation, te_freq, te_fa, merge_contigs = annotate_contig(
-        contig_dir, te_library, vcf_parsed, out, sample_name, thread, presets)
+        contig_dir, te_library, vcf_parsed, out, sample_name, thread, presets, loci_eval)
 
     # lift over
     logging.info("Map contigs to reference...")
     report_meta = annotation_liftover(fasta1=merge_contigs, fasta2=ref, bed=te_contigs_annotation, sample_name=sample_name, out_dir=out,
                                       preset=presets, overlap=overlap, gap=gap, flank_len=500, family_rm=family_annotation, freq=te_freq)
 
-    logging.info("Write output...")
-    # convert meta to dict
-    ins_dict = dict()
-    for item in report_meta:
-        ins_dict[item['ins_name']] = item
-
-    # generate TE sequence fasta
-    final_te_seqs = out+"/"+sample_name+".final.fa"
-    if os.path.isfile(final_te_seqs):
-        os.remove(final_te_seqs)
-
-    with open(te_fa, "r") as input, open(final_te_seqs, "a") as output:
-        for record in SeqIO.parse(input, "fasta"):
-            ins_name = record.id
-            if ins_name in ins_dict:
-                chr = ins_dict[ins_name]['chr']
-                start = ins_dict[ins_name]['start']
-                end = ins_dict[ins_name]['end']
-                family = ins_dict[ins_name]['family']
-                te_strand = ins_dict[ins_name]['te_strand']
-                record.id = chr+"_"+str(start)+"_"+str(end)+"#"+family
-
-                if te_strand == "+" or te_strand == ".":
-                    te_seq = str(record.seq)
-                else:
-                    te_seq = str(record.seq.reverse_complement())
-                output.write(">"+record.id+"\n"+te_seq+"\n")
-                ins_dict[ins_name]['sequence'] = te_seq
-
-    # write meta data in json format
-    for item in report_meta:
-        del item['ins_name']
-        del item['te_strand']
-    report_json = out + "/" + sample_name + ".final.json"
-    with open(report_json, 'w') as output:
-        json.dump(report_meta, output, indent=4, sort_keys=False)
+    generate_output(report_meta, te_fa, vcf_parsed, out, sample_name)
 
 
 def create_fa(header, seq, out):
