@@ -276,23 +276,22 @@ def annotation_liftover(fasta1, fasta2, bed, sample_name, out_dir=".", preset="m
                 ins_name = entry[9]
                 te_strand = entry[10]
                 te_freq = entry[12]
-            support_freq = '_'.join([str(support_type), str(te_freq)])
             out_line = '\t'.join(
-                [chromosome, start, end, family, support_freq, strand])
+                [chromosome, start, end, family, te_freq, strand])
             output.write(out_line+"\n")
             te_id = ins_name.split(':')[0]
             report_full.append({'ins_name': ins_name, 'ID': te_id, 'chr': chromosome, 'start': int(start), 'end': int(
-                end), 'family': family, 'support_type': int(support_type), 'strand': strand, 'te_strand': strand, 'frequency': float(te_freq)})
+                end), 'family': family, 'support_type': int(support_type), 'strand': strand, 'te_strand': te_strand, 'frequency': float(te_freq)})
 
     # clean files
     print("Clean tmp files...")
-    # os.remove(flank_fa)
-    # os.remove(flank_bed)
-    # os.remove(te_remove_tmp)
-    # os.remove(te_report_tmp)
-    # os.remove(te_report_tmp_sort)
-    # os.remove(te_report_tmp_merge)
-    # os.remove(mm2_out)
+    os.remove(flank_fa)
+    os.remove(flank_bed)
+    os.remove(te_remove_tmp)
+    os.remove(te_report_tmp)
+    os.remove(te_report_tmp_sort)
+    os.remove(te_report_tmp_merge)
+    os.remove(mm2_out)
 
     print("Lift over workflow finished!\n")
 
