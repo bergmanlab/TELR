@@ -7,7 +7,7 @@ import time
 from TELR_utility import mkdir, format_time
 
 
-def detect_sv(bam, reference, out, sample_name, thread, svim=False):
+def detect_sv(vcf_parsed, bam, reference, te_library, out, sample_name, thread, svim=False):
     """
     Detect structural variants from BAM file using Sniffles or SVIM
     """
@@ -38,10 +38,13 @@ def detect_sv(bam, reference, out, sample_name, thread, svim=False):
         sys.exit(1)
     else:
         logging.info("SV detection finished in " + format_time(proc_time))
-        return(vcf)
+    
+    # parse VCF from SV detection output to tsv
+    vcf_parse_filter(vcf, vcf_parsed, te_library, out, sample_name, thread)
 
 
-def vcf_parse_filter(vcf, vcf_parsed, out, sample_name, te_library, thread):
+
+def vcf_parse_filter(vcf, vcf_parsed, te_library, out, sample_name, thread):
     """Parse and filter for insertions from VCF file"""
     logging.info("Parse structural variant VCF...")
 

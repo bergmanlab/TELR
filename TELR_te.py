@@ -8,7 +8,7 @@ from TELR_utility import mkdir
 from liftover import annotation_liftover
 
 
-def annotate_contig(asm_dir, te_library, vcf, out, sample_name, thread, presets):
+def annotate_contig(contig_dir, te_library, vcf_parsed, out, sample_name, thread, presets):
     logging.info("Annotate contigs...")
     if presets == "ont":
         presets = "map-ont"
@@ -18,12 +18,13 @@ def annotate_contig(asm_dir, te_library, vcf, out, sample_name, thread, presets)
     # merge all contigs into a single file
     merge_contigs = os.path.join(out, sample_name+".contigs.fa")
     contig_list = os.path.join(out, sample_name+".contigs.list")
+    # with open(vcf_parsed, "")
     # TODO: I should do this another way, maybe start from parsed VCF
     with open(merge_contigs, "w") as output_contigs, open(contig_list, "w") as output_list:
-        for file in os.listdir(asm_dir):
-            if ".cns.fa" in file and os.stat(asm_dir+"/"+file).st_size > 0:
+        for file in os.listdir(contig_dir):
+            if ".cns.fa" in file and os.stat(contig_dir+"/"+file).st_size > 0:
                 contig_name = file.replace('.cns.fa', '')
-                with open(asm_dir+"/"+file, "r") as handle:
+                with open(contig_dir+"/"+file, "r") as handle:
                     records = SeqIO.parse(handle, "fasta")
                     for record in records:
                         if record.id == 'ctg1':
@@ -38,7 +39,7 @@ def annotate_contig(asm_dir, te_library, vcf, out, sample_name, thread, presets)
         os.remove(seq2contig_out)
 
     # TODO: consider that some contigs might not exist
-    with open(vcf, "r") as input:
+    with open(vcf_parsed, "r") as input:
         for line in input:
             entry = line.replace('\n', '').split("\t")
             contig_name = "_".join([entry[0], entry[1], entry[2]])
@@ -57,7 +58,7 @@ def annotate_contig(asm_dir, te_library, vcf, out, sample_name, thread, presets)
                 else:
                     subprocess.call(
                         ["samtools", "faidx", merge_contigs, contig_name], stdout=output)
-            # subject=asm_dir+"/"+contig_name+".cns.fa"
+            # subject=contig_dir+"/"+contig_name+".cns.fa"
             if os.path.isfile(subject):
                 with open(seq2contig_out, "a") as output:
                     mm2_output = subprocess.check_output(
@@ -187,7 +188,7 @@ def annotate_contig(asm_dir, te_library, vcf, out, sample_name, thread, presets)
 
     # build frequency dict
     te_freq = dict()
-    with open(vcf, "r") as input:
+    with open(vcf_parsed, "r") as input:
         for line in input:
             entry = line.replace('\n', '').split("\t")
             contig_name = "_".join([entry[0], entry[1], entry[2]])
