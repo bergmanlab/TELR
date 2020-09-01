@@ -34,3 +34,12 @@ def format_time(time):
         return("%d minutes %d seconds" % (d.minute, d.second))
     else:
         return("%d hours %d minutes %d seconds" % (d.hour, d.minute, d.second))
+
+
+def create_loci_set(vcf_parsed):
+    all_loci = set()
+    with open(vcf_parsed, "r") as input:
+        for line in input:
+            entry = line.replace('\n', '').split('\t')
+            all_loci.add('_'.join(entry[0:3]))
+    return all_loci

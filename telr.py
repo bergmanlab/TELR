@@ -15,11 +15,12 @@ from TELR_utility import format_time
 
 
 def main():
+    args = get_args()
     # logging config
     formatstr = "%(asctime)s: %(levelname)s: %(message)s"
     datestr = "%m/%d/%Y %H:%M:%S"
     logging.basicConfig(level=logging.DEBUG,
-                        filename="TELR.log",
+                        filename=os.path.join(args.out, "TELR.log"),
                         filemode="w",
                         format=formatstr,
                         datefmt=datestr)
@@ -27,12 +28,11 @@ def main():
     start_time = time.time()
 
     # Parse input
-    args = get_args()
     sample_name = os.path.splitext(os.path.basename(args.reads))[0]
     reads, reference, fasta, skip_alignment = parse_input(
         args.reads, args.reference, sample_name, args.out)
 
-    # Alignment
+    # # Alignment
     bam = os.path.join(args.out, sample_name + "_sort.bam")
     if not skip_alignment:
         alignment(bam, fasta, reference, args.out,
@@ -40,10 +40,15 @@ def main():
     else:
         sort_index_bam(reads, bam, args.thread)
 
+    # initialize loci eveluation file
+    loci_eval = os.path.join(args.out, sample_name + ".loci_eval.tsv")
+    if os.path.isfile(loci_eval):
+        os.remove(loci_eval)
+
     # Detect and parse SV
     vcf_parsed = os.path.join(args.out, sample_name+".vcf_filtered.tsv")
     detect_sv(vcf_parsed, bam, reference, args.library,
-              args.out, sample_name, args.thread)
+              args.out, sample_name, args.thread, loci_eval)
 
     # Local assembly
     contig_dir = os.path.join(args.out, "contig_assembly")
@@ -53,7 +58,7 @@ def main():
     # find TEs
     # TODO: different approaches
     find_te(contig_dir, vcf_parsed, reference, args.library, args.out,
-            sample_name, args.thread, args.gap, args.overlap, args.presets)
+            sample_name, args.thread, args.gap, args.overlap, args.presets, loci_eval)
 
     proc_time = time.time() - start_time
 

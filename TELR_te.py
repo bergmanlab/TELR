@@ -5,7 +5,7 @@ import json
 import re
 import logging
 from TELR_utility import mkdir, create_loci_set
-from liftover import annotation_liftover
+from TELR_liftover import annotation_liftover
 from TELR_output import generate_output
 
 
@@ -36,7 +36,7 @@ def annotate_contig(contig_dir, te_library, vcf_parsed, out, sample_name, thread
     with open(loci_eval, "a") as output:
         for locus in all_loci:
             if locus not in assembly_passed_loci:
-                output.write('\t'.join([locus, "assembly failed"]))
+                output.write('\t'.join([locus, "assembly failed"]) + '\n')
 
     # map sequence to contigs
     seq2contig_out = os.path.join(out, "seq2contig.paf")
@@ -86,7 +86,7 @@ def annotate_contig(contig_dir, te_library, vcf_parsed, out, sample_name, thread
     with open(loci_eval, "a") as output:
         for locus in assembly_passed_loci:
             if locus not in seq2contig_passed_loci:
-                output.write('\t'.join([locus, "seq-contig failed"]))
+                output.write('\t'.join([locus, "seq-contig failed"]) + '\n')
 
     # map TE library to contigs using minimap2
     # TE-contig alignment
