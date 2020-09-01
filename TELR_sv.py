@@ -40,7 +40,8 @@ def detect_sv(vcf_parsed, bam, reference, te_library, out, sample_name, thread, 
         logging.info("SV detection finished in " + format_time(proc_time))
 
     # parse VCF from SV detection output to tsv
-    vcf_parse_filter(vcf, vcf_parsed, bam, te_library, out, sample_name, thread, loci_eval)
+    vcf_parse_filter(vcf, vcf_parsed, bam, te_library,
+                     out, sample_name, thread, loci_eval)
 
 
 def vcf_parse_filter(vcf, vcf_parsed, bam, te_library, out, sample_name, thread, loci_eval):
@@ -57,7 +58,7 @@ def vcf_parse_filter(vcf, vcf_parsed, bam, te_library, out, sample_name, thread,
 def parse_vcf(vcf, vcf_parsed, bam):
     vcf_parsed_tmp = vcf_parsed + '.tmp'
     query_str = "\"%CHROM\\t%POS\\t%END\\t%SVLEN\\t%RE\\t%AF\\t%ID\\t%ALT\\t%RNAMES\\t%FILTER\\t[ %GT]\\t[ %DR]\\t[ %DV]\n\""
-    command = "bcftools query -i \'SVTYPE=\"INS\"\' -f "+query_str+" "+vcf
+    command = "bcftools query -i \'SVTYPE=\"INS\" & ALT!=\"<INS>\"\' -f "+query_str+" "+vcf
     with open(vcf_parsed_tmp, "w") as output:
         subprocess.call(command, stdout=output, shell=True)
     # TODO check whether vcf file contains insertions, quit if 0
@@ -119,7 +120,8 @@ def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eva
     with open(loci_eval, "a") as output:
         for locus in all_loci:
             if locus not in ins_te_loci:
-                output.write('\t'.join([locus, "VCF insertion sequence not repeatmasked"]))
+                output.write(
+                    '\t'.join([locus, "VCF insertion sequence not repeatmasked"]) + '\n')
 
 
 def write_ins_seqs(vcf, out):
