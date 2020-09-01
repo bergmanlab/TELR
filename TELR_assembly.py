@@ -93,8 +93,7 @@ def prep_assembly(vcf_parsed, out, sample_name, raw_reads, contig_reads_dir):
     with open(vcf_parsed, "r") as input:
         for line in input:
             entry = line.replace('\n', '').split("\t")
-            read_list = entry[8].split(",")
-            k = k + 2*(len(read_list))
+            k = k + 2*(len(entry[8].split(",")))
             m.append(k)
     if len(m) == 1:
         subprocess.call(
@@ -103,9 +102,11 @@ def prep_assembly(vcf_parsed, out, sample_name, raw_reads, contig_reads_dir):
         print("No insertion detected, exiting...")
     else:
         m = m[:-1]
+        print("number of item in m:" + str(len(m)))
         index = " ".join(str(i) for i in m)
-        subprocess.call(['csplit', '-s', '-f', csplit_prefix,
-                         '-n', '1', subset_fa_reorder, index])
+        command = "csplit -s -f " + csplit_prefix + \
+            " -n 1 " + subset_fa_reorder + " " + index
+        subprocess.call(command, shell=True)
 
     # remove tmp files
     os.remove(read_ids)
