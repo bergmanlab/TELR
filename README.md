@@ -48,7 +48,7 @@ Script to detect TEs in long read data
 
 required arguments:
   -i READ, --read READ
-      reads in fasta/fastq format
+      reads in fasta/fastq format or read alignment in BAM format
   -r REFERENCE, --reference REFERENCE
       reference genome in fasta format
   -l LIBRARY, --library LIBRARY
@@ -73,6 +73,8 @@ optional arguments:
 
 ## Output
 The results of TELE pipeline are output to the directory <output>.
+- `<sample>.log`: log file of TELR run.
 - `<sample>.final.bed`: non-reference TE insertion annotation predicted by TELR pipeline in bed format (0-based).
+- `<sample>.final.bed`: non-reference TE insertion annotation predicted by TELR pipeline in VCF format (0-based).
 - `<sample>.final.json`: non-reference TE insertion annotation predicted by TELR pipeline in json format (0-based).
 - `<sample>.final.fa`: TE insertion sequences extracted from local assembly of reads supporting TE insertions.
