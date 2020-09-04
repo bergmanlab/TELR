@@ -9,52 +9,98 @@ from TELR_utility import mkdir
 
 def get_args():
     parser = argparse.ArgumentParser(
-        description="Script to detect TEs in long read data")
+        description="Script to detect TEs in long read data"
+    )
     optional = parser._action_groups.pop()
     required = parser.add_argument_group("required arguments")
 
     # required
-    required.add_argument("-i", "--reads", type=str,
-                          help="reads in fasta/fastq format or read alignments in bam format", required=True)
-    required.add_argument("-r", "--reference", type=str,
-                          help="reference genome in fasta format", required=True)
-    required.add_argument("-l", "--library", type=str,
-                          help="TE consensus sequences in fasta format", required=True)
+    required.add_argument(
+        "-i",
+        "--reads",
+        type=str,
+        help="reads in fasta/fastq format or read alignments in bam format",
+        required=True,
+    )
+    required.add_argument(
+        "-r",
+        "--reference",
+        type=str,
+        help="reference genome in fasta format",
+        required=True,
+    )
+    required.add_argument(
+        "-l",
+        "--library",
+        type=str,
+        help="TE consensus sequences in fasta format",
+        required=True,
+    )
 
     # optional
-    optional.add_argument("-x", "--presets", type=str,
-                          help="parameter presets for different sequencing technologies (default = 'pacbio')", required=False)
-    optional.add_argument("-p", "--polish", type=int,
-                          help="rounds of contig polishing (default = 1)", required=False)
-    optional.add_argument("-o", "--out", type=str,
-                          help="directory to output data (default = '.')", required=False)
-    optional.add_argument("-t", "--thread", type=int,
-                          help="max cpu threads to use (default = '1')", required=False)
-    optional.add_argument("-g", "--gap", type=int,
-                          help="max gap size for flanking sequence alignment (default = '20')", required=False)
-    optional.add_argument("-v", "--overlap", type=int,
-                          help="max overlap size for flanking sequence alignment (default = '20')", required=False)
+    optional.add_argument(
+        "-x",
+        "--presets",
+        type=str,
+        help="parameter presets for different sequencing technologies (default = 'pacbio')",
+        required=False,
+    )
+    optional.add_argument(
+        "-p",
+        "--polish",
+        type=int,
+        help="rounds of contig polishing (default = 1)",
+        required=False,
+    )
+    optional.add_argument(
+        "-o",
+        "--out",
+        type=str,
+        help="directory to output data (default = '.')",
+        required=False,
+    )
+    optional.add_argument(
+        "-t",
+        "--thread",
+        type=int,
+        help="max cpu threads to use (default = '1')",
+        required=False,
+    )
+    optional.add_argument(
+        "-g",
+        "--gap",
+        type=int,
+        help="max gap size for flanking sequence alignment (default = '20')",
+        required=False,
+    )
+    optional.add_argument(
+        "-v",
+        "--overlap",
+        type=int,
+        help="max overlap size for flanking sequence alignment (default = '20')",
+        required=False,
+    )
     parser._action_groups.append(optional)
     args = parser.parse_args()
     # TODO: remove intermediate files
 
     # checks if in files exist
     try:
-        test = open(args.reads, 'r')
+        test = open(args.reads, "r")
     except Exception as e:
         print(e)
         logging.exception("Can not open input file: " + args.reads)
         sys.exit(1)
 
     try:
-        test = open(args.reference, 'r')
+        test = open(args.reference, "r")
     except Exception as e:
         print(e)
         logging.exception("Can not open input file: " + args.reference)
         sys.exit(1)
 
     try:
-        test = open(args.library, 'r')
+        test = open(args.library, "r")
     except Exception as e:
         print(e)
         logging.exception("Can not open input file: " + args.library)
@@ -99,12 +145,10 @@ def parse_input(input_reads, input_reference, sample_name, out_dir):
         os.symlink(input_reads, input_reads_copy)
     except Exception as e:
         print(e)
-        logging.exception("Create symbolic link for " +
-                          input_reads + " failed")
+        logging.exception("Create symbolic link for " + input_reads + " failed")
         sys.exit(1)
 
-    input_reference_copy = os.path.join(
-        out_dir, os.path.basename(input_reference))
+    input_reference_copy = os.path.join(out_dir, os.path.basename(input_reference))
     if not os.path.isabs(input_reference):
         input_reference = os.path.abspath(input_reference)
     if os.path.islink(input_reference_copy):
@@ -112,18 +156,22 @@ def parse_input(input_reads, input_reference, sample_name, out_dir):
     try:
         os.symlink(input_reference, input_reference_copy)
     except Exception:
-        logging.exception("Create symbolic link for " +
-                          input_reference + " failed")
+        logging.exception("Create symbolic link for " + input_reference + " failed")
         sys.exit(1)
 
     reads_filename, reads_extension = os.path.splitext(input_reads_copy)
-    if reads_extension == '.bam':
+    if reads_extension == ".bam":
         logging.info("BAM file is provided, skip alignment step")
         skip_alignment = True
-        fasta = os.path.join(out_dir, sample_name + '.telr.fasta')
+        fasta = os.path.join(out_dir, sample_name + ".telr.fasta")
         logging.info("Converting input BAM file to fasta...")
         bam2fasta(input_reads_copy, fasta)
-    elif reads_extension == '.fasta' or reads_extension == '.fastq' or reads_extension == '.fa' or reads_extension == '.fq':
+    elif (
+        reads_extension == ".fasta"
+        or reads_extension == ".fastq"
+        or reads_extension == ".fa"
+        or reads_extension == ".fq"
+    ):
         logging.info("Raw reads are provided")
         skip_alignment = False
         fasta = input_reads_copy
@@ -139,7 +187,7 @@ def bam2fasta(bam, fasta):
     """
     Convert bam to fasta.
     """
-    fasta_tmp = fasta + '.tmp'
+    fasta_tmp = fasta + ".tmp"
     try:
         with open(fasta_tmp, "w") as output:
             subprocess.call(["samtools", "fasta", bam], stdout=output)
@@ -167,4 +215,4 @@ def rm_fasta_redundancy(fasta, new_fasta):
         for record in SeqIO.parse(fasta, "fasta"):
             if record.id not in records:
                 records.add(record.id)
-                SeqIO.write(record, output_handle, 'fasta')
+                SeqIO.write(record, output_handle, "fasta")

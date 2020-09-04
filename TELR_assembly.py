@@ -192,6 +192,7 @@ def polish_contig(prefix, reads, raw_contig, polished_contig, thread, preset, ro
 
 
 def extract_reads(reads, list, out):
+    """Extract reads from fasta using read ID list"""
     record_dict = SeqIO.index(reads, "fasta")
     with open(out, "wb") as output_handle, open(list, "r") as ID:
         for entry in ID:

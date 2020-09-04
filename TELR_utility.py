@@ -29,17 +29,17 @@ def check_exist(file):
 def format_time(time):
     d = datetime(1, 1, 1) + timedelta(seconds=time)
     if d.hour == 0 and d.minute == 0:
-        return("%d seconds" % (d.second))
+        return "%d seconds" % (d.second)
     elif d.hour == 0 and d.minute != 0:
-        return("%d minutes %d seconds" % (d.minute, d.second))
+        return "%d minutes %d seconds" % (d.minute, d.second)
     else:
-        return("%d hours %d minutes %d seconds" % (d.hour, d.minute, d.second))
+        return "%d hours %d minutes %d seconds" % (d.hour, d.minute, d.second)
 
 
 def create_loci_set(vcf_parsed):
     all_loci = set()
     with open(vcf_parsed, "r") as input:
         for line in input:
-            entry = line.replace('\n', '').split('\t')
-            all_loci.add('_'.join(entry[0:3]))
+            entry = line.replace("\n", "").split("\t")
+            all_loci.add("_".join(entry[0:3]))
     return all_loci
