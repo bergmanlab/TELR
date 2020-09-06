@@ -8,14 +8,13 @@ from TELR_utility import mkdir, format_time, create_loci_set
 
 
 def detect_sv(
-    vcf_parsed,
+    vcf,
     bam,
     reference,
     te_library,
     out,
     sample_name,
     thread,
-    loci_eval,
     svim=False,
 ):
     """
@@ -43,9 +42,9 @@ def detect_sv(
             print(e)
             logging.exception("Detecting SVs using SVIM failed, exiting...")
             sys.exit(1)
-        vcf = os.path.join(out, "variants.vcf")
+        vcf_tmp = os.path.join(out, "variants.vcf")
+        os.rename(vcf_tmp, vcf)
     else:
-        vcf = os.path.join(out, sample_name + ".vcf")
         try:
             subprocess.call(
                 ["sniffles", "-n", "-1", "--threads", str(thread), "-m", bam, "-v", vcf]
@@ -61,11 +60,6 @@ def detect_sv(
     else:
         logging.info("SV detection finished in " + format_time(proc_time))
 
-    # parse VCF from SV detection output to tsv
-    vcf_parse_filter(
-        vcf, vcf_parsed, bam, te_library, out, sample_name, thread, loci_eval
-    )
-
 
 def vcf_parse_filter(
     vcf, vcf_parsed, bam, te_library, out, sample_name, thread, loci_eval
@@ -73,7 +67,7 @@ def vcf_parse_filter(
     """Parse and filter for insertions from VCF file"""
     logging.info("Parse structural variant VCF...")
 
-    vcf_parsed_tmp = vcf + ".parsed.tmp"
+    vcf_parsed_tmp = vcf + ".parsed.tmp.tsv"
     parse_vcf(vcf, vcf_parsed_tmp, bam)
     filter_vcf(
         vcf_parsed_tmp, vcf_parsed, te_library, out, sample_name, thread, loci_eval
@@ -90,8 +84,7 @@ def parse_vcf(vcf, vcf_parsed, bam):
     with open(vcf_parsed_tmp, "w") as output:
         subprocess.call(command, stdout=output, shell=True)
     # TODO check whether vcf file contains insertions, quit if 0
-    # remove redundancy in parsed vcf
-    rm_vcf_redundancy(vcf_parsed_tmp, vcf_parsed)
+    rm_vcf_redundancy(vcf_parsed_tmp, vcf_parsed)  # remove redundancy in parsed vcf
     os.remove(vcf_parsed_tmp)
     return vcf_parsed
 
@@ -192,12 +185,11 @@ def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eva
     os.remove(ins_seqs)
 
     # report removed loci
-    all_loci = create_loci_set(ins)
     with open(loci_eval, "a") as output:
-        for locus in all_loci:
+        for locus in create_loci_set(ins):
             if locus not in ins_te_loci:
                 output.write(
-                    "\t".join([locus, "VCF insertion sequence not repeatmasked"]) + "\n"
+                    "\t".join([locus, "VCF sequence not repeatmasked"]) + "\n"
                 )
 
 

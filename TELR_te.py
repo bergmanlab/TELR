@@ -47,29 +47,27 @@ def annotate_contig(
 
     # TODO: consider that some contigs might not exist
     seq2contig_passed_loci = set()
+    seq2contig_dir = os.path.join(out, "seq2contig")
+    seq2contig = os.path.join(out, "seq2contig.paf")
+    mkdir(seq2contig_dir)
     with open(vcf_parsed, "r") as input:
         for line in input:
             entry = line.replace("\n", "").split("\t")
             contig_name = "_".join([entry[0], entry[1], entry[2]])
             if contig_name in assembly_passed_loci:
                 vcf_seq = entry[7]
-                query = os.path.join(out, contig_name + ".seq.fa")
+                query = os.path.join(seq2contig_dir, contig_name + ".seq.fa")
                 create_fa(contig_name, vcf_seq, query)
-                subject = os.path.join(out, contig_name + ".contig.fa")
+                subject = os.path.join(seq2contig_dir, contig_name + ".contig.fa")
                 with open(subject, "w") as output:
                     try:
-                        subprocess.check_output(
-                            ["samtools", "faidx", merge_contigs, contig_name],
-                            stderr=subprocess.DEVNULL,
-                        )
-                    except subprocess.CalledProcessError:
-                        print(contig_name + ":contig assembly doesn't exist")
-                        continue
-                    else:
                         subprocess.call(
                             ["samtools", "faidx", merge_contigs, contig_name],
                             stdout=output,
                         )
+                    except subprocess.CalledProcessError:
+                        print(contig_name + ":contig assembly doesn't exist")
+                        continue
                 seq2contig_output = subprocess.check_output(
                     [
                         "minimap2",
@@ -83,15 +81,17 @@ def annotate_contig(
                     ]
                 )
                 seq2contig_output = seq2contig_output.decode("utf-8")
+                print(seq2contig_output)
                 if seq2contig_output != "":
                     seq2contig_passed_loci.add(contig_name)
-                    with open(seq2contig_out, "a") as output:
+                    with open(seq2contig, "a") as output:
                         output.write(seq2contig_output)
                 os.remove(query)
                 os.remove(subject)
-    seq2contig_bed = os.path.join(out, "seq2contig.bed")
+    os.rmdir(seq2contig_dir)
     # covert to bed format
-    with open(seq2contig_out, "r") as input, open(seq2contig_bed, "w") as output:
+    seq2contig_bed = os.path.join(out, "seq2contig.bed")
+    with open(seq2contig, "r") as input, open(seq2contig_bed, "w") as output:
         for line in input:
             entry = line.replace("\n", "").split("\t")
             bed_line = "\t".join(
@@ -181,14 +181,26 @@ def annotate_contig(
     with open(te2contig_filter_tmp_sort_bed, "w") as output:
         subprocess.call(command, shell=True, stdout=output)
 
+    # find out what's filtered out
+    seq_mm2_overlap_loci = create_loci_set(te2contig_filter_tmp_sort_bed)
+    with open(loci_eval, "a") as output:
+        for locus in seq2contig_passed_loci:
+            if locus not in seq_mm2_overlap_loci:
+                output.write(
+                    "\t".join([locus, "VCF sequence doesn't overlap contig annotation"])
+                    + "\n"
+                )
+
     # merge
-    te2contig_filter_bed = out + "/" + sample_name + ".te2contig_filter.bed"
+    contig_te_annotation = out + "/" + sample_name + ".te2contig_filter.bed"
     command = (
         'bedtools merge -d 10000 -c 4,6 -o distinct,distinct -delim "|" -i '
         + te2contig_filter_tmp_sort_bed
     )
-    with open(te2contig_filter_bed, "w") as output:
+    with open(contig_te_annotation, "w") as output:
         subprocess.call(command, shell=True, stdout=output)
+
+    # seq_mm2_overlap_merge_loci = create_loci_set(contig_te_annotation)
 
     # remove tmp files
     os.remove(te2contig_out)
@@ -207,7 +219,7 @@ def annotate_contig(
                 "-fi",
                 merge_contigs,
                 "-bed",
-                te2contig_filter_bed,
+                contig_te_annotation,
             ],
             stdout=output,
         )
@@ -259,10 +271,16 @@ def annotate_contig(
                 output.write(out_line + "\n")
     print("Done\n")
 
-    te2contig_rm_merge = out + "/" + sample_name + ".te2contig_rm.merge.bed"
+    contig_rm_annotation = out + "/" + sample_name + ".te2contig_rm.merge.bed"
     command = 'bedtools merge -c 4,6 -o distinct -delim "|" -i ' + te2contig_rm
-    with open(te2contig_rm_merge, "w") as output:
+    with open(contig_rm_annotation, "w") as output:
         subprocess.call(command, shell=True, stdout=output)
+
+    # seq_mm2_overlap_merge_rm_loci = create_loci_set(te2contig_rm_merge)
+    # with open(loci_eval, "a") as output:
+    #     for locus in seq_mm2_overlap_merge_loci:
+    #         if locus not in seq_mm2_overlap_merge_rm_loci:
+    #             print(locus, "contig seq RM failed")
 
     # build frequency dict
     te_freq = dict()
@@ -273,7 +291,7 @@ def annotate_contig(
             freq = entry[5]
             te_freq[contig_name] = freq
 
-    return te2contig_filter_bed, te2contig_rm_merge, te_freq, te_fa, merge_contigs
+    return contig_te_annotation, contig_rm_annotation, te_freq, te_fa, merge_contigs
 
 
 def seq2contig(seq, contig, out):
@@ -285,13 +303,15 @@ def seq2contig(seq, contig, out):
 
 # def find_te(contigs, ref, te_contigs_annotation, family_annotation, te_freq, te_fa, out, sample_name, gap, overlap, presets):
 def find_te(
-    contig_dir,
+    contig_te_annotation,
+    contig_family_annotation,
+    te_freq,
+    te_fa,
+    merge_contigs,
     vcf_parsed,
     ref,
-    te_library,
     out,
     sample_name,
-    thread,
     gap,
     overlap,
     presets,
@@ -305,31 +325,21 @@ def find_te(
     else:
         presets = "map-pb"
 
-    # contig annotation
-    (
-        te_contigs_annotation,
-        family_annotation,
-        te_freq,
-        te_fa,
-        merge_contigs,
-    ) = annotate_contig(
-        contig_dir, te_library, vcf_parsed, out, sample_name, thread, presets, loci_eval
-    )
-
     # lift over
     logging.info("Map contigs to reference...")
     report_meta = annotation_liftover(
         fasta1=merge_contigs,
         fasta2=ref,
-        bed=te_contigs_annotation,
+        bed=contig_te_annotation,
         sample_name=sample_name,
         out_dir=out,
         preset=presets,
         overlap=overlap,
         gap=gap,
         flank_len=500,
-        family_rm=family_annotation,
+        family_rm=contig_family_annotation,
         freq=te_freq,
+        loci_eval=loci_eval
     )
 
     generate_output(report_meta, te_fa, vcf_parsed, out, sample_name)

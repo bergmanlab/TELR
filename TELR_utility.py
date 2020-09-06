@@ -43,3 +43,10 @@ def create_loci_set(vcf_parsed):
             entry = line.replace("\n", "").split("\t")
             all_loci.add("_".join(entry[0:3]))
     return all_loci
+
+
+def report_bad_loci(set_raw, set_filtered, report, message):
+    with open(report, "a") as output:
+        for locus in set_raw:
+            if locus not in set_filtered:
+                output.write("\t".join([locus, message]) + "\n")

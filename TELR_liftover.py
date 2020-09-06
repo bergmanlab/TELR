@@ -7,6 +7,7 @@ import pandas as pd
 import subprocess
 import numpy as np
 import re
+from TELR_utility import report_bad_loci
 
 
 def get_args():
@@ -110,13 +111,14 @@ def annotation_liftover(
     flank_len=500,
     family_rm=None,
     freq=None,
+    loci_eval=None,
 ):
     """
     Lift variant annotation from one genome to another.
     """
     print("Starting lift over workflow...")
 
-    # for each annotation, extract flanking sequence, map to another genome, check the distance
+    # for each annotation, extract flanking sequence, map to another genome, check the distance between mapped flanks
     if "gff" in bed:
         ins_bed = out_dir + "/" + sample_name + ".ins.bed"
         gff2bed(bed, ins_bed)
@@ -133,18 +135,26 @@ def annotation_liftover(
         subprocess.call(
             ["bedtools", "getfasta", "-fi", fasta1, "-bed", flank_bed], stdout=output
         )
-    # print ("Done")
 
-    # map to another genome
-    # minimap2 way
-    mm2_out = out_dir + "/" + sample_name + ".flank.paf"
+    # map flanks to genome2 using minimap2
+    flank2ref_out = out_dir + "/" + sample_name + ".flank.paf"
     print("Align flanking sequence to reference...")
-    with open(mm2_out, "w") as output:
+    with open(flank2ref_out, "w") as output:
         subprocess.call(
             ["minimap2", "-cx", preset, "-v", "0", "--secondary=no", fasta2, flank_fa],
             stdout=output,
         )
-    # print ("Done")
+
+    # report contig flanks that can not be mapped to ref
+    contig_w_te_set = set()
+    with open(bed, "r") as input:
+        for line in input:
+            contig_w_te_set.add(line.replace("\n", "").split("\t")[0])
+    contig_mapped_set = set()
+    with open(flank2ref_out, "r") as input:
+        for line in input:
+            contig_mapped_set.add(line.split(":")[0])
+    report_bad_loci(contig_w_te_set, contig_mapped_set, loci_eval, "Flank not mapped")
 
     # read family, strand and TE length info into dict
     te_len_dict = dict()
@@ -202,9 +212,7 @@ def annotation_liftover(
 
     # process the mapped paf
     print("Parsing flanking sequence alignments...")
-    te_remove_tmp = out_dir + "/" + sample_name + ".lift.remove.tmp.tsv"
     te_report_tmp = out_dir + "/" + sample_name + ".lift.pass.tmp.tsv"
-    test_tmp = out_dir + "/" + sample_name + ".lift.test.tmp.tsv"
     header = [
         "flank_name",
         "flank_len",
@@ -216,7 +224,7 @@ def annotation_liftover(
         "end",
     ]
     df = pd.read_csv(
-        mm2_out, delimiter="\t", usecols=[0, 1, 2, 3, 4, 5, 7, 8], names=header
+        flank2ref_out, delimiter="\t", usecols=[0, 1, 2, 3, 4, 5, 7, 8], names=header
     )
     df["ins_name"] = df["flank_name"].map(flank_ins_dict)
     df["flank_side"] = (
@@ -227,62 +235,63 @@ def annotation_liftover(
     if "chr" in df.iloc[0]["flank_name"]:
         df["chr_flank"] = (
             df["flank_name"]
-            .replace(":.*", "", regex=True)
+            .replace(":.*", "", regex=True)  # this one may not be necessary
             .replace("_.*", "", regex=True)
         )
-        rm_df = df.copy().query("chr_flank != chr")
-        if len(rm_df) > 0:
-            rm_df["type"] = "chr_mismatch"
-            rm_df.to_csv(
-                te_remove_tmp,
-                sep="\t",
-                index=False,
-                header=False,
-                columns=["ins_name", "type"],
-            )
         df.query("chr_flank == chr", inplace=True)
         df.drop(["chr_flank"], inplace=True, axis=1)
-    # remove multi hit
-    rm_df = df.copy()[df.duplicated(subset="flank_name", keep="first")]
-    if len(rm_df) > 0:
-        rm_df["type"] = "multi_hit"
-        rm_df.to_csv(
-            te_remove_tmp,
-            sep="\t",
-            index=False,
-            header=False,
-            columns=["ins_name", "type"],
-            mode="a",
-        )
-    df.drop_duplicates(subset="flank_name", keep=False, inplace=True)
-    # remove if two flank map to different chr or strand
-    rm_df = (
-        df.copy()
-        .groupby("ins_name")
-        .filter(lambda x: x["chr"].nunique() > 1 or x["flank_strand"].nunique() > 1)
+
+    contig_wrong_chr_filter_set = df["ins_name"].replace(":.*", "", regex=True).unique()
+    report_bad_loci(
+        contig_mapped_set,
+        contig_wrong_chr_filter_set,
+        loci_eval,
+        "all flanks mapped to wrong chromosome",
     )
-    if len(rm_df) > 0:
-        rm_df["type"] = "multi_strand"
-        rm_df.to_csv(
-            te_remove_tmp,
-            sep="\t",
-            index=False,
-            header=False,
-            columns=["ins_name", "type"],
-            mode="a",
-        )
+
+    # remove multi hit
+    df.drop_duplicates(
+        subset="flank_name", keep=False, inplace=True
+    )  # TODO: instead of removing all multi-hit flanks, I should keep the one that is close to the breakpoint
+
+    contig_multi_hit_filter_set = df["ins_name"].replace(":.*", "", regex=True).unique()
+    report_bad_loci(
+        contig_wrong_chr_filter_set,
+        contig_multi_hit_filter_set,
+        loci_eval,
+        "all flanks with multiple hits",
+    )
+
+    # remove if two flank map to different chr or strand
     df = df.groupby("ins_name").filter(
         lambda x: x["chr"].nunique() == 1 and x["flank_strand"].nunique() == 1
     )
+
+    contig_wrong_hit_filter_set = df["ins_name"].replace(":.*", "", regex=True).unique()
+    report_bad_loci(
+        contig_multi_hit_filter_set,
+        contig_wrong_hit_filter_set,
+        loci_eval,
+        "all flanks mapped to wrong chr/strand",
+    )
+
     # add frequency info
     if freq is not None:
         df["te_freq"] = df["ins_name"].map(freq_dict)
     else:
-        df["te_freq"] = NA
+        df["te_freq"] = 1
     # add TE family info
     df["te_family"] = df["ins_name"].map(family_dict)
     # remove annotation without family annotation
     df.dropna(subset=["te_family"], inplace=True)
+    contig_no_rm_filter_set = df["ins_name"].replace(":.*", "", regex=True).unique()
+    report_bad_loci(
+        contig_wrong_hit_filter_set,
+        contig_no_rm_filter_set,
+        loci_eval,
+        "contigs without RM annotation",
+    )
+
     df["te_strand"] = df["ins_name"].map(strand_dict)
     df["te_len"] = df["ins_name"].map(te_len_dict)
     # group and summarize by contig
@@ -293,6 +302,14 @@ def annotation_liftover(
         | ((new_df["score"] <= 0) & (new_df["end"] - new_df["start"] <= overlap))
         | (new_df["score"] == 0.5)
     ]
+    contig_gap_filter_set = new_df["ins_name"].replace(":.*", "", regex=True).unique()
+    report_bad_loci(
+        contig_no_rm_filter_set,
+        contig_gap_filter_set,
+        loci_eval,
+        "contigs flanks overlap/gap too large",
+    )
+
     new_df.to_csv(
         te_report_tmp,
         sep="\t",
@@ -328,22 +345,22 @@ def annotation_liftover(
         )
         subprocess.call(command, shell=True, stdout=output)
 
-    # output overlapped/identical entries
-    with open(te_report_tmp_merge, "r") as input, open(te_remove_tmp, "a") as output:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
-            if "," in entry[3]:
-                output.write(entry[9] + "\t" + "ins_overlap" + "\n")
+    # # output overlapped/identical entries
+    # with open(te_report_tmp_merge, "r") as input, open(te_remove_tmp, "a") as output:
+    #     for line in input:
+    #         entry = line.replace("\n", "").split("\t")
+    #         if "," in entry[3]:
+    #             output.write(entry[9] + "\t" + "ins_overlap" + "\n")
 
-    # find and remove duplicate entries in the remove list
-    te_remove_final = out_dir + "/" + sample_name + ".lift.remove.bed"
-    te_remove_set = set()
-    with open(te_remove_tmp, "r") as input, open(te_remove_final, "w") as output:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
-            if entry[0] not in te_remove_set:
-                output.write(line)
-                te_remove_set.add(entry[0])
+    # # find and remove duplicate entries in the remove list # TODO: need to output something
+    # te_remove_final = out_dir + "/" + sample_name + ".lift.remove.bed"
+    # te_remove_set = set()
+    # with open(te_remove_tmp, "r") as input, open(te_remove_final, "w") as output:
+    #     for line in input:
+    #         entry = line.replace("\n", "").split("\t")
+    #         if entry[0] not in te_remove_set:
+    #             output.write(line)
+    #             te_remove_set.add(entry[0])
 
     # final report
     report_bed_path = out_dir + "/" + sample_name + ".final.bed"
@@ -393,15 +410,14 @@ def annotation_liftover(
                 }
             )
 
-    # clean files
+    # clean files # TODO: consider keep flank2ref mapping file
     print("Clean tmp files...")
-    os.remove(flank_fa)
-    os.remove(flank_bed)
-    os.remove(te_remove_tmp)
-    os.remove(te_report_tmp)
-    os.remove(te_report_tmp_sort)
-    os.remove(te_report_tmp_merge)
-    os.remove(mm2_out)
+    # os.remove(flank_fa)
+    # os.remove(flank_bed)
+    # os.remove(te_report_tmp)
+    # os.remove(te_report_tmp_sort)
+    # os.remove(te_report_tmp_merge)
+    # os.remove(flank2ref_out)
 
     print("Lift over workflow finished!\n")
 
