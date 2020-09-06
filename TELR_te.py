@@ -81,7 +81,6 @@ def annotate_contig(
                     ]
                 )
                 seq2contig_output = seq2contig_output.decode("utf-8")
-                print(seq2contig_output)
                 if seq2contig_output != "":
                     seq2contig_passed_loci.add(contig_name)
                     with open(seq2contig, "a") as output:
