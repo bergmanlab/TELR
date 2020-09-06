@@ -7,11 +7,11 @@ import logging
 from TELR_input import get_args, parse_input
 from TELR_alignment import alignment, sort_index_bam
 from TELR_sv import detect_sv, vcf_parse_filter
-from TELR_assembly import prep_assembly, local_assembly
+from TELR_assembly import local_assembly
 from TELR_te import annotate_contig, find_te
 from TELR_utility import format_time
 
-# python3 telr.py -o $output_dir -i $read_path -r $reference_path -l $te_library_path -t 16 -x pacbio
+# python3 telr.py -o $output_dir -i $reads -r $reference -l $te_library
 
 
 def main():
@@ -50,11 +50,15 @@ def main():
         os.remove(loci_eval)
 
     # Detect and parse SV
+    vcf = os.path.join(args.out, sample_name + ".vcf")
+    detect_sv(vcf, bam, reference, args.library, args.out, sample_name, args.thread)
+
+    # Parse SV and filter for TE candidate locus
     vcf_parsed = os.path.join(args.out, sample_name + ".vcf_filtered.tsv")
-    detect_sv(
+    vcf_parse_filter(
+        vcf,
         vcf_parsed,
         bam,
-        reference,
         args.library,
         args.out,
         sample_name,
@@ -75,20 +79,39 @@ def main():
         args.polish,
     )
 
-    # find TEs
-    # TODO: different approaches
-    find_te(
+    # Annotate contig for TE region
+    (
+        contig_te_annotation,
+        contig_rm_annotation,
+        te_freq,
+        te_fa,
+        merge_contigs,
+    ) = annotate_contig(
         contig_dir,
-        vcf_parsed,
-        reference,
         args.library,
+        vcf_parsed,
         args.out,
         sample_name,
         args.thread,
+        args.presets,
+        loci_eval,
+    )
+
+    # find TEs
+    find_te(
+        contig_te_annotation,
+        contig_rm_annotation,
+        te_freq,
+        te_fa,
+        merge_contigs,
+        vcf_parsed,
+        reference,
+        args.out,
+        sample_name,
         args.gap,
         args.overlap,
         args.presets,
-        loci_eval,
+        loci_eval
     )
 
     proc_time = time.time() - start_time
