@@ -102,7 +102,6 @@ def prep_assembly(vcf_parsed, out, sample_name, raw_reads, contig_reads_dir):
         print("No insertion detected, exiting...")
     else:
         m = m[:-1]
-        print("number of item in m:" + str(len(m)))
         index = " ".join(str(i) for i in m)
         command = "csplit -s -f " + csplit_prefix + \
             " -n 1 " + subset_fa_reorder + " " + index
