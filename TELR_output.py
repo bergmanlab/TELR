@@ -6,7 +6,7 @@ from Bio import SeqIO
 from datetime import date
 
 
-def generate_output(meta, te_fa, vcf_parsed, out, sample_name):
+def generate_output(meta, te_fa, vcf_parsed, out, sample_name, ref):
     logging.info("Write output...")
     # convert meta to dict
     ins_dict = dict()
@@ -40,7 +40,9 @@ def generate_output(meta, te_fa, vcf_parsed, out, sample_name):
     contig_meta = dict()
     with open(vcf_parsed, "r") as input:
         for line in input:
-            entry = line.replace("\n", "").split("\t")
+            entry = (
+                line.replace("\n", "").replace(" ", "").split("\t")
+            )  # TODO: some how there are spaces in the parsed vcf file
             contig_name = "_".join([entry[0], entry[1], entry[2]])
             gt = entry[10]
             ref_count = entry[11]
@@ -62,15 +64,14 @@ def generate_output(meta, te_fa, vcf_parsed, out, sample_name):
 
     # write in VCF format
     vcf_out = os.path.join(out, sample_name + ".final.vcf")
-    write_vcf(meta, vcf_out)
+    write_vcf(meta, ref, vcf_out)
 
 
-def write_vcf(input_dict, out_vcf):
+def write_vcf(input_dict, ref, out_vcf):
     df = pd.DataFrame(input_dict)
-
     df["ID"] = df.index
     df["REF"] = "N"
-    df["QUAL"] = 60
+    df["QUAL"] = "."
     df["FILTER"] = "PASS"
     df["FORMAT"] = "GT:DR:DV"
     df["INFO"] = df.apply(
@@ -108,6 +109,7 @@ def write_vcf(input_dict, out_vcf):
         vcf.write("##fileformat=VCFv4.1" + "\n")
         vcf.write("##fileDate={}".format(date.today()) + "\n")
         vcf.write("##source=TELR" + "\n")
+        vcf.write("##reference=" + ref + "\n")
         vcf.write(
             '##INFO=<ID=END,Number=1,Type=Integer,Description="End position of the structure variant">'
             + "\n"
