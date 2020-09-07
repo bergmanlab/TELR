@@ -88,7 +88,7 @@ def write_vcf(input_dict, ref, out_vcf):
         + str(x.alt_count)
         + ";AF="
         + str(x.frequency),
-        axis=1,
+        axis=1
     )
 
     df = df[
