@@ -181,7 +181,11 @@ def annotate_contig(
         subprocess.call(command, shell=True, stdout=output)
 
     # find out what's filtered out
-    seq_mm2_overlap_loci = create_loci_set(te2contig_filter_tmp_sort_bed)
+    seq_mm2_overlap_loci = set()
+    with open(te2contig_filter_tmp_sort_bed, "r") as input:
+        for line in input:
+            seq_mm2_overlap_loci.add(line.split('\t')[0])
+    # seq_mm2_overlap_loci = create_loci_set(te2contig_filter_tmp_sort_bed)
     with open(loci_eval, "a") as output:
         for locus in seq2contig_passed_loci:
             if locus not in seq_mm2_overlap_loci:
@@ -202,11 +206,11 @@ def annotate_contig(
     # seq_mm2_overlap_merge_loci = create_loci_set(contig_te_annotation)
 
     # remove tmp files
-    os.remove(te2contig_out)
-    os.remove(seq2contig_bed)
-    os.remove(te2contig_filter_raw)
-    os.remove(te2contig_filter_tmp_bed)
-    os.remove(te2contig_filter_tmp_sort_bed)
+    # os.remove(te2contig_out)
+    # os.remove(seq2contig_bed)
+    # os.remove(te2contig_filter_raw)
+    # os.remove(te2contig_filter_tmp_bed)
+    # os.remove(te2contig_filter_tmp_sort_bed)
 
     # extract sequence and RM
     te_fa = out + "/" + sample_name + ".te.fa"
@@ -341,7 +345,7 @@ def find_te(
         loci_eval=loci_eval
     )
 
-    generate_output(report_meta, te_fa, vcf_parsed, out, sample_name)
+    generate_output(report_meta, te_fa, vcf_parsed, out, sample_name, ref)
 
 
 def create_fa(header, seq, out):
