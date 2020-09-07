@@ -4,6 +4,7 @@ import logging
 import json
 from Bio import SeqIO
 from datetime import date
+import subprocess
 
 
 def generate_output(meta, te_fa, vcf_parsed, out, sample_name, ref):
@@ -64,10 +65,11 @@ def generate_output(meta, te_fa, vcf_parsed, out, sample_name, ref):
 
     # write in VCF format
     vcf_out = os.path.join(out, sample_name + ".final.vcf")
-    write_vcf(meta, ref, vcf_out)
+    contig_info = get_contig_info(ref)
+    write_vcf(meta, ref, contig_info, vcf_out)
 
 
-def write_vcf(input_dict, ref, out_vcf):
+def write_vcf(input_dict, ref, contig_info, out_vcf):
     df = pd.DataFrame(input_dict)
     df["ID"] = df.index
     df["REF"] = "N"
@@ -88,7 +90,7 @@ def write_vcf(input_dict, ref, out_vcf):
         + str(x.alt_count)
         + ";AF="
         + str(x.frequency),
-        axis=1
+        axis=1,
     )
 
     df = df[
@@ -110,6 +112,7 @@ def write_vcf(input_dict, ref, out_vcf):
         vcf.write("##fileDate={}".format(date.today()) + "\n")
         vcf.write("##source=TELR" + "\n")
         vcf.write("##reference=" + ref + "\n")
+        vcf.write("\n".join(contig_info) + "\n")
         vcf.write(
             '##INFO=<ID=END,Number=1,Type=Integer,Description="End position of the structure variant">'
             + "\n"
@@ -163,3 +166,15 @@ def write_vcf(input_dict, ref, out_vcf):
             + "\n"
         )
     df.to_csv(out_vcf, sep="\t", mode="a", index=False, header=False)
+
+
+def get_contig_info(reference):
+    with open(reference, "r") as input:
+        subprocess.call(["samtools", "faidx", reference])
+        index_file = reference + ".fai"
+    contig_info = []
+    with open(index_file, "r") as input:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            contig_info.append("##contig=<ID={},length={}>".format(entry[0], entry[1]))
+    return contig_info
