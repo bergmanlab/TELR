@@ -11,7 +11,7 @@ python3 telr.py -i (--reads) <reads in fasta/fastq format or read alignments in 
 ## Optional arguments
 In addition to the required program options listed above, there are some optional arguments. The full list of program options with descriptions can also be obtained by running `telr.py -h`.
 - `-x (--presets) <arg>` Preset for different sequencing technologies (default = 'pacbio').
-- `-p (--polish_rounds) <int>` Rounds of contig polishing using polisher from [wtdbg2](https://github.com/ruanjue/wtdbg2) (default = 1).
+- `-p (--polish) <int>` Rounds of contig polishing using polisher from [wtdbg2](https://github.com/ruanjue/wtdbg2) (default = 1).
 - `-o (--out) <arg>` Output directory (default = '.').
 - `-t (--thread) <int>` Maximum cpu threads to use (default = '1').
 - `-g (--gap) <int>` Maximum gap size between sequence alignments of two contig flanks (default= '20').
