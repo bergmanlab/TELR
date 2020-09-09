@@ -7,7 +7,9 @@ wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O $H
 bash ~/miniconda.sh -b -p $HOME/miniconda # silent mode
 echo "export PATH=\$PATH:\$HOME/miniconda/bin" >> $HOME/.bashrc # add to .bashrc
 source $HOME/.bashrc
+conda init
 ```
+- `conda init` requires you to close and open a new terminal before it take effect
 
 ### Update Conda
 ```
