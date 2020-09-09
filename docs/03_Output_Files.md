@@ -1,12 +1,11 @@
 # Output
 TELR outputs non-referece TE insertion predictions in multiple format.
-- `<sample>.final.bed`: non-reference TE insertion annotation predicted by TELR pipeline in bed format (0-based).
-- `<sample>.final.vcf`: non-reference TE insertion annotation predicted by TELR pipeline in VCF format (0-based).
-- `<sample>.final.json`: non-reference TE insertion annotation predicted by TELR pipeline in json format (0-based).
-- `<sample>.final.fa`: TE insertion sequences extracted from local assembly of reads supporting TE insertions.
+- `<sample>.telr.vcf`: non-reference TE insertion annotation predicted by TELR pipeline in VCF format (0-based).
+- `<sample>.telr.json`: non-reference TE insertion annotation predicted by TELR pipeline in json format (0-based).
+- `<sample>.telr.fa`: TE insertion sequences extracted from local assembly of reads supporting TE insertions.
 
 ## VCF file output by TELR
-TELR generates a standard VCF file `<sample>.final.vcf` in [v4.1 format](https://samtools.github.io/hts-specs/VCFv4.1.pdf) that has detailed information for each non-reference TE insertion.
+TELR generates a standard VCF file `<sample>.telr.vcf` in [v4.1 format](https://samtools.github.io/hts-specs/VCFv4.1.pdf) that has detailed information for each non-reference TE insertion.
 
 Column | Description
 -- | --
@@ -35,7 +34,7 @@ RE= | Number of reads supporting the TE insertion.
 AF= | Allele frequency of the variant
 
 ## JSON file output by TELR
-The VCF and JSON files are largely equivalent, but the JSON file `<sample>.final.json` can be easier to parse programmatically. For each non-reference TE insertion, the json file contain these fields:
+The VCF and JSON files are largely equivalent, but the JSON file `<sample>.telr.json` can be easier to parse programmatically. For each non-reference TE insertion, the json file contain these fields:
 - `ID` The id of the TE insertions.
 - `chr` The chromosome name where the TE insertion occurred
 - `start` Starting breakpoint position of the TE insertions.
@@ -49,7 +48,7 @@ The VCF and JSON files are largely equivalent, but the JSON file `<sample>.final
 - `alt_count`: Number of reads supporting the TE insertion.
 
 ## FASTA file output by TELR
-For each non-reference TE insertion, TELR reports insertion sequences in `<sample>.final.fa`.
+For each non-reference TE insertion, TELR reports insertion sequences in `<sample>.telr.fa`.
 
 ## Log file output by TELR
 For each TELR run, a log file called `<sample>.log` is generated that records all the major steps in the program and error messages.
