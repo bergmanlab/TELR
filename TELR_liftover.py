@@ -154,7 +154,7 @@ def annotation_liftover(
     with open(flank2ref_out, "r") as input:
         for line in input:
             contig_mapped_set.add(line.split(":")[0])
-    report_bad_loci(contig_w_te_set, contig_mapped_set, loci_eval, "Flank not mapped")
+    report_bad_loci(contig_w_te_set, contig_mapped_set, loci_eval, "No flanks mapped to reference")
 
     # read family, strand and TE length info into dict
     te_len_dict = dict()
@@ -246,7 +246,7 @@ def annotation_liftover(
         contig_mapped_set,
         contig_wrong_chr_filter_set,
         loci_eval,
-        "all flanks mapped to wrong chromosome",
+        "No flanks mapped to correct chromosome",
     )
 
     # remove multi hit
@@ -259,7 +259,7 @@ def annotation_liftover(
         contig_wrong_chr_filter_set,
         contig_multi_hit_filter_set,
         loci_eval,
-        "all flanks with multiple hits",
+        "No flanks with single hits",
     )
 
     # remove if two flank map to different chr or strand
@@ -272,7 +272,7 @@ def annotation_liftover(
         contig_multi_hit_filter_set,
         contig_wrong_hit_filter_set,
         loci_eval,
-        "all flanks mapped to wrong chr/strand",
+        "Two flanks mapped to different chromosomes or strands",
     )
 
     # add frequency info
@@ -307,7 +307,7 @@ def annotation_liftover(
         contig_no_rm_filter_set,
         contig_gap_filter_set,
         loci_eval,
-        "contigs flanks overlap/gap too large",
+        "Overlap/gap between contigs flanks excceeds threshold",
     )
 
     new_df.to_csv(

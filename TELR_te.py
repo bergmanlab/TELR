@@ -38,7 +38,7 @@ def annotate_contig(
     with open(loci_eval, "a") as output:
         for locus in all_loci:
             if locus not in assembly_passed_loci:
-                output.write("\t".join([locus, "assembly failed"]) + "\n")
+                output.write("\t".join([locus, "Contig assembly failed"]) + "\n")
 
     # map sequence to contigs
     seq2contig_out = os.path.join(out, "seq2contig.paf")
@@ -102,7 +102,7 @@ def annotate_contig(
     with open(loci_eval, "a") as output:
         for locus in assembly_passed_loci:
             if locus not in seq2contig_passed_loci:
-                output.write("\t".join([locus, "seq-contig failed"]) + "\n")
+                output.write("\t".join([locus, "Sniffles VCF sequence not mapped to assembled contig"]) + "\n")
 
     # map TE library to contigs using minimap2
     # TE-contig alignment
