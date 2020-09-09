@@ -15,7 +15,7 @@ def generate_output(meta, te_fa, vcf_parsed, out, sample_name, ref):
         ins_dict[item["ins_name"]] = item
 
     # generate TE sequence fasta
-    final_te_seqs = out + "/" + sample_name + ".final.fa"
+    final_te_seqs = out + "/" + sample_name + ".telr.fa"
     if os.path.isfile(final_te_seqs):
         os.remove(final_te_seqs)
 
@@ -59,12 +59,12 @@ def generate_output(meta, te_fa, vcf_parsed, out, sample_name, ref):
         item["alt_count"] = contig_meta[item["ID"]]["alt_count"]
         del item["ins_name"]
         del item["te_strand"]
-    report_json = out + "/" + sample_name + ".final.json"
+    report_json = out + "/" + sample_name + ".telr.json"
     with open(report_json, "w") as output:
         json.dump(meta, output, indent=4, sort_keys=False)
 
     # write in VCF format
-    vcf_out = os.path.join(out, sample_name + ".final.vcf")
+    vcf_out = os.path.join(out, sample_name + ".telr.vcf")
     contig_info = get_contig_info(ref)
     write_vcf(meta, ref, contig_info, vcf_out)
 
