@@ -80,6 +80,13 @@ def get_args():
         help="max overlap size for flanking sequence alignment (default = '20')",
         required=False,
     )
+    optional.add_argument(
+        "-k",
+        "--keep_files",
+        action='store_true',
+        help="If provided then all intermediate files will be kept (default: remove intermediate files)",
+        required=False,
+    )
     parser._action_groups.append(optional)
     args = parser.parse_args()
     # TODO: remove intermediate files
