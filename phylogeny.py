@@ -110,7 +110,7 @@ def get_args():
         args.thread = 1
 
     if args.method is None:
-        args.method = "raxml"
+        args.method = "iqtree"
     elif args.method != "raxml" and args.method != "iqtree" and args.method != "both":
         print("method not recognized, please check help page")
         sys.exit(1)
