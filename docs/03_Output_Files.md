@@ -8,7 +8,7 @@ TELR outputs non-referece TE insertion predictions in multiple format.
 ## VCF file output by TELR
 TELR generates a standard VCF file `<sample>.final.vcf` in [v4.1 format](https://samtools.github.io/hts-specs/VCFv4.1.pdf) that has detailed information for each non-reference TE insertion.
 
-Column name | Description
+Column | Description
 -- | --
 chromosome | The chromosome name where the TE insertion occurred
 position | Starting breakpoint position of the TE insertions.
