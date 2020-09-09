@@ -412,12 +412,12 @@ def annotation_liftover(
 
     # clean files # TODO: consider keep flank2ref mapping file
     print("Clean tmp files...")
-    # os.remove(flank_fa)
-    # os.remove(flank_bed)
-    # os.remove(te_report_tmp)
-    # os.remove(te_report_tmp_sort)
-    # os.remove(te_report_tmp_merge)
-    # os.remove(flank2ref_out)
+    os.remove(flank_fa)
+    os.remove(flank_bed)
+    os.remove(te_report_tmp)
+    os.remove(te_report_tmp_sort)
+    os.remove(te_report_tmp_merge)
+    os.remove(flank2ref_out)
 
     print("Lift over workflow finished!\n")
 

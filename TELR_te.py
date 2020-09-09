@@ -102,7 +102,12 @@ def annotate_contig(
     with open(loci_eval, "a") as output:
         for locus in assembly_passed_loci:
             if locus not in seq2contig_passed_loci:
-                output.write("\t".join([locus, "Sniffles VCF sequence not mapped to assembled contig"]) + "\n")
+                output.write(
+                    "\t".join(
+                        [locus, "Sniffles VCF sequence not mapped to assembled contig"]
+                    )
+                    + "\n"
+                )
 
     # map TE library to contigs using minimap2
     # TE-contig alignment
@@ -184,7 +189,7 @@ def annotate_contig(
     seq_mm2_overlap_loci = set()
     with open(te2contig_filter_tmp_sort_bed, "r") as input:
         for line in input:
-            seq_mm2_overlap_loci.add(line.split('\t')[0])
+            seq_mm2_overlap_loci.add(line.split("\t")[0])
     # seq_mm2_overlap_loci = create_loci_set(te2contig_filter_tmp_sort_bed)
     with open(loci_eval, "a") as output:
         for locus in seq2contig_passed_loci:
@@ -206,11 +211,13 @@ def annotate_contig(
     # seq_mm2_overlap_merge_loci = create_loci_set(contig_te_annotation)
 
     # remove tmp files
-    # os.remove(te2contig_out)
-    # os.remove(seq2contig_bed)
-    # os.remove(te2contig_filter_raw)
-    # os.remove(te2contig_filter_tmp_bed)
-    # os.remove(te2contig_filter_tmp_sort_bed)
+    os.remove(seq2contig)
+    os.remove(te2contig_bed)
+    os.remove(te2contig_out)
+    os.remove(seq2contig_bed)
+    os.remove(te2contig_filter_raw)
+    os.remove(te2contig_filter_tmp_bed)
+    os.remove(te2contig_filter_tmp_sort_bed)
 
     # extract sequence and RM
     te_fa = out + "/" + sample_name + ".te.fa"
@@ -278,6 +285,7 @@ def annotate_contig(
     command = 'bedtools merge -c 4,6 -o distinct -delim "|" -i ' + te2contig_rm
     with open(contig_rm_annotation, "w") as output:
         subprocess.call(command, shell=True, stdout=output)
+    os.remove(te2contig_rm)
 
     # seq_mm2_overlap_merge_rm_loci = create_loci_set(te2contig_rm_merge)
     # with open(loci_eval, "a") as output:
@@ -309,9 +317,7 @@ def find_te(
     contig_te_annotation,
     contig_family_annotation,
     te_freq,
-    te_fa,
     merge_contigs,
-    vcf_parsed,
     ref,
     out,
     sample_name,
@@ -342,10 +348,10 @@ def find_te(
         flank_len=500,
         family_rm=contig_family_annotation,
         freq=te_freq,
-        loci_eval=loci_eval
+        loci_eval=loci_eval,
     )
 
-    generate_output(report_meta, te_fa, vcf_parsed, out, sample_name, ref)
+    return report_meta
 
 
 def create_fa(header, seq, out):
