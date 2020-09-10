@@ -59,10 +59,10 @@ For each TELR run, a tabular file `<sample>.loci_eval.tsv` is generated that rep
 - VCF sequence not repeatmasked
 - Contig assembly failed
 - Sniffles VCF sequence not mapped to assembled contig
-VCF sequence doesn't overlap contig annotation
+- VCF sequence doesn't overlap contig annotation
 - No flanks mapped to reference
 - No flanks mapped to correct chromosome
 - No flanks with single hits
 - Two flanks mapped to different chromosomes or strands
-contigs without RM annotation
+- contigs without RM annotation
 - Overlap/gap between contigs flanks excceeds threshold
