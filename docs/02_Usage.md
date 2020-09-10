@@ -1,5 +1,40 @@
 # Usage
 
+## Command line help page
+```
+usage: telr.py [-h] -i READS -r REFERENCE -l LIBRARY [-x PRESETS] [-p POLISH]
+               [-o OUT] [-t THREAD] [-g GAP] [-v OVERLAP] [-k]
+
+Script to detect TEs in long read data
+
+required arguments:
+  -i READS, --reads READS
+                        reads in fasta/fastq format or read alignments in bam
+                        format
+  -r REFERENCE, --reference REFERENCE
+                        reference genome in fasta format
+  -l LIBRARY, --library LIBRARY
+                        TE consensus sequences in fasta format
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -x PRESETS, --presets PRESETS
+                        parameter presets for different sequencing
+                        technologies (default = 'pacbio')
+  -p POLISH, --polish POLISH
+                        rounds of contig polishing (default = 1)
+  -o OUT, --out OUT     directory to output data (default = '.')
+  -t THREAD, --thread THREAD
+                        max cpu threads to use (default = '1')
+  -g GAP, --gap GAP     max gap size for flanking sequence alignment (default
+                        = '20')
+  -v OVERLAP, --overlap OVERLAP
+                        max overlap size for flanking sequence alignment
+                        (default = '20')
+  -k, --keep_files      If provided then all intermediate files will be kept
+                        (default: remove intermediate files)
+```
+
 ## Required arguments
 TELR requires long reads in FASTA/FASTQ format or read alignments in BAM format, a reference genome assembly in FASTA format (which must be the same as the one used to align the reads, if read alignments are provided), and TE consensus sequence in FASTA format. Here is a template with the names of the required and optional parameters.
 ```
