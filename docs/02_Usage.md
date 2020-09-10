@@ -4,8 +4,8 @@
 TELR requires long reads in FASTA/FASTQ format or read alignments in BAM format, a reference genome assembly in FASTA format (which must be the same as the one used to align the reads, if read alignments are provided), and TE consensus sequence in FASTA format. Here is a template with the names of the required and optional parameters.
 ```
 python3 telr.py -i (--reads) <reads in fasta/fastq format or read alignments in bam format> \
-        -r (--reference) <reference genome in fasta format> \
-        -l (--library) <TE consensus sequences in fasta format>
+                -r (--reference) <reference genome in fasta format> \
+                -l (--library) <TE consensus sequences in fasta format>
 ```
 
 ## Optional arguments
