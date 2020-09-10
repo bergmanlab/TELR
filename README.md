@@ -13,6 +13,9 @@ The following sections will provide you installation instructions, usage guide, 
   - [Usage](docs/02_Usage.md)
   - [Output Files](docs/03_Output_Files.md)
 
+## Getting Help
+Please use the [Github Issue page](https://github.com/bergmanlab/TELR/issues) if you have questions.
+
 ## License
 
 Copyright (c) 2020 Shunhua Han and Casey M. Bergman
