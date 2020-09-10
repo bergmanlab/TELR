@@ -89,7 +89,6 @@ def get_args():
     )
     parser._action_groups.append(optional)
     args = parser.parse_args()
-    # TODO: remove intermediate files
 
     # checks if in files exist
     try:
