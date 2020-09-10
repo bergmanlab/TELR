@@ -12,8 +12,10 @@ from TELR_assembly import local_assembly
 from TELR_te import annotate_contig, find_te, generate_output
 from TELR_utility import format_time, mkdir
 
-# python3 telr.py -o $output_dir -i $reads -r $reference -l $te_library
-
+'''
+Author: Shunhua Han <shhan@uga.edu>
+Concept: Casey Bergman <cbergman.uga.edu>, Guilherme Dias <guilherme.dias@uga.edu>
+'''
 
 def main():
     args = get_args()
