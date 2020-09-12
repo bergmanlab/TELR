@@ -108,4 +108,3 @@ dependencies:
   - xz=5.2.5=h516909a_1
   - zlib=1.2.11=h516909a_1009
   - zstd=1.4.5=h6597ccf_2
-prefix: /home/sh60271/miniconda/envs/TELR_env
