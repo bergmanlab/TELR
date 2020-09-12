@@ -465,10 +465,10 @@ def get_coordinate(df_group):
         if start > end:  # when there are overlaps
             gap = end - start
             start, end = end, start
-            score = 2
+            score = 3
         else:
             gap = end - start
-            score = 3
+            score = 2
     return pd.Series(
         [chr, start, end, family, score, strand, gap, te_strand, te_len, te_freq],
         index=[
