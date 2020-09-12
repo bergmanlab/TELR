@@ -1,5 +1,6 @@
 # Installation
-TELR is written in python3 and is designed to run on linux operating systems. Installation of software dependencies for McClintock is automated by Conda, thus a working installation of Conda is required to install McClintock. Conda can be installed via the Miniconda installer.
+## Use Conda to install software dependencies
+TELR is written in python3 and is designed to run on linux operating system. Installation of software dependencies for TELR is automated by Conda, thus a working installation of Conda is required to install TELR. Conda can be installed via the Miniconda installer.
 
 ### Installing Miniconda (Python 3.X)
 ```
@@ -16,36 +17,35 @@ conda init
 conda update conda
 ```
 
-## Install dependencies
+## Install software dependencies
 After installing and updating Conda, you can now use conda to install dependencies and create running environment for TELR.
-```
-conda create -n TELR_env python=3.6 -y
-conda activate TELR_env
-conda install -c conda-forge -y biopython
-conda install -y pandas=1.0.0
-conda install -y repeatmasker=4.0.7
-conda install -y samtools=1.9
-conda install -y bcftools=1.9
-conda install -y bedtools
-conda install -y ngmlr=0.2.7
-conda install -y sniffles=1.0.12
-conda install -y wtdbg
-conda install -y seqtk
-conda install -y minimap2
-conda install -y svim=1.3
-conda install -y mafft
-conda install -y raxml
-conda install -c bioconda iqtree
-```
-
-## Quick Start
+### Clone TELR Repository
 ```
 git clone git@github.com:bergmanlab/TELR.git
 cd TELR
-./telr.py --help
 ```
+### Create TELR Conda Environment
+```
+conda env create -f envs/telr.yml
+```
+- This installs all the software dependencies needed to run TELR into the TELR Conda environment.
 
-## Running on a test dataset
+### Activate TELR Conda Environment
+```
+conda activate TELR_env
+```
+- This adds the dependencies installed in the TELR conda environment to the environment PATH so that they can be used by the TELR scripts.
+- This environment must always be activated prior to running any of the TELR scripts
+- NOTE: Sometimes activating conda environments does not work via conda activate myenv when run through a script submitted to a queueing system, this can be fixed by activating the environment in the script as shown below
+```
+CONDA_BASE=$(conda info --base)
+source ${CONDA_BASE}/etc/profile.d/conda.sh
+conda activate TELR_env
+```
+- For more on Conda: see the [Conda User Guide](https://docs.conda.io/projects/conda/en/latest/index.html).
+
+## Running TELR on test dataset
+- A test dataset is provided in the `test/` directory, you can test whether your TELR installation is successful by running TELR on this dataset, which should take less than one minute to finish on a single thread machine.
 ```
 conda activate TELR_env
 cd test
