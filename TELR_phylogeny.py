@@ -126,8 +126,14 @@ def get_args():
     return args
 
 
-def get_te_seq(te_seqs, family, consensus_length, length_filter, out):
+def get_te_seq(te_seqs, family, consensus, add_consensus, length_filter, out):
+    # get consensus length/merge
+    consensus_length = len(consensus[family].seq)
+
     with open(out, "w") as output:
+        if add_consensus:
+            record = consensus[family]
+            output.write(">" + record.id + "\n" + str(record.seq) + "\n")
         for record in te_seqs:
             if record.id.split("_")[3] == family:
                 if (
@@ -192,7 +198,15 @@ def build_tree(alignment, family, out_dir, tmp_dir, method, bootstrap, thread):
 
 
 def phylogeny_from_telr(
-    family, consensus, length_filter, te_seqs, out_dir, method, bootstrap, thread
+    family,
+    consensus,
+    length_filter,
+    te_seqs,
+    out_dir,
+    method,
+    bootstrap,
+    thread,
+    add_consensus=False,
 ):
     # create dir for intermediate files
     tree_tmp_dir = os.path.join(out_dir, "tree_tmp_files", family)
@@ -200,18 +214,19 @@ def phylogeny_from_telr(
         shutil.rmtree(tree_tmp_dir)
     os.makedirs(tree_tmp_dir)
 
-    # get consensus length/merge
-    consensus_length = len(consensus[family].seq)
-
     # build consensus sequence from TELR TE output
     seqs = os.path.join(tree_tmp_dir, family + ".telr.fa")
-    get_te_seq(te_seqs, family, consensus_length, length_filter, seqs)
+    get_te_seq(te_seqs, family, consensus, add_consensus, length_filter, seqs)
 
     # align TE sequences
     align_fa = os.path.join(tree_tmp_dir, family + ".align.fa")
     with open(align_fa, "w") as output:
+        if thread > 8:
+            mafft_thread = 8
+        else:
+            mafft_thread = thread
         subprocess.call(
-            ["mafft", "--auto", "--quiet", "--thread", str(thread), seqs],
+            ["mafft", "--quiet", "--auto", "--thread", str(mafft_thread), seqs],
             stdout=output,
         )
 
@@ -244,9 +259,9 @@ def main():
     for telr_out_dir in args.telr_dirs:
         if telr_out_dir[-1] == "/":
             telr_out_dir = telr_out_dir[:-1]
-        for telr_out_fa in glob.glob(telr_out_dir + "/**/*final.fa", recursive=True):
+        for telr_out_fa in glob.glob(telr_out_dir + "/**/*telr.fa", recursive=True):
             sample = (
-                os.path.basename(telr_out_fa).replace(".final.fa", "").replace("_", "-")
+                os.path.basename(telr_out_fa).replace(".telr.fa", "").replace("_", "-")
             )
             for record in SeqIO.parse(telr_out_fa, "fasta"):
                 family = record.id.split("#")[1].replace("_", "-")
@@ -255,7 +270,7 @@ def main():
                     start = record.id.split("_")[1]
                     record.id = "_".join([sample, contig, start, family])
                     all_te_seqs.append(record)
-    
+
     for family in families:
         phylogeny_from_telr(
             te_seqs=all_te_seqs,
@@ -266,6 +281,7 @@ def main():
             method=args.method,
             bootstrap=args.bootstrap,
             thread=args.thread,
+            add_consensus=args.add_consensus,
         )
 
 
