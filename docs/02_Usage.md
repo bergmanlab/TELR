@@ -36,7 +36,7 @@ optional arguments:
 ```
 
 ## Required arguments
-TELR requires long reads in FASTA/FASTQ format or read alignments in BAM format, a reference genome assembly in FASTA format (which must be the same as the one used to align the reads, if read alignments are provided), and TE consensus sequence in FASTA format. Here is a template with the names of the required and optional parameters.
+TELR requires long reads in FASTA/FASTQ format or read alignments in BAM format from BWA-MEM (use `-M` and `-x` parameter), Minimap2 (with Cigar & MD string) or NGMLR, a reference genome assembly in FASTA format (which must be the same as the one used to align the reads, if read alignments are provided), and TE consensus sequence in FASTA format. Here is a template with the names of the required and optional parameters.
 ```
 python3 telr.py -i (--reads) <reads in fasta/fastq format or read alignments in bam format> \
                 -r (--reference) <reference genome in fasta format> \
