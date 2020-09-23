@@ -3,6 +3,7 @@ import argparse
 import sys
 import os
 import glob
+import editdistance
 
 # import time
 import logging
@@ -87,7 +88,13 @@ def get_args():
     optional.add_argument(
         "--length_filter",
         type=float,
-        help="percentage of TE sequence longer or shorter than consensus sequence (default: 0.1)",
+        help="percentage of TE sequence longer or shorter than consensus sequence (default: 10%)",
+        required=False,
+    )
+    optional.add_argument(
+        "--divergence_filter",
+        type=float,
+        help="percentage of TE sequence divergent from consensus sequence (default: 10%)",
         required=False,
     )
     parser._action_groups.append(optional)
@@ -118,7 +125,10 @@ def get_args():
         sys.exit(1)
 
     if args.length_filter is None:
-        args.length_filter = 0.1
+        args.length_filter = 1
+
+    if args.divergence_filter is None:
+        args.divergence_filter = 0.1
 
     if args.bootstrap is None:
         args.bootstrap = 5
@@ -126,22 +136,14 @@ def get_args():
     return args
 
 
-def get_te_seq(te_seqs, family, consensus, add_consensus, length_filter, out):
-    # get consensus length/merge
-    consensus_length = len(consensus[family].seq)
-
+def get_te_seq(te_seqs, family, consensus, add_consensus, out):
     with open(out, "w") as output:
         if add_consensus:
             record = consensus[family]
             output.write(">" + record.id + "\n" + str(record.seq) + "\n")
         for record in te_seqs:
             if record.id.split("_")[3] == family:
-                if (
-                    ((1 - length_filter) * float(consensus_length))
-                    <= len(record.seq)
-                    <= ((1 + length_filter) * float(consensus_length))
-                ):
-                    output.write(">" + record.id + "\n" + str(record.seq) + "\n")
+                output.write(">" + record.id + "\n" + str(record.seq) + "\n")
 
 
 def run_raxml(alignment, tmp_dir, out_dir, prefix, bootstrap, thread):
@@ -200,7 +202,6 @@ def build_tree(alignment, family, out_dir, tmp_dir, method, bootstrap, thread):
 def phylogeny_from_telr(
     family,
     consensus,
-    length_filter,
     te_seqs,
     out_dir,
     method,
@@ -216,7 +217,7 @@ def phylogeny_from_telr(
 
     # build consensus sequence from TELR TE output
     seqs = os.path.join(tree_tmp_dir, family + ".telr.fa")
-    get_te_seq(te_seqs, family, consensus, add_consensus, length_filter, seqs)
+    get_te_seq(te_seqs, family, consensus, add_consensus, seqs)
 
     # align TE sequences
     align_fa = os.path.join(tree_tmp_dir, family + ".align.fa")
@@ -242,41 +243,68 @@ def phylogeny_from_telr(
     )
 
 
+def per_base_len_dist(consensus_len, seq_len):
+    return abs(seq_len - consensus_len) / consensus_len
+
+
 def main():
     args = get_args()
 
     # TODO process consensus sequence, remove stuff after #
     consensus_dict = SeqIO.index(args.consensus, "fasta")
 
-    # TODO add consensus option
-
     # TODO add all family option
+
+    meta_out = os.path.join(args.out, "meta.txt")
 
     families = args.family.replace(" ", "").replace("_", "-").split(",")
     # parse TELR output directories and load consensus
     all_te_seqs = []
-    k = 0
-    for telr_out_dir in args.telr_dirs:
-        if telr_out_dir[-1] == "/":
-            telr_out_dir = telr_out_dir[:-1]
-        for telr_out_fa in glob.glob(telr_out_dir + "/**/*telr.fa", recursive=True):
-            sample = (
-                os.path.basename(telr_out_fa).replace(".telr.fa", "").replace("_", "-")
-            )
-            for record in SeqIO.parse(telr_out_fa, "fasta"):
-                family = record.id.split("#")[1].replace("_", "-")
-                if family in families:
-                    contig = record.id.split("_")[0].replace("_", "-")
-                    start = record.id.split("_")[1]
-                    record.id = "_".join([sample, contig, start, family])
-                    all_te_seqs.append(record)
+    with open(meta_out, "w") as output:
+        for telr_out_dir in args.telr_dirs:
+            if telr_out_dir[-1] == "/":
+                telr_out_dir = telr_out_dir[:-1]
+            for telr_out_fa in glob.glob(telr_out_dir + "/**/*telr.fa", recursive=True):
+                sample = (
+                    os.path.basename(telr_out_fa)
+                    .replace(".telr.fa", "")
+                    .replace("_", "-")
+                )
+                # the following section can be parallized
+                for record in SeqIO.parse(telr_out_fa, "fasta"):
+                    family = record.id.split("#")[1].replace("_", "-")
+                    if family in families:
+                        consensus_seq = str(consensus_dict[family].seq)
+                        consensus_length = len(consensus_seq)
+                        sample_seq = str(record.seq)
+                        seq_len = len(sample_seq)
+                        len_diff = per_base_len_dist(consensus_length, seq_len)
+                        div_diff = (
+                            editdistance.eval(consensus_seq, sample_seq)
+                            / consensus_length
+                        )
+                        contig = record.id.split("_")[0].replace("_", "-")
+                        start = record.id.split("_")[1]
+                        meta_out_line = "\t".join(
+                            [
+                                sample,
+                                contig,
+                                start,
+                                family,
+                                str(len_diff),
+                                str(div_diff),
+                            ]
+                        )
+                        output.write(meta_out_line + "\n")
+                        if div_diff < args.divergence_filter:
+                            record.id = "_".join([sample, contig, start, family])
+                            all_te_seqs.append(record)
 
     for family in families:
         phylogeny_from_telr(
             te_seqs=all_te_seqs,
             family=family,
             consensus=consensus_dict,
-            length_filter=args.length_filter,
             out_dir=args.out,
             method=args.method,
             bootstrap=args.bootstrap,
