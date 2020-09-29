@@ -2,12 +2,12 @@
     <img src="https://github.com/bergmanlab/TELR/blob/master/TELR.png?raw=true" alt="TELR"/>
 </p>
 
-## Introducation
+## Introduction
 TELR (pronounced Teller) is a fast non-reference transposable element (TE) detector from long read sequencing data (PacBio or Oxford Nanopore).
 
 TELR uses long reads mapped to a reference genome to identify insertions using [Sniffles](https://github.com/fritzsedlazeck/Sniffles), then filters insertions by matching insertion supporting reads with user supplied TE consensus sequences. For each TE insertion candidate locus, TELR performs a local assembly of all reads supporting TE insertion, annotates the TE sequence in assembled contigs, then maps the flanks back to the reference genome. Finally, TELR generates the coordinates of the non-reference TE insertions plus the assembled TE sequences.
 
-The current version of TELR shows good performance on real drosophila melanogaster data sets with lots of heterozygous TE insertions. We are currently doing more testing on other species.
+The current version of TELR shows good performance on real Drosophila melanogaster data sets, including datasets with heterozygous TE insertions. We are currently doing more testing on other species.
 
 ## Documentation
 The following sections will provide you installation instructions, usage guide, and descriptions of output files.
