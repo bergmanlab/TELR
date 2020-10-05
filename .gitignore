@@ -1,3 +1,4 @@
 test/test_output
+test/*bam
 .vscode/settings.json
 __pycache__
