@@ -74,15 +74,14 @@ def main():
 
     # telr output files
     telr_bed = []
-    for file in glob.glob(args.telr_dir + "/*.final.bed"):
+    for file in glob.glob(args.telr_dir + "/*.telr.vcf"):
         telr_bed.append(file)
-    prefix = os.path.basename(telr_bed[0]).replace('.final.bed', '')
-    telr_bed = args.telr_dir + "/" + prefix + '.final.bed'
-    telr_contigs = args.telr_dir + "/" + prefix + '.contigs.fa'
-    telr_bed = args.telr_dir + '/' + prefix + ".final.bed"
-    telr_meta = args.telr_dir + '/' + prefix + ".final.meta.tsv"
-    telr_contig_te = args.telr_dir +"/" + prefix + ".te2contig_filter.bed"
-    telr_family = args.telr_dir + "/" + prefix + ".te2contig_rm.merge.bed"
+    prefix = os.path.basename(telr_bed[0]).replace('.telr.vcf', '')
+    telr_bed = args.telr_dir + "/" + prefix + '.telr.vcf'
+    telr_contigs = args.telr_dir + "/intermediate_files/" + prefix + '.contigs.fa'
+    telr_meta = args.telr_dir + '/intermediate_files/' + prefix + ".final.meta.tsv"
+    telr_contig_te = args.telr_dir +"/intermediate_files/" + prefix + ".te2contig_filter.bed"
+    telr_family = args.telr_dir + "/intermediate_files/" + prefix + ".te2contig_rm.merge.bed"
 
     # filter genome 1 TE annotation by focus regions and families
     ## TODO: check annotation file format?
