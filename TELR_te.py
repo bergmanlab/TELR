@@ -4,9 +4,12 @@ from Bio import SeqIO
 import json
 import re
 import logging
+import pysam
+import statistics
 from TELR_utility import mkdir, create_loci_set
 from TELR_liftover import annotation_liftover
 from TELR_output import generate_output
+from TELR_assembly import prep_assembly
 
 
 def annotate_contig(
@@ -21,9 +24,10 @@ def annotate_contig(
     all_loci = create_loci_set(vcf_parsed)
     assembly_passed_loci = set()
     merge_contigs = os.path.join(out, sample_name + ".contigs.fa")
-    with open(merge_contigs, "w") as output:
+    with open(merge_contigs, "w") as MERGE:
         for locus in all_loci:
             assembly = os.path.join(contig_dir, locus + ".cns.fa")
+            new_assembly = os.path.join(contig_dir, locus + ".cns.ctg1.fa")
             if os.path.isfile(assembly) and os.stat(assembly).st_size > 0:
                 assembly_passed_loci.add(locus)
                 with open(assembly, "r") as handle:
@@ -32,7 +36,9 @@ def annotate_contig(
                         if record.id == "ctg1":
                             record.id = locus
                             record.description = "len=" + str(len(record.seq))
-                            SeqIO.write(record, output, "fasta")
+                            SeqIO.write(record, MERGE, "fasta")
+                            with open(new_assembly, "w") as CTG1:
+                                SeqIO.write(record, CTG1, "fasta")
 
     # report assembly failed loci
     with open(loci_eval, "a") as output:
@@ -310,6 +316,168 @@ def seq2contig(seq, contig, out):
         subprocess.call(
             ["minimap2", "-cx", "map-pb", "--secondary=no", contig, seq], stdout=output
         )  # only retain primary alignment
+
+
+def minimap2bam(query, subject, presets, thread=1):
+    sam = query.replace(".reads.fa", ".realign.sam")
+    with open(sam, "w") as output:
+        subprocess.call(
+            ["minimap2", "-a", "-x", presets, "-v", "0", subject, query], stdout=output
+        )
+    bam = query.replace(".reads.fa", ".realign.bam")
+    with open(bam, "w") as output:
+        subprocess.call(["samtools", "view", "-bS", sam], stdout=output)
+    sorted_bam = query.replace(".reads.fa", ".realign.sort.bam")
+    subprocess.call(["samtools", "sort", "-@", str(thread), "-o", sorted_bam, bam])
+    subprocess.call(["samtools", "index", "-@", str(thread), sorted_bam])
+
+    os.remove(sam)
+    os.remove(bam)
+
+    return sorted_bam
+
+
+def get_af(
+    out,
+    sample_name,
+    bam,
+    raw_reads,
+    contig_te_annotation,
+    contig_dir,
+    vcf_parsed,
+    presets,
+    thread,
+):
+    logging.info("Estimating allele frequency")
+    if presets == "ont":
+        presets = "map-ont"
+    else:
+        presets = "map-pb"
+
+    # prepare reads
+    telr_reads_dir = os.path.join(out, "telr_reads")
+    prep_assembly(
+        vcf_parsed, out, sample_name, bam, raw_reads, telr_reads_dir, read_type="all"
+    )
+
+    # read contig annotation to dict
+    contig_te_dict = dict()
+    with open(contig_te_annotation, "r") as input:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            contig_name = entry[0]
+            start = entry[1]
+            end = entry[2]
+            contig_te_dict[contig_name] = int(start), int(end)
+
+    # re-align reads to assembly
+    k = 0
+    vcf_parsed_freq = vcf_parsed + ".freq"
+    with open(vcf_parsed, "r") as input, open(vcf_parsed_freq, "w") as output:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            contig_name = "_".join([entry[0], entry[1], entry[2]])
+            # rename all reads around breakpoints
+            telr_reads = telr_reads_dir + "/contig" + str(k)
+            telr_reads_rename = telr_reads_dir + "/" + contig_name + ".reads.fa"
+            os.rename(telr_reads, telr_reads_rename)
+            k = k + 1
+
+            contig = os.path.join(contig_dir, contig_name + ".cns.ctg1.fa")
+
+            # get contig length
+            contig_length = 0
+            if os.path.isfile(contig):
+                with open(contig, "r") as handle:
+                    records = SeqIO.parse(handle, "fasta")
+                    for record in records:
+                        contig_length = len(record.seq)
+            else:
+                print(contig_name + " no assembly")
+                continue
+
+            # map reads to assembly
+            raw_reads = os.path.join(telr_reads_dir, contig_name + ".reads.fa")
+            # bam = raw_reads.replace(".reads.fa", ".realign.sort.bam")
+            bam = minimap2bam(raw_reads, contig, presets, thread)
+
+            # get average
+            if contig_name in contig_te_dict:
+                start, end = contig_te_dict[contig_name]
+                # get TE coverage
+                te_cov = get_median_cov(bam, contig_name, start, end)
+                # get flanking coverage
+                flank_len = 1000
+                offset = 200
+                left_flank_present = True
+                right_flank_present = True
+                left_flank_cov = 0
+                right_flank_cov = 0
+                if start - flank_len - offset >= 0:
+                    left_flank_cov = get_median_cov(
+                        bam, contig_name, start - flank_len - offset, start - offset
+                    )
+                else:
+                    left_flank_present = False
+
+                if end + flank_len + offset <= contig_length:
+                    right_flank_cov = get_median_cov(
+                        bam, contig_name, end + offset, end + flank_len + offset
+                    )
+                else:
+                    right_flank_present = False
+
+                if left_flank_present and right_flank_present:
+                    flank_cov = (left_flank_cov + right_flank_cov) / 2
+                elif left_flank_present:
+                    flank_cov = left_flank_cov
+                elif right_flank_present:
+                    flank_cov = right_flank_cov
+                else:
+                    print(contig_name + " no flanks")
+                    continue
+                out_line = "\t".join(
+                    entry
+                    + [
+                        str(te_cov),
+                        str(left_flank_cov),
+                        str(right_flank_cov),
+                        str(flank_cov),
+                    ]
+                )
+                output.write(out_line + "\n")
+            else:
+                print(contig_name + " not in contig_te")
+
+    # get frequency
+    te_freq = dict()
+    with open(vcf_parsed_freq, "r") as input:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            contig_name = "_".join([entry[0], entry[1], entry[2]])
+            te_cov = float(entry[13])
+            flank_cov = float(entry[16])
+            freq = round(te_cov / flank_cov, 2)
+            if freq > 1:
+                freq = 1
+            te_freq[contig_name] = freq
+    return te_freq
+
+def get_median_cov(bam, chr, start, end):
+    commands = (
+        "samtools depth -aa -r " + chr + ":" + str(start) + "-" + str(end) + " " + bam
+    )
+    depth = bam + ".depth"
+    with open(depth, "w") as output:
+        subprocess.call(commands, shell=True, stdout=output)
+    covs = []
+    with open(depth, "r") as input:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            covs.append(int(entry[2]))
+    median_cov = statistics.median(covs)
+    os.remove(depth)
+    return median_cov
 
 
 # def find_te(contigs, ref, te_contigs_annotation, family_annotation, te_freq, te_fa, out, sample_name, gap, overlap, presets):
