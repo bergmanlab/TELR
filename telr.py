@@ -9,13 +9,14 @@ from TELR_input import get_args, parse_input
 from TELR_alignment import alignment, sort_index_bam
 from TELR_sv import detect_sv, vcf_parse_filter
 from TELR_assembly import local_assembly
-from TELR_te import annotate_contig, find_te, generate_output
+from TELR_te import annotate_contig, find_te, generate_output, get_af
 from TELR_utility import format_time, mkdir
 
-'''
+"""
 Author: Shunhua Han <shhan@uga.edu>
 Concept: Casey Bergman <cbergman.uga.edu>, Guilherme Dias <guilherme.dias@uga.edu>
-'''
+"""
+
 
 def main():
     args = get_args()
@@ -72,6 +73,7 @@ def main():
         args.thread,
         loci_eval,
     )
+    
 
     # Local assembly
     contig_dir = os.path.join(tmp_dir, "contig_assembly")
@@ -80,6 +82,7 @@ def main():
         vcf_parsed,
         tmp_dir,
         sample_name,
+        bam,
         fasta,
         args.thread,
         args.presets,
@@ -102,6 +105,19 @@ def main():
         args.thread,
         args.presets,
         loci_eval,
+    )
+
+    # calculate AF
+    te_freq = get_af(
+        tmp_dir,
+        sample_name,
+        bam,
+        fasta,
+        contig_te_annotation,
+        contig_dir,
+        vcf_parsed,
+        args.presets,
+        args.thread,
     )
 
     # find TEs
