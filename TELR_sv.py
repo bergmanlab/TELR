@@ -4,6 +4,7 @@ import subprocess
 import pandas as pd
 import logging
 import time
+from Bio import SeqIO
 from TELR_utility import mkdir, format_time, create_loci_set
 
 
@@ -87,7 +88,7 @@ def merge_vcf(vcf_in, vcf_out, window=20):
     vcf_tmp = vcf_in + ".tmp"
     with open(vcf_tmp, "w") as output:
         command = (
-            'bedtools merge -o collapse -c 2,3,4,5,6,7,8,9,10,11,12,13 -delim ";"'
+            'bedtools merge -o collapse -c 2,3,4,5,6,7,8,9,10,11,12,13,14 -delim ";"'
             + " -d "
             + str(window)
             + " -i "
@@ -115,6 +116,7 @@ def merge_vcf(vcf_in, vcf_out, window=20):
                 gt = entry[12].split(";")[idx]
                 ref_count = entry[13].split(";")[idx]
                 alt_count = len(reads.split(","))
+                ins_te_prop = entry[15].split(";")[idx]
                 out_line = "\t".join(
                     [
                         chr,
@@ -130,6 +132,7 @@ def merge_vcf(vcf_in, vcf_out, window=20):
                         gt,
                         str(ref_count),
                         str(alt_count),
+                        str(ins_te_prop)
                     ]
                 )
             else:
@@ -236,6 +239,14 @@ def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eva
     ins_seqs = os.path.join(out, sample_name + ".vcf_ins.fasta")
     write_ins_seqs(ins, ins_seqs)
 
+    # get the length of the insertion sequence TODO: this can be generalized
+    contig_len = dict()
+    if os.path.isfile(ins_seqs):
+        with open(ins_seqs, "r") as handle:
+            records = SeqIO.parse(handle, "fasta")
+            for record in records:
+                contig_len[record.id] = len(record.seq)
+
     # run RM on the inserted seqeunce
     repeatmasker_dir = os.path.join(out, "vcf_ins_repeatmask")
     mkdir(repeatmasker_dir)
@@ -268,13 +279,25 @@ def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eva
         print("Repeatmasking VCF insertion sequences failed, exiting...")
         sys.exit(1)
 
+    # merge RM gff
+    ins_rm_merge = os.path.join(
+        repeatmasker_dir, os.path.basename(ins_seqs) + ".out.merge.bed"
+    )
+    with open(ins_rm_merge, "w") as output:
+        subprocess.call(["bedtools", "merge", "-i", ins_repeatmasked], stdout=output)
+
     # extract VCF sequences that contain TEs
-    with open(ins_repeatmasked, "r") as input:
-        ins_te_loci = {
-            line.replace("\n", "").split("\t")[0]
-            for line in input
-            if "RepeatMasker" in line
-        }
+    ins_te_loci = dict()
+    with open(ins_rm_merge, "r") as input:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            contig_name = entry[0]
+            length = int(entry[2]) - int(entry[1])
+            ins_te_prop = round(length / contig_len[contig_name], 2)
+            if contig_name in ins_te_loci:
+                ins_te_loci[contig_name] = ins_te_loci[contig_name] + ins_te_prop
+            else:
+                ins_te_loci[contig_name] = ins_te_prop
 
     with open(ins, "r") as input, open(ins_filtered, "w") as output:
         for line in input:
@@ -282,8 +305,9 @@ def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eva
             contig_name = "_".join([entry[0], entry[1], entry[2]])
             # TODO: maybe add filter for insertion sequences covered by TE?
             if contig_name in ins_te_loci:
-                output.write(line)
-    os.remove(ins_seqs)
+                out_line = line.replace("\n", "") + "\t" + str(ins_te_loci[contig_name])
+                output.write(out_line + "\n")
+    # os.remove(ins_seqs)
 
     # report removed loci
     with open(loci_eval, "a") as output:
