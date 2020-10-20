@@ -4,9 +4,10 @@ from Bio import SeqIO
 import json
 import re
 import logging
+import time
 import pysam
 import statistics
-from TELR_utility import mkdir, create_loci_set
+from TELR_utility import mkdir, create_loci_set, format_time
 from TELR_liftover import annotation_liftover
 from TELR_output import generate_output
 from TELR_assembly import prep_assembly
@@ -348,7 +349,8 @@ def get_af(
     presets,
     thread,
 ):
-    logging.info("Estimating allele frequency")
+    logging.info("Estimating allele frequency...")
+    start_time = time.time()
     if presets == "ont":
         presets = "map-ont"
     else:
@@ -407,7 +409,7 @@ def get_af(
                 # get TE coverage
                 te_cov = get_median_cov(bam, contig_name, start, end)
                 # get flanking coverage
-                flank_len = 1000
+                flank_len = 100
                 offset = 200
                 left_flank_present = True
                 right_flank_present = True
@@ -455,12 +457,14 @@ def get_af(
         for line in input:
             entry = line.replace("\n", "").split("\t")
             contig_name = "_".join([entry[0], entry[1], entry[2]])
-            te_cov = float(entry[13])
-            flank_cov = float(entry[16])
+            te_cov = float(entry[14])
+            flank_cov = float(entry[17])
             freq = round(te_cov / flank_cov, 2)
             if freq > 1:
                 freq = 1
             te_freq[contig_name] = freq
+    proc_time = time.time() - start_time
+    logging.info("Allele frequency estimation finished in " + format_time(proc_time))
     return te_freq
 
 def get_median_cov(bam, chr, start, end):
