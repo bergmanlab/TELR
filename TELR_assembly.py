@@ -85,7 +85,7 @@ def prep_assembly(
                 for read in read_list:
                     output.write(read + "\n")
     else:
-        window = 50
+        window = 1000
         samfile = pysam.AlignmentFile(bam, "rb")
         read_ids = os.path.join(out, sample_name + ".id")
         vcf_parsed_new = vcf_parsed + ".new"
@@ -109,24 +109,6 @@ def prep_assembly(
                     reads.add(read.query_name)
                 for read in reads:
                     output.write(read + "\n")
-                # # get breakpoint coverage
-                # coverage = 0
-                # for pileupcolumn in samfile.pileup(
-                #     ins_chr, ins_breakpoint - 20, ins_breakpoint + 20, truncate=True
-                # ):
-                #     if pileupcolumn.n > coverage:
-                #         coverage = pileupcolumn.n
-
-                # # compare sniffles reads
-                # num_sniffles_unique = len(reads_sniffles.difference(reads))
-                # out_line = (
-                #     line.replace("\n", "")
-                #     + "\t"
-                #     + str(len(reads))
-                #     + "\t"
-                #     + str(num_sniffles_unique)
-                # )
-                # VCF.write(out_line + "\n")
 
                 # write
                 out_line = line.replace("\n", "") + "\t" + str(len(reads))
@@ -160,7 +142,7 @@ def prep_assembly(
             if read_type == "sv":
                 k = k + 2 * (len(entry[8].split(",")))
             else:
-                k = k + 2 * int(entry[13])
+                k = k + 2 * int(entry[14])
             m.append(k)
     if len(m) == 1:
         subprocess.call(["cp", subset_fa_reorder, reads_dir + "/contig0"])
