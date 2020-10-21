@@ -73,7 +73,6 @@ def main():
         args.thread,
         loci_eval,
     )
-    
 
     # Local assembly
     contig_dir = os.path.join(tmp_dir, "contig_assembly")
