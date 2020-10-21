@@ -4,6 +4,7 @@ import subprocess
 import pandas as pd
 import logging
 import time
+from Bio import SeqIO
 from TELR_utility import mkdir, format_time, create_loci_set
 
 
@@ -62,31 +63,134 @@ def detect_sv(
 
 
 def vcf_parse_filter(
-    vcf, vcf_parsed, bam, te_library, out, sample_name, thread, loci_eval
+    vcf_in, vcf_out, bam, te_library, out, sample_name, thread, loci_eval
 ):
     """Parse and filter for insertions from VCF file"""
     logging.info("Parse structural variant VCF...")
 
-    vcf_parsed_tmp = vcf + ".parsed.tmp.tsv"
-    parse_vcf(vcf, vcf_parsed_tmp, bam)
+    vcf_parsed = vcf_in + ".parsed.tmp.tsv"
+    parse_vcf(vcf_in, vcf_parsed, bam)
+
+    vcf_filtered = vcf_in + ".filtered.tmp.tsv"
     filter_vcf(
-        vcf_parsed_tmp, vcf_parsed, te_library, out, sample_name, thread, loci_eval
+        vcf_parsed, vcf_filtered, te_library, out, sample_name, thread, loci_eval
     )
-    os.remove(vcf_parsed_tmp)
+
+    # merge entries
+    vcf_merged = vcf_in + ".merged.tmp.tsv"
+    merge_vcf(vcf_filtered, vcf_merged)
+
+    os.rename(vcf_merged, vcf_out)
+    # os.remove(vcf_parsed_tmp)
 
 
-def parse_vcf(vcf, vcf_parsed, bam):
-    vcf_parsed_tmp = vcf_parsed + ".tmp"
+def merge_vcf(vcf_in, vcf_out, window=20):
+    vcf_tmp = vcf_in + ".tmp"
+    with open(vcf_tmp, "w") as output:
+        command = (
+            'bedtools merge -o collapse -c 2,3,4,5,6,7,8,9,10,11,12,13,14 -delim ";"'
+            + " -d "
+            + str(window)
+            + " -i "
+            + vcf_in
+        )
+        subprocess.call(command, shell=True, stdout=output)
+
+    with open(vcf_tmp, "r") as input, open(vcf_out, "w") as output:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            if ";" in entry[3]:
+                chr = entry[0]
+                start = average(entry[3])
+                end = average(entry[4])
+                len_list = entry[5].split(";")
+                idx = len_list.index(max(len_list))
+                length = len_list[idx]
+                coverage = sum(string2int(entry[6].split(";"), integer=False))
+                af = af_sum(string2int(entry[7].split(";"), integer=False))
+                sv_id = entry[8].split(";")[idx]
+                ins_seq = entry[9].split(";")[idx]
+                ids = entry[10].replace(";", ",").split(",")
+                reads = ",".join(get_unique_list(ids))
+                sv_filter = entry[11].split(";")[idx]
+                gt = entry[12].split(";")[idx]
+                ref_count = entry[13].split(";")[idx]
+                alt_count = len(reads.split(","))
+                ins_te_prop = entry[15].split(";")[idx]
+                out_line = "\t".join(
+                    [
+                        chr,
+                        str(start),
+                        str(end),
+                        str(length),
+                        str(coverage),
+                        str(af),
+                        sv_id,
+                        ins_seq,
+                        reads,
+                        sv_filter,
+                        gt,
+                        str(ref_count),
+                        str(alt_count),
+                        str(ins_te_prop)
+                    ]
+                )
+            else:
+                entry = [entry[0]] + entry[3:]
+                out_line = "\t".join(entry)
+            output.write(out_line + "\n")
+
+    os.remove(vcf_tmp)
+
+
+def string2int(lst, integer=True):
+    if integer:
+        for i in range(0, len(lst)):
+            lst[i] = int(lst[i])
+    else:
+        for i in range(0, len(lst)):
+            lst[i] = float(lst[i])
+    return lst
+
+
+def average(lst):
+    num_list = lst.split(";")
+    num_list = string2int(num_list)
+    return round(sum(num_list) / len(num_list))
+
+
+def parse_vcf(vcf_in, vcf_out, bam):
+    vcf_tmp = vcf_in + ".tmp"
     query_str = '"%CHROM\\t%POS\\t%END\\t%SVLEN\\t%RE\\t%AF\\t%ID\\t%ALT\\t%RNAMES\\t%FILTER\\t[ %GT]\\t[ %DR]\\t[ %DV]\n"'
     command = (
-        'bcftools query -i \'SVTYPE="INS" & ALT!="<INS>"\' -f ' + query_str + " " + vcf
+        'bcftools query -i \'SVTYPE="INS" & ALT!="<INS>"\' -f '
+        + query_str
+        + " "
+        + vcf_in
     )
-    with open(vcf_parsed_tmp, "w") as output:
+    with open(vcf_tmp, "w") as output:
         subprocess.call(command, stdout=output, shell=True)
+
+    # check start and end, swap if needed
+    vcf_swap = vcf_in + ".swap"
+    swap_coordinate(vcf_tmp, vcf_swap)
+
+    # sort bed file
+
     # TODO check whether vcf file contains insertions, quit if 0
-    rm_vcf_redundancy(vcf_parsed_tmp, vcf_parsed)  # remove redundancy in parsed vcf
-    os.remove(vcf_parsed_tmp)
-    return vcf_parsed
+    rm_vcf_redundancy(vcf_swap, vcf_out)  # remove redundancy in parsed vcf
+    os.remove(vcf_swap)
+    os.remove(vcf_tmp)
+
+
+def swap_coordinate(vcf_in, vcf_out):
+    with open(vcf_in, "r") as input, open(vcf_out, "w") as output:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            if int(entry[2]) < int(entry[1]):
+                entry[1], entry[2] = entry[2], entry[1]
+            out_line = "\t".join(entry)
+            output.write(out_line + "\n")
 
 
 def rm_vcf_redundancy(vcf_in, vcf_out):
@@ -135,6 +239,14 @@ def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eva
     ins_seqs = os.path.join(out, sample_name + ".vcf_ins.fasta")
     write_ins_seqs(ins, ins_seqs)
 
+    # get the length of the insertion sequence TODO: this can be generalized
+    contig_len = dict()
+    if os.path.isfile(ins_seqs):
+        with open(ins_seqs, "r") as handle:
+            records = SeqIO.parse(handle, "fasta")
+            for record in records:
+                contig_len[record.id] = len(record.seq)
+
     # run RM on the inserted seqeunce
     repeatmasker_dir = os.path.join(out, "vcf_ins_repeatmask")
     mkdir(repeatmasker_dir)
@@ -167,13 +279,25 @@ def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eva
         print("Repeatmasking VCF insertion sequences failed, exiting...")
         sys.exit(1)
 
+    # merge RM gff
+    ins_rm_merge = os.path.join(
+        repeatmasker_dir, os.path.basename(ins_seqs) + ".out.merge.bed"
+    )
+    with open(ins_rm_merge, "w") as output:
+        subprocess.call(["bedtools", "merge", "-i", ins_repeatmasked], stdout=output)
+
     # extract VCF sequences that contain TEs
-    with open(ins_repeatmasked, "r") as input:
-        ins_te_loci = {
-            line.replace("\n", "").split("\t")[0]
-            for line in input
-            if "RepeatMasker" in line
-        }
+    ins_te_loci = dict()
+    with open(ins_rm_merge, "r") as input:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            contig_name = entry[0]
+            length = int(entry[2]) - int(entry[1])
+            ins_te_prop = round(length / contig_len[contig_name], 2)
+            if contig_name in ins_te_loci:
+                ins_te_loci[contig_name] = ins_te_loci[contig_name] + ins_te_prop
+            else:
+                ins_te_loci[contig_name] = ins_te_prop
 
     with open(ins, "r") as input, open(ins_filtered, "w") as output:
         for line in input:
@@ -181,16 +305,15 @@ def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eva
             contig_name = "_".join([entry[0], entry[1], entry[2]])
             # TODO: maybe add filter for insertion sequences covered by TE?
             if contig_name in ins_te_loci:
-                output.write(line)
-    os.remove(ins_seqs)
+                out_line = line.replace("\n", "") + "\t" + str(ins_te_loci[contig_name])
+                output.write(out_line + "\n")
+    # os.remove(ins_seqs)
 
     # report removed loci
     with open(loci_eval, "a") as output:
         for locus in create_loci_set(ins):
             if locus not in ins_te_loci:
-                output.write(
-                    "\t".join([locus, "VCF sequence not repeatmasked"]) + "\n"
-                )
+                output.write("\t".join([locus, "VCF sequence not repeatmasked"]) + "\n")
 
 
 def write_ins_seqs(vcf, out):

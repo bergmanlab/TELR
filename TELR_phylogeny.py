@@ -88,13 +88,13 @@ def get_args():
     optional.add_argument(
         "--length_filter",
         type=float,
-        help="percentage of TE sequence longer or shorter than consensus sequence (default: 10%)",
+        help="percentage of TE sequence longer or shorter than consensus sequence (default: 10%%)",
         required=False,
     )
     optional.add_argument(
         "--divergence_filter",
         type=float,
-        help="percentage of TE sequence divergent from consensus sequence (default: 10%)",
+        help="percentage of TE sequence divergent from consensus sequence (default: 10%%)",
         required=False,
     )
     parser._action_groups.append(optional)
