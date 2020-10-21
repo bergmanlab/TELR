@@ -73,7 +73,7 @@ def prep_assembly(
     vcf_parsed, out, sample_name, bam, raw_reads, reads_dir, read_type="sv"
 ):
     """Prepare reads for local assembly"""
-    logging.info("Prepare reads for local assembly")
+    # logging.info("Prepare reads for local assembly")
 
     if read_type == "sv":
         # extract read IDs
