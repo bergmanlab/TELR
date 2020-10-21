@@ -501,7 +501,11 @@ def get_af(
             contig_name = "_".join([entry[0], entry[1], entry[2]])
             te_cov = float(entry[14])
             flank_cov = float(entry[17])
-            freq = round(te_cov / flank_cov, 2)
+            if flank_cov == 0:
+                freq = 1
+                print(contig_name + " zero flank coverage for")
+            else:
+                freq = round(te_cov / flank_cov, 2)
             if freq > 1:
                 freq = 1
             te_freq[contig_name] = freq
