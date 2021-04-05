@@ -372,6 +372,7 @@ def annotation_liftover(
             chromosome = entry[0]
             if "," in entry[3]:
                 len_list = entry[11].split(",")
+                len_list = [int(i) for i in len_list]
                 idx = len_list.index(max(len_list))
                 start = entry[3].split(",")[idx]
                 end = entry[4].split(",")[idx]

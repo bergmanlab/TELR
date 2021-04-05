@@ -48,14 +48,15 @@ def alignment(bam, read, reference, out, sample_name, thread, presets):
         print(e)
         print("Read alignment (ngmlr) failed, check input reads, exiting...")
         sys.exit(1)
-    proc_time = time.time() - start_time
-    logging.info("Alignment finished in " + format_time(proc_time))
 
     sort_index_bam(bam_tmp, bam, thread)
     if os.path.isfile(bam) is False:
         sys.stderr.write("Sorted and indexed BAM file does not exist, exiting...\n")
         sys.exit(1)
     os.remove(bam_tmp)
+
+    proc_time = time.time() - start_time
+    logging.info("First alignment finished in " + format_time(proc_time))
 
 
 def sort_index_bam(bam, sorted_bam, thread):
