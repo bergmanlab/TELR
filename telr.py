@@ -9,7 +9,7 @@ from TELR_input import get_args, parse_input
 from TELR_alignment import alignment, sort_index_bam
 from TELR_sv import detect_sv, vcf_parse_filter
 from TELR_assembly import local_assembly
-from TELR_te import annotate_contig, find_te, generate_output, get_af
+from TELR_te import merge_contig, annotate_contig, find_te, generate_output, get_af
 from TELR_utility import format_time, mkdir
 
 """
@@ -60,10 +60,15 @@ def main():
     # Detect and parse SV
     vcf = os.path.join(tmp_dir, sample_name + ".vcf")
     detect_sv(vcf, bam, reference, args.library, tmp_dir, sample_name, args.thread)
+    if args.sniffles_only:
+        proc_time = time.time() - start_time
+        logging.info("TELR finished in " + format_time(proc_time))
+        sys.exit(1)
 
     # Parse SV and filter for TE candidate locus
     vcf_parsed = os.path.join(tmp_dir, sample_name + ".vcf_filtered.tsv")
     vcf_parse_filter(
+        args.assemble_all_ins,
         vcf,
         vcf_parsed,
         bam,
@@ -88,6 +93,15 @@ def main():
         args.polish,
     )
 
+    # merge contigs
+    merge_contigs, assembly_passed_loci = merge_contig(
+        contig_dir, vcf_parsed, tmp_dir, sample_name, loci_eval
+    )
+    if args.assembly_only or args.assemble_all_ins:
+        proc_time = time.time() - start_time
+        logging.info("TELR finished in " + format_time(proc_time))
+        sys.exit(1)
+
     # Annotate contig for TE region
     (
         contig_te_annotation,
@@ -96,7 +110,8 @@ def main():
         te_fa,
         merge_contigs,
     ) = annotate_contig(
-        contig_dir,
+        merge_contigs,
+        assembly_passed_loci,
         args.library,
         vcf_parsed,
         tmp_dir,

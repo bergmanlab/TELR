@@ -83,8 +83,26 @@ def get_args():
     optional.add_argument(
         "-k",
         "--keep_files",
-        action='store_true',
+        action="store_true",
         help="If provided then all intermediate files will be kept (default: remove intermediate files)",
+        required=False,
+    )
+    optional.add_argument(
+        "--sniffles_only",
+        action="store_true",
+        help="If provided then TELR would stop after SV detection step (default: run complete TELR)",
+        required=False,
+    )
+    optional.add_argument(
+        "--assembly_only",
+        action="store_true",
+        help="If provided then TELR would stop after local assembly step (default: run complete TELR)",
+        required=False,
+    )
+    optional.add_argument(
+        "--assemble_all_ins",
+        action="store_true",
+        help="If provided then TELR would assemble all insertion loci (default: run complete TELR)",
         required=False,
     )
     parser._action_groups.append(optional)

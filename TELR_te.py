@@ -15,15 +15,7 @@ from TELR_output import generate_output
 from TELR_assembly import prep_assembly
 
 
-def annotate_contig(
-    contig_dir, te_library, vcf_parsed, out, sample_name, thread, presets, loci_eval
-):
-    logging.info("Annotate contigs...")
-    if presets == "ont":
-        presets = "map-ont"
-    else:
-        presets = "map-pb"
-
+def merge_contig(contig_dir, vcf_parsed, out, sample_name, loci_eval):
     all_loci = create_loci_set(vcf_parsed)
     assembly_passed_loci = set()
     merge_contigs = os.path.join(out, sample_name + ".contigs.fa")
@@ -42,12 +34,30 @@ def annotate_contig(
                             SeqIO.write(record, MERGE, "fasta")
                             with open(new_assembly, "w") as CTG1:
                                 SeqIO.write(record, CTG1, "fasta")
-
     # report assembly failed loci
     with open(loci_eval, "a") as output:
         for locus in all_loci:
             if locus not in assembly_passed_loci:
                 output.write("\t".join([locus, "Contig assembly failed"]) + "\n")
+    return merge_contigs, assembly_passed_loci
+
+
+def annotate_contig(
+    merge_contigs,
+    assembly_passed_loci,
+    te_library,
+    vcf_parsed,
+    out,
+    sample_name,
+    thread,
+    presets,
+    loci_eval,
+):
+    logging.info("Annotate contigs...")
+    if presets == "ont":
+        presets = "map-ont"
+    else:
+        presets = "map-pb"
 
     # map sequence to contigs
     seq2contig_out = os.path.join(out, "seq2contig.paf")
