@@ -295,6 +295,9 @@ def annotation_liftover(
     df["te_strand"] = df["ins_name"].map(strand_dict)
     df["te_len"] = df["ins_name"].map(te_len_dict)
     # group and summarize by contig
+    if df.shape[0] == 0:
+        report_full = []
+        return report_full
     new_df = df.groupby("ins_name").apply(get_coordinate).reset_index()
     # remove if two flank have gap/overlap bigger than threshold
     new_df = new_df[
@@ -302,6 +305,9 @@ def annotation_liftover(
         | ((new_df["score"] <= 0) & (new_df["end"] - new_df["start"] <= overlap))
         | (new_df["score"] == 0.5)
     ]
+    if new_df.shape[0] == 0:
+        report_full = []
+        return report_full
     contig_gap_filter_set = new_df["ins_name"].replace(":.*", "", regex=True).unique()
     report_bad_loci(
         contig_no_rm_filter_set,
