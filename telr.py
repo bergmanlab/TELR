@@ -135,7 +135,12 @@ def main():
     )
 
     # generate output files
-    generate_output(report_meta, te_fa, vcf_parsed, args.out, sample_name, reference)
+    if report_meta:
+        generate_output(report_meta, te_fa, vcf_parsed, args.out, sample_name, reference)
+    else:
+        print("No non-reference TE insertion found")
+        logging.info("TELR found no non-reference TE insertions")
+
 
     # clean tmp files
     if not args.keep_files:
