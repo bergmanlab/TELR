@@ -39,8 +39,8 @@ def main():
 
     # Parse input
     sample_name = os.path.splitext(os.path.basename(args.reads))[0]
-    reads, reference, fasta, skip_alignment = parse_input(
-        args.reads, args.reference, sample_name, tmp_dir
+    reads, reference, library, fasta, skip_alignment = parse_input(
+        args.reads, args.reference, args.library, sample_name, tmp_dir
     )
 
     # # Alignment
@@ -59,7 +59,7 @@ def main():
 
     # Detect and parse SV
     vcf = os.path.join(tmp_dir, sample_name + ".vcf")
-    detect_sv(vcf, bam, reference, args.library, tmp_dir, sample_name, args.thread)
+    detect_sv(vcf, bam, reference, library, tmp_dir, sample_name, args.thread)
 
     # Parse SV and filter for TE candidate locus
     vcf_parsed = os.path.join(tmp_dir, sample_name + ".vcf_filtered.tsv")
@@ -67,7 +67,7 @@ def main():
         vcf,
         vcf_parsed,
         bam,
-        args.library,
+        library,
         tmp_dir,
         sample_name,
         args.thread,
@@ -97,7 +97,7 @@ def main():
         merge_contigs,
     ) = annotate_contig(
         contig_dir,
-        args.library,
+        library,
         vcf_parsed,
         tmp_dir,
         sample_name,

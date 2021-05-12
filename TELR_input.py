@@ -136,7 +136,7 @@ def get_args():
     return args
 
 
-def parse_input(input_reads, input_reference, sample_name, out_dir):
+def parse_input(input_reads, input_reference, input_library, sample_name, out_dir):
     """
     Parse input files. If bam file is provided, convert to fasta format.
     """
@@ -164,6 +164,17 @@ def parse_input(input_reads, input_reference, sample_name, out_dir):
     except Exception:
         logging.exception("Create symbolic link for " + input_reference + " failed")
         sys.exit(1)
+    
+    input_library_copy = os.path.join(out_dir, os.path.basename(input_library))
+    if not os.path.isabs(input_library):
+        input_library = os.path.abspath(input_library)
+    if os.path.islink(input_library_copy):
+        os.remove(input_library_copy)
+    try:
+        os.symlink(input_library, input_library_copy)
+    except Exception:
+        logging.exception("Create symbolic link for " + input_library + " failed")
+        sys.exit(1)
 
     reads_filename, reads_extension = os.path.splitext(input_reads_copy)
     if reads_extension == ".bam":
@@ -186,7 +197,7 @@ def parse_input(input_reads, input_reference, sample_name, out_dir):
         logging.error("Input format not recognized")
         sys.exit(1)
 
-    return input_reads_copy, input_reference_copy, fasta, skip_alignment
+    return input_reads_copy, input_reference_copy, input_library_copy, fasta, skip_alignment
 
 
 def bam2fasta(bam, fasta):
