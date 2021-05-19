@@ -227,7 +227,11 @@ def annotate_contig(
     os.remove(te2contig_filter_tmp_sort_bed)
 
     # extract sequence and RM
-    te_fa = out + "/" + sample_name + ".te.fa"
+    if "+" in sample_name:
+        sample_name_replace = sample_name.replace("+", "plus")
+    else:
+        sample_name_replace = sample_name
+    te_fa = out + "/" + sample_name_replace + ".te.fa"
     with open(te_fa, "w") as output:
         subprocess.call(
             [

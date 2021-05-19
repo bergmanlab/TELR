@@ -132,7 +132,7 @@ def merge_vcf(vcf_in, vcf_out, window=20):
                         gt,
                         str(ref_count),
                         str(alt_count),
-                        str(ins_te_prop)
+                        str(ins_te_prop),
                     ]
                 )
             else:
@@ -236,7 +236,11 @@ def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eva
     Filter insertion sequences from Sniffles VCF by repeatmasking with TE concensus
     """
     # constrct fasta from parsed vcf file
-    ins_seqs = os.path.join(out, sample_name + ".vcf_ins.fasta")
+    if "+" in sample_name:
+        sample_name_replace = sample_name.replace("+", "plus")
+    else:
+        sample_name_replace = sample_name
+    ins_seqs = os.path.join(out, sample_name_replace + ".vcf_ins.fasta")
     write_ins_seqs(ins, ins_seqs)
 
     # get the length of the insertion sequence TODO: this can be generalized
