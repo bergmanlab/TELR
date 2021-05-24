@@ -89,7 +89,7 @@ def main():
     te_report, te_report_meta = annotation_liftover(
         args.fasta1,
         args.fasta2,
-        ins_bed,
+        args.bed,
         sample_name,
         args.out,
         args.preset,
