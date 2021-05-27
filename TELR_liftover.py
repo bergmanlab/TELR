@@ -7,7 +7,8 @@ import pandas as pd
 import subprocess
 import numpy as np
 import re
-from TELR_utility import report_bad_loci
+
+# from TELR_utility import report_bad_loci
 
 
 def get_args():
@@ -80,22 +81,34 @@ def get_args():
     return args
 
 
+def report_bad_loci(set_raw, set_filtered, report, message):
+    with open(report, "a") as output:
+        for locus in set_raw:
+            if locus not in set_filtered:
+                output.write("\t".join([locus, message]) + "\n")
+
+
 def main():
     args = get_args()
 
     sample_name = os.path.splitext(os.path.basename(args.fasta1))[0]
 
+    loci_eval = os.path.join(args.out, sample_name + ".loci_eval.tsv")
+
     # call liftover function
-    te_report, te_report_meta = annotation_liftover(
-        args.fasta1,
-        args.fasta2,
-        args.bed,
-        sample_name,
-        args.out,
-        args.preset,
-        args.overlap,
-        args.gap,
-        args.length,
+    report = annotation_liftover(
+        fasta1=args.fasta1,
+        fasta2=args.fasta2,
+        bed=args.bed,
+        sample_name=sample_name,
+        loci_eval=loci_eval,
+        out_dir=args.out,
+        preset=args.preset,
+        overlap=args.overlap,
+        gap=args.gap,
+        flank_len=args.length,
+        family_rm=None,
+        freq=None,
     )
 
 
@@ -104,6 +117,7 @@ def annotation_liftover(
     fasta2,
     bed,
     sample_name,
+    loci_eval,
     out_dir=".",
     preset="map-pb",
     overlap=25,
@@ -111,7 +125,6 @@ def annotation_liftover(
     flank_len=500,
     family_rm=None,
     freq=None,
-    loci_eval=None,
 ):
     """
     Lift variant annotation from one genome to another.
@@ -154,7 +167,9 @@ def annotation_liftover(
     with open(flank2ref_out, "r") as input:
         for line in input:
             contig_mapped_set.add(line.split(":")[0])
-    report_bad_loci(contig_w_te_set, contig_mapped_set, loci_eval, "No flanks mapped to reference")
+    report_bad_loci(
+        contig_w_te_set, contig_mapped_set, loci_eval, "No flanks mapped to reference"
+    )
 
     # read family, strand and TE length info into dict
     te_len_dict = dict()
