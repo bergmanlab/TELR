@@ -3,7 +3,12 @@ import argparse
 import sys
 import os
 import glob
+import json
+import random
+import string
 import editdistance
+from multiprocessing import Process, Pool
+from TELR_te import create_fa
 
 # import time
 import logging
@@ -86,9 +91,15 @@ def get_args():
         required=False,
     )
     optional.add_argument(
+        "--exclude_contigs",
+        type=str,
+        help="Exclude contigs can be provided, multiple contigs should be separated by comma",
+        required=False,
+    )
+    optional.add_argument(
         "--length_filter",
         type=float,
-        help="percentage of TE sequence longer or shorter than consensus sequence (default: 10%%)",
+        help="percentage of TE sequence longer or shorter than consensus sequence (default: 100%%)",
         required=False,
     )
     optional.add_argument(
@@ -96,6 +107,9 @@ def get_args():
         type=float,
         help="percentage of TE sequence divergent from consensus sequence (default: 10%%)",
         required=False,
+    )
+    parser.add_argument(
+        "-t", "--threads", type=int, help="number of cores", required=False
     )
     parser._action_groups.append(optional)
     args = parser.parse_args()
@@ -141,9 +155,13 @@ def get_te_seq(te_seqs, family, consensus, add_consensus, out):
         if add_consensus:
             record = consensus[family]
             output.write(">" + record.id + "\n" + str(record.seq) + "\n")
-        for record in te_seqs:
-            if record.id.split("_")[3] == family:
-                output.write(">" + record.id + "\n" + str(record.seq) + "\n")
+        for item in te_seqs:
+            item_family = item["family"]
+            item_quality = item["quality"]
+            if item_family == family and item_quality == "pass":
+                item_id = item["ID"]
+                item_seq = item["sequence"]
+                output.write(">" + item_id + "\n" + item_seq + "\n")
 
 
 def run_raxml(alignment, tmp_dir, out_dir, prefix, bootstrap, thread):
@@ -199,16 +217,19 @@ def build_tree(alignment, family, out_dir, tmp_dir, method, bootstrap, thread):
         run_iqtree(alignment=alignment, prefix=family, tmp_dir=tmp_dir, out_dir=out_dir)
 
 
-def phylogeny_from_telr(
+def get_telr_seqs_phylogeny(
     family,
     consensus,
-    te_seqs,
+    data_json,
     out_dir,
     method,
     bootstrap,
     thread,
     add_consensus=False,
 ):
+    # read parsed data
+    with open(data_json) as f:
+        data = json.load(f)
     # create dir for intermediate files
     tree_tmp_dir = os.path.join(out_dir, "tree_tmp_files", family)
     if os.path.isdir(tree_tmp_dir):
@@ -216,8 +237,8 @@ def phylogeny_from_telr(
     os.makedirs(tree_tmp_dir)
 
     # build consensus sequence from TELR TE output
-    seqs = os.path.join(tree_tmp_dir, family + ".telr.fa")
-    get_te_seq(te_seqs, family, consensus, add_consensus, seqs)
+    telr_seqs = os.path.join(tree_tmp_dir, family + ".telr.fa")
+    get_te_seq(data, family, consensus, add_consensus, telr_seqs)
 
     # align TE sequences
     align_fa = os.path.join(tree_tmp_dir, family + ".align.fa")
@@ -227,7 +248,7 @@ def phylogeny_from_telr(
         else:
             mafft_thread = thread
         subprocess.call(
-            ["mafft", "--quiet", "--auto", "--thread", str(mafft_thread), seqs],
+            ["mafft", "--quiet", "--auto", "--thread", str(mafft_thread), telr_seqs],
             stdout=output,
         )
 
@@ -242,9 +263,59 @@ def phylogeny_from_telr(
         bootstrap=bootstrap,
     )
 
+def id_generator(size=6, chars=string.ascii_uppercase + string.digits):
+    return ''.join(random.choice(chars) for _ in range(size))
 
 def per_base_len_dist(consensus_len, seq_len):
-    return abs(seq_len - consensus_len) / consensus_len
+    return (seq_len - consensus_len) / consensus_len
+
+def diff_telr_consensus(consensus_seq, telr_seq):
+    # create fasta file
+    consensus_id = id_generator(3, string.ascii_uppercase)
+    os.path.join(out_dir, consensus_id + '.fa')
+    create_fa(consensus_id, consensus_seq, out_dir)
+    consensus_length = len(consensus_seq)
+    telr_len = len(telr_seq)
+    len_diff = per_base_len_dist(consensus_length, telr_len)
+    div_diff = editdistance.eval(consensus_seq, telr_seq) / consensus_length
+    return len_diff, div_diff
+
+
+def parse_telr_out(args):
+    json_in = args[0]
+    json_out = args[1]
+    consensus = args[2]
+    len_filter = args[3]
+    div_filter = args[4]
+    exclude_contigs = args[5]
+    contigs_fail = set()
+    if exclude_contigs:
+        contigs = exclude_contigs.split(",")
+        for contig in contigs:
+            contigs_fail.add(contig)
+    with open(json_in) as f:
+        item = json.load(f)
+    sample = item["sample"]
+    family = item["family"]
+    telr_seq = item["sequence"]
+    len_diff, div_diff = diff_telr_consensus(consensus, telr_seq)
+    contig = item["chr"]
+    start = item["start"]
+    new_te_id = "_".join([sample, contig, str(start), family])
+    item["ID"] = new_te_id
+    item["length_diff"] = len_diff
+    item["edit_dist"] = div_diff
+    if (
+        abs(len_diff) <= len_filter
+        and div_diff <= div_filter
+        and contig not in contigs_fail
+    ):
+        item["quality"] = "pass"
+    else:
+        item["quality"] = "fail"
+    with open(json_out, "w") as c:
+        json.dump(item, c, indent=4)
+    os.remove(json_in)
 
 
 def main():
@@ -253,62 +324,90 @@ def main():
     # TODO process consensus sequence, remove stuff after #
     consensus_dict = SeqIO.index(args.consensus, "fasta")
 
-    # TODO add all family option
-
-    meta_out = os.path.join(args.out, "meta.txt")
-
     families = args.family.replace(" ", "").replace("_", "-").split(",")
     # parse TELR output directories and load consensus
-    all_te_seqs = []
-    with open(meta_out, "w") as output:
-        for telr_out_dir in args.telr_dirs:
-            if telr_out_dir[-1] == "/":
-                telr_out_dir = telr_out_dir[:-1]
-            for telr_out_fa in glob.glob(telr_out_dir + "/**/*telr.fa", recursive=True):
-                sample = (
-                    os.path.basename(telr_out_fa)
-                    .replace(".telr.fa", "")
-                    .replace("_", "-")
-                )
-                # the following section can be parallized
-                for record in SeqIO.parse(telr_out_fa, "fasta"):
-                    family = record.id.split("#")[1].replace("_", "-")
-                    if family in families:
-                        consensus_seq = str(consensus_dict[family].seq)
-                        consensus_length = len(consensus_seq)
-                        sample_seq = str(record.seq)
-                        seq_len = len(sample_seq)
-                        len_diff = per_base_len_dist(consensus_length, seq_len)
-                        div_diff = (
-                            editdistance.eval(consensus_seq, sample_seq)
-                            / consensus_length
-                        )
-                        contig = record.id.split("_")[0].replace("_", "-")
-                        start = record.id.split("_")[1]
-                        meta_out_line = "\t".join(
-                            [
-                                sample,
-                                contig,
-                                start,
-                                family,
-                                str(len_diff),
-                                str(div_diff),
-                            ]
-                        )
-                        output.write(meta_out_line + "\n")
-                        if div_diff < args.divergence_filter:
-                            record.id = "_".join([sample, contig, start, family])
-                            all_te_seqs.append(record)
+    json_dir = os.path.join(args.out, "json_files")
+    mkdir(json_dir)
+    print("parse TELR output")
+    meta_data = []
+    for telr_out_dir in args.telr_dirs:
+        if telr_out_dir[-1] == "/":
+            telr_out_dir = telr_out_dir[:-1]
+        telr_json_files = glob.glob(telr_out_dir + "/**/*telr.json", recursive=True)
+    for telr_json in telr_json_files:
+        sample = os.path.basename(telr_json).replace(".telr.json", "").replace("_", "-")
+        with open(telr_json) as f:
+            json_data = json.load(f)
+        for item in json_data:
+            family = item["family"]
+            if family in families:
+                item["sample"] = sample
+                prefix = "_".join([sample, item["ID"], family])
+                item_json_in = os.path.join(json_dir, prefix + ".in.json")
+                with open(item_json_in, "w") as c:
+                    json.dump(item, c, indent=4)
+                item_json_out = os.path.join(json_dir, prefix + ".out.json")
+                consensus_seq = str(consensus_dict[family].seq)
+                item_out = {
+                    "json_in": item_json_in,
+                    "json_out": item_json_out,
+                    "consensus": consensus_seq,
+                    "len_filter": args.length_filter,
+                    "div_filter": args.divergence_filter,
+                    "exclude_contigs": args.exclude_contigs,
+                }
+                meta_data.append(item_out)
+
+    # run parsing
+    # read table
+    pa_list = []
+    for meta_item in meta_data:
+        pa_list.append(
+            [
+                meta_item["json_in"],
+                meta_item["json_out"],
+                meta_item["consensus"],
+                meta_item["len_filter"],
+                meta_item["div_filter"],
+                meta_item["exclude_contigs"],
+            ]
+        )
+
+    # download in parallel
+    print("TELR parsing...")
+    try:
+        pool = Pool(processes=args.threads)
+        pool.map(parse_telr_out, pa_list)
+        pool.close()
+        pool.join()
+    except Exception as e:
+        print(e)
+        print("TELR parsing failed, exiting...")
+        sys.exit(1)
+
+    # merge parsed TELR output
+    parsed_data = []
+    for meta_item in meta_data:
+        json_out = meta_item["json_out"]
+        with open(json_out) as f:
+            parsed_data_item = json.load(f)
+        parsed_data.append(parsed_data_item)
+        os.remove(json_out)
+
+    # write seq quality report
+    parsed_data_out = args.out + "/data_parsed.json"
+    with open(parsed_data_out, "w") as c:
+        json.dump(parsed_data, c, indent=4)
 
     for family in families:
-        phylogeny_from_telr(
-            te_seqs=all_te_seqs,
+        get_telr_seqs_phylogeny(
+            data_json=parsed_data_out,
             family=family,
             consensus=consensus_dict,
             out_dir=args.out,
             method=args.method,
             bootstrap=args.bootstrap,
-            thread=args.thread,
+            thread=args.threads,
             add_consensus=args.add_consensus,
         )
 

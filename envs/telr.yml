@@ -13,11 +13,12 @@ dependencies:
   - boost-cpp=1.67.0=h3a22d5f_0
   - bzip2=1.0.8=h516909a_3
   - c-ares=1.11.0=h470a237_1
-  - ca-certificates=2020.6.20=hecda079_0
-  - certifi=2020.6.20=py36h9f0ad1d_0
+  - ca-certificates=2021.5.30=ha878542_0
+  - certifi=2021.5.30=py36h5fab9bb_0
   - curl=7.71.1=he644dc0_5
   - cycler=0.10.0=py_2
   - decorator=4.4.2=py_0
+  - editdistance=0.5.3=py36hc4f0c31_3
   - freetype=2.10.2=he06d7ca_0
   - gmp=6.1.2=hf484d3e_1000
   - gnutls=3.5.19=h2a4e5f8_1
@@ -53,14 +54,14 @@ dependencies:
   - lz4-c=1.9.2=he1b5a44_3
   - mafft=7.471=h516909a_0
   - matplotlib-base=3.3.1=py36h5ffbc53_1
-  - minimap2=2.17=hed695b0_3
+  - minimap2=2.20=h5bf99c6_0
   - ncurses=6.1=hf484d3e_1002
   - nettle=3.3=0
   - networkx=2.5=py_0
   - ngmlr=0.2.7=he513fc3_2
   - numpy=1.19.1=py36h3849536_2
   - olefile=0.46=py_0
-  - openssl=1.1.1g=h516909a_1
+  - openssl=1.1.1k=h7f98852_0
   - pandas=1.0.0=py36hb3f55d8_0
   - pcre=8.44=he1b5a44_0
   - perl=5.26.2=h516909a_1006
@@ -108,3 +109,4 @@ dependencies:
   - xz=5.2.5=h516909a_1
   - zlib=1.2.11=h516909a_1009
   - zstd=1.4.5=h6597ccf_2
+prefix: /home/sh60271/miniconda/envs/TELR_env
