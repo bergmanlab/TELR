@@ -12,7 +12,6 @@ def detect_sv(
     vcf,
     bam,
     reference,
-    te_library,
     out,
     sample_name,
     thread,

@@ -2,16 +2,13 @@ import os
 import sys
 import subprocess
 from Bio import SeqIO
-import json
 import re
 import logging
 import time
-import pysam
 import statistics
-from multiprocessing import Process, Pool
+from multiprocessing import Pool
 from TELR_utility import mkdir, create_loci_set, format_time
 from TELR_liftover import annotation_liftover
-from TELR_output import generate_output
 from TELR_assembly import prep_assembly
 
 
@@ -535,7 +532,6 @@ def get_median_cov(bam, chr, start, end):
     return median_cov
 
 
-# def find_te(contigs, ref, te_contigs_annotation, family_annotation, te_freq, te_fa, out, sample_name, gap, overlap, presets):
 def find_te(
     contig_te_annotation,
     contig_family_annotation,
@@ -559,7 +555,7 @@ def find_te(
 
     # lift over
     logging.info("Map contigs to reference...")
-    report_meta = annotation_liftover(
+    report_meta, report_out_bed = annotation_liftover(
         fasta1=merge_contigs,
         fasta2=ref,
         bed=contig_te_annotation,
@@ -574,7 +570,7 @@ def find_te(
         loci_eval=loci_eval,
     )
 
-    return report_meta
+    return report_meta, report_out_bed
 
 
 def create_fa(header, seq, out):

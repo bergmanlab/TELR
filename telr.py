@@ -9,11 +9,12 @@ from TELR_input import get_args, parse_input
 from TELR_alignment import alignment, sort_index_bam
 from TELR_sv import detect_sv, vcf_parse_filter
 from TELR_assembly import local_assembly
-from TELR_te import annotate_contig, find_te, generate_output, get_af
+from TELR_te import annotate_contig, find_te, get_af
+from TELR_output import generate_output
 from TELR_utility import format_time, mkdir
 
 """
-Author: Shunhua Han <shhan@uga.edu>
+Author: Shunhua Han <hanshunhua0829@gmail.com>
 Concept: Casey Bergman <cbergman.uga.edu>, Guilherme Dias <guilherme.dias@uga.edu>
 """
 
@@ -59,7 +60,7 @@ def main():
 
     # Detect and parse SV
     vcf = os.path.join(tmp_dir, sample_name + ".vcf")
-    detect_sv(vcf, bam, reference, library, tmp_dir, sample_name, args.thread)
+    detect_sv(vcf, bam, reference, tmp_dir, sample_name, args.thread)
 
     # Parse SV and filter for TE candidate locus
     vcf_parsed = os.path.join(tmp_dir, sample_name + ".vcf_filtered.tsv")
@@ -120,7 +121,7 @@ def main():
     )
 
     # find TEs
-    report_meta = find_te(
+    report_meta, report_out_bed = find_te(
         contig_te_annotation,
         contig_rm_annotation,
         te_freq,
@@ -136,11 +137,18 @@ def main():
 
     # generate output files
     if report_meta:
-        generate_output(report_meta, te_fa, vcf_parsed, args.out, sample_name, reference)
+        generate_output(
+            report_meta,
+            report_out_bed,
+            te_fa,
+            vcf_parsed,
+            args.out,
+            sample_name,
+            reference,
+        )
     else:
         print("No non-reference TE insertion found")
         logging.info("TELR found no non-reference TE insertions")
-
 
     # clean tmp files
     if not args.keep_files:

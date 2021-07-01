@@ -7,7 +7,7 @@ from datetime import date
 import subprocess
 
 
-def generate_output(meta, te_fa, vcf_parsed, out, sample_name, ref):
+def generate_output(meta, bed, te_fa, vcf_parsed, out, sample_name, ref):
     logging.info("Write output...")
     # convert meta to dict
     ins_dict = dict()
@@ -68,9 +68,14 @@ def generate_output(meta, te_fa, vcf_parsed, out, sample_name, ref):
     contig_info = get_contig_info(ref)
     write_vcf(meta, ref, contig_info, vcf_out)
 
+    # write in BED format
+    bed_out = os.path.join(out, sample_name + ".telr.bed")
+    os.rename(bed, bed_out)
+
 
 def write_vcf(input_dict, ref, contig_info, out_vcf):
     df = pd.DataFrame(input_dict)
+    df["start"] = df["start"] + 1
     df["ID"] = df.index
     df["REF"] = "N"
     df["QUAL"] = "."

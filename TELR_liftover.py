@@ -2,10 +2,8 @@
 import sys
 import argparse
 import os
-from Bio import SeqIO
 import pandas as pd
 import subprocess
-import numpy as np
 import re
 
 # from TELR_utility import report_bad_loci
@@ -96,7 +94,7 @@ def main():
     loci_eval = os.path.join(args.out, sample_name + ".loci_eval.tsv")
 
     # call liftover function
-    report = annotation_liftover(
+    report_meta, report_out_bed = annotation_liftover(
         fasta1=args.fasta1,
         fasta2=args.fasta2,
         bed=args.bed,
@@ -443,7 +441,7 @@ def annotation_liftover(
 
     print("Lift over workflow finished!\n")
 
-    return report_full
+    return report_full, report_bed_path
 
 
 def get_coordinate(df_group):

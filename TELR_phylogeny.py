@@ -7,7 +7,7 @@ import json
 import random
 import string
 import editdistance
-from multiprocessing import Process, Pool
+from multiprocessing import Pool
 from TELR_te import create_fa
 
 # import time
@@ -263,16 +263,19 @@ def get_telr_seqs_phylogeny(
         bootstrap=bootstrap,
     )
 
+
 def id_generator(size=6, chars=string.ascii_uppercase + string.digits):
-    return ''.join(random.choice(chars) for _ in range(size))
+    return "".join(random.choice(chars) for _ in range(size))
+
 
 def per_base_len_dist(consensus_len, seq_len):
     return (seq_len - consensus_len) / consensus_len
 
+
 def diff_telr_consensus(consensus_seq, telr_seq):
     # create fasta file
     consensus_id = id_generator(3, string.ascii_uppercase)
-    os.path.join(out_dir, consensus_id + '.fa')
+    os.path.join(out_dir, consensus_id + ".fa")
     create_fa(consensus_id, consensus_seq, out_dir)
     consensus_length = len(consensus_seq)
     telr_len = len(telr_seq)
