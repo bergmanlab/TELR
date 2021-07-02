@@ -39,10 +39,17 @@ def get_args():
 
     # optional
     optional.add_argument(
+        "-m",
+        "--method",
+        type=str,
+        help="method for read alignment, please provide 'nglmr' or 'minimap2' (default = 'nglmr')",
+        required=False,
+    )
+    optional.add_argument(
         "-x",
         "--presets",
         type=str,
-        help="parameter presets for different sequencing technologies (default = 'pacbio')",
+        help="parameter presets for different sequencing technologies, please provide 'ont' or 'pacbio' (default = 'pacbio')",
         required=False,
     )
     optional.add_argument(
@@ -111,6 +118,9 @@ def get_args():
         print(e)
         logging.exception("Can not open input file: " + args.library)
         sys.exit(1)
+
+    if args.method is None:
+        args.method = "nglmr"
 
     if args.presets is None:
         args.presets = "pacbio"

@@ -48,7 +48,7 @@ def main():
     bam = os.path.join(tmp_dir, sample_name + "_sort.bam")
     if not skip_alignment:
         alignment(
-            bam, fasta, reference, tmp_dir, sample_name, args.thread, args.presets
+            bam, fasta, reference, tmp_dir, sample_name, args.thread, args.method, args.presets
         )
     else:
         sort_index_bam(reads, bam, args.thread)

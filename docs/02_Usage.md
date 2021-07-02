@@ -18,9 +18,13 @@ required arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
+  -m METHOD, --method METHOD
+                        method for read alignment, please provide 'nglmr' or
+                        'minimap2' (default = 'nglmr')
   -x PRESETS, --presets PRESETS
                         parameter presets for different sequencing
-                        technologies (default = 'pacbio')
+                        technologies, please provide 'ont' or 'pacbio'
+                        (default = 'pacbio')
   -p POLISH, --polish POLISH
                         rounds of contig polishing (default = 1)
   -o OUT, --out OUT     directory to output data (default = '.')
@@ -45,7 +49,8 @@ python3 telr.py -i (--reads) <reads in fasta/fastq format or read alignments in 
 
 ## Optional arguments
 In addition to the required program options listed above, there are some optional arguments. The full list of program options with descriptions can also be obtained by running `telr.py -h`.
-- `-x (--presets) <arg>` Preset for different sequencing technologies (default = 'pacbio').
+- `-m (--method) <arg>` Method for read alignment, please provide 'nglmr' or or 'minimap2' (default = 'nglmr').
+- `-x (--presets) <arg>` Preset for different sequencing technologies, please provide 'ont' or 'pacbio' (default = 'pacbio').
 - `-p (--polish) <int>` Rounds of contig polishing using polisher from [wtdbg2](https://github.com/ruanjue/wtdbg2) (default = 1).
 - `-o (--out) <arg>` Output directory (default = '.').
 - `-t (--thread) <int>` Maximum cpu threads to use (default = '1').

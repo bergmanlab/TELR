@@ -6,47 +6,92 @@ import time
 from TELR_utility import format_time
 
 
-def alignment(bam, read, reference, out, sample_name, thread, presets):
+def alignment(bam, read, reference, out, sample_name, thread, method, presets):
     """
-    This function takes raw reads and performs read alignment using ngmlr.
+    This function takes raw reads and performs read alignment using ngmlr or minimap2.
     """
-    if presets == "ont":
-        presets = "ont"
-        label = "ont"
-    else:
-        presets = "pacbio"
-        label = "pb"
-    bam_tmp = out + "/" + sample_name + ".tmp.bam"
-
     logging.info("Start alignment...")
     start_time = time.time()
-
-    try:
-        with open(bam_tmp, "w") as output:
-            subprocess.call(
-                [
-                    "ngmlr",
-                    "-r",
-                    reference,
-                    "-q",
-                    read,
-                    "-x",
-                    presets,
-                    "-t",
-                    str(thread),
-                    "--rg-id",
-                    sample_name,
-                    "--rg-sm",
-                    sample_name,
-                    "--rg-lb",
-                    label,
-                    "--no-progress",
-                ],
-                stdout=output,
+    if method == "nglmr":
+        if presets == "ont":
+            presets = "ont"
+            label = "ont"
+        elif presets == "pacbio":
+            presets = "pacbio"
+            label = "pb"
+        else:
+            print(
+                "Read presets not recognized, please provide ont or pacbio, exiting..."
             )
-    except Exception as e:
-        print(e)
-        print("Read alignment (ngmlr) failed, check input reads, exiting...")
+            sys.exit(1)
+
+        try:
+            bam_tmp = out + "/" + sample_name + ".tmp.bam"
+            with open(bam_tmp, "w") as output:
+                subprocess.call(
+                    [
+                        "ngmlr",
+                        "-r",
+                        reference,
+                        "-q",
+                        read,
+                        "-x",
+                        presets,
+                        "-t",
+                        str(thread),
+                        "--rg-id",
+                        sample_name,
+                        "--rg-sm",
+                        sample_name,
+                        "--rg-lb",
+                        label,
+                        "--no-progress",
+                    ],
+                    stdout=output,
+                )
+        except Exception as e:
+            print(e)
+            print("Read alignment failed, check input reads, exiting...")
+            sys.exit(1)
+    elif method == "minimap2":
+        if presets == "ont":
+            presets = "map-ont"
+        elif presets == "pacbio":
+            presets = "map-pb"
+        else:
+            print(
+                "Read presets not recognized, please provide ont or pacbio, exiting..."
+            )
+            sys.exit(1)
+        try:
+            sam = out + "/" + sample_name + ".sam"
+            with open(sam, "w") as output:
+                subprocess.call(
+                    [
+                        "minimap2",
+                        "--cs",
+                        "--MD",
+                        "-Y",
+                        "-L",
+                        "-ax",
+                        presets,
+                        reference,
+                        read,
+                    ],
+                    stdout=output,
+                )
+            bam_tmp = out + "/" + sample_name + ".tmp.bam"
+            with open(bam_tmp, "w") as output:
+                subprocess.call(["samtools", "view", "-bS", sam], stdout=output)
+                os.remove(sam)
+        except Exception as e:
+            print(e)
+            print("Read alignment failed, check input reads, exiting...")
+            sys.exit(1)
+    else:
+        print(
+            "Alignment method not recognized, please provide ont or pacbio, exiting..."
+        )
         sys.exit(1)
 
     sort_index_bam(bam_tmp, bam, thread)
