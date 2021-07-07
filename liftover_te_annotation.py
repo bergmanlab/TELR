@@ -10,11 +10,12 @@ import json
 import subprocess
 import shutil
 from multiprocessing import Pool
+from TELR_utility import check_exist
 
 
 def get_args(program_version, arguments=sys.argv[1:]):
     parser = argparse.ArgumentParser(
-        description="Program for lifting TE annotations from genome 1 to genome 2, this program requires SAMtools, bedtools and minimap2."
+        description="Program for lifting TE annotations from one contig/assembly to another, this program requires SAMtools, bedtools and minimap2."
     )
 
     ## required ##
@@ -37,10 +38,10 @@ def get_args(program_version, arguments=sys.argv[1:]):
 
     ## optional ##
     parser.add_argument(
-        "-p",
+        "-x",
         "--preset",
         type=str,
-        help="minimap2 preset (default = 'asm10')",
+        help="minimap2 preset used in the flank to reference alignment step (default = 'asm10')",
         required=False,
     )
     parser.add_argument(
@@ -51,10 +52,17 @@ def get_args(program_version, arguments=sys.argv[1:]):
         required=False,
     )
     parser.add_argument(
-        "-w",
-        "--window",
+        "-g",
+        "--flank_gap_max",
         type=int,
-        help="maximum distance between 5p and 3p flanking sequence alignments (default = '50bp')",
+        help="maximum gap size between 5p and 3p flanking sequence alignments (default = '50bp')",
+        required=False,
+    )
+    parser.add_argument(
+        "-p",
+        "--flank_overlap_max",
+        type=int,
+        help="maximum overlap size between 5p and 3p flanking sequence alignments (default = '50bp')",
         required=False,
     )
     parser.add_argument(
@@ -115,8 +123,11 @@ def get_args(program_version, arguments=sys.argv[1:]):
         sys.exit(1)
 
     # set default values for optional arguments
-    if args.window is None:
-        args.window = 50
+    if args.flank_gap_max is None:
+        args.flank_gap_max = 50
+
+    if args.flank_overlap_max is None:
+        args.flank_overlap_max = 50
 
     if args.flank_len is None:
         args.flank_len = 500
@@ -128,6 +139,32 @@ def get_args(program_version, arguments=sys.argv[1:]):
         args.threads = 1
 
     return args
+
+
+def get_ref_seq(ref, chrom, start, end, out_dir):
+    """
+    Extract subsequence from fasta based on coordinates
+    """
+    prefix = "_".join([chrom, str(start), str(end), "subseq"])
+    bed = os.path.join(out_dir, prefix + ".bed")
+    subject = os.path.join(out_dir, prefix + ".fa")
+    with open(bed, "w") as output:
+        out_line = "\t".join([chrom, str(start), str(end)])
+        output.write(out_line + "\n")
+    with open(subject, "w") as output:
+        subprocess.call(
+            ["bedtools", "getfasta", "-fi", ref, "-bed", bed],
+            stdout=output,
+        )
+    subseq = ""
+    with open(subject, "r") as input:
+        for line in input:
+            if ">" not in line:
+                entry = line.replace("\n", "")
+                subseq = subseq + entry
+    # os.remove(bed)
+    # os.remove(subject)
+    return subseq
 
 
 def get_ref_fa(ref, chrom, start, end, prefix, out_dir):
@@ -288,6 +325,33 @@ def absmin(num1, num2):
         return num2
 
 
+def get_paf_info(paf):
+    """
+    Extract information from minimap2 PAF file
+    """
+    paf_info = dict()
+    if check_exist(paf):
+        with open(paf, "r") as input:
+            for line in input:
+                entry = line.replace("\n", "").split("\t")
+                query_length = int(entry[1])
+                num_residue_matches = int(entry[9])
+                alignment_block_length = int(entry[10])
+                query_mapp_qual = int(entry[11])
+                alignment_block_length = int(entry[10])
+                blast_identity = float(num_residue_matches / alignment_block_length)
+                paf_entry_id = "_".join([entry[0], entry[5], entry[7], entry[8]])
+                paf_info[paf_entry_id] = {
+                    "query_length": query_length,
+                    "query_mapp_qual": query_mapp_qual,
+                    "num_residue_matches": num_residue_matches,
+                    "alignment_block_length": alignment_block_length,
+                    "blast_identity": blast_identity,
+                }
+
+    return paf_info
+
+
 def run_liftover(input_json):
     """
     Main liftover function for a single annotation
@@ -307,7 +371,8 @@ def run_liftover(input_json):
     fasta2 = input_values["fasta2"]
     out_dir = input_values["out_dir"]
     flank_len = input_values["flank_len"]
-    window = input_values["window"]
+    flank_gap_max = input_values["flank_gap_max"]
+    flank_overlap_max = input_values["flank_overlap_max"]
     bed2 = input_values["bed2"]
     preset = input_values["preset"]
 
@@ -334,39 +399,47 @@ def run_liftover(input_json):
     num_secondary = 10  # save 10 secondary alignments
 
     # map 5 prime flanks to ref2
-    align_5p = out_dir + "/" + prefix_5p + ".paf"
-    align_flank(fa_5p, fasta2, align_5p, preset, num_secondary)
-    align_5p_bed = out_dir + "/" + prefix_5p + ".bed"
+    align_5p_flank_paf = out_dir + "/" + prefix_5p + ".paf"
+    align_flank(fa_5p, fasta2, align_5p_flank_paf, preset, num_secondary)
+    align_5p_flank_qcs = dict()
+    if check_exist(align_5p_flank_paf):
+        align_5p_flank_qcs = get_paf_info(align_5p_flank_paf)
+
+    align_5p_flank_bed = out_dir + "/" + prefix_5p + ".bed"
     paf_to_bed(
-        align_5p, align_5p_bed, filter=chrom
+        align_5p_flank_paf, align_5p_flank_bed, filter=chrom
     )  # only keep alignments on the same chromosome as original TE
 
     # map 3 prime flanks to ref2
-    align_3p = out_dir + "/" + prefix_3p + ".paf"
-    align_flank(fa_3p, fasta2, align_3p, preset, num_secondary)
-    align_3p_bed = out_dir + "/" + prefix_3p + ".bed"
+    align_3p_flank_paf = out_dir + "/" + prefix_3p + ".paf"
+    align_flank(fa_3p, fasta2, align_3p_flank_paf, preset, num_secondary)
+    align_3p_flank_qcs = dict()
+    if check_exist(align_3p_flank_paf):
+        align_3p_flank_qcs = get_paf_info(align_3p_flank_paf)
+
+    align_3p_flank_bed = out_dir + "/" + prefix_3p + ".bed"
     paf_to_bed(
-        align_3p, align_3p_bed, filter=chrom
+        align_3p_flank_paf, align_3p_flank_bed, filter=chrom
     )  # only keep alignments on the same chromosome as original TE
 
     # clean intermediate files
-    os.remove(align_3p)
-    os.remove(align_5p)
+    # os.remove(align_3p)
+    # os.remove(align_5p) # TODO: to be removed
     os.remove(fa_5p)
     os.remove(fa_3p)
 
     # find closest entries between 3 prime and 5 prime flank alignments, require two alignments to be on the same strand, also report distance
     overlap = out_dir + "/" + prefix + ".overlap"
-    if check_file(align_5p_bed) and check_file(align_3p_bed):
+    if check_file(align_5p_flank_bed) and check_file(align_3p_flank_bed):
         with open(overlap, "w") as output:
             subprocess.call(
                 [
                     "bedtools",
                     "closest",
                     "-a",
-                    align_5p_bed,
+                    align_5p_flank_bed,
                     "-b",
-                    align_3p_bed,
+                    align_3p_flank_bed,
                     "-s",
                     "-d",
                     "-t",
@@ -385,6 +458,7 @@ def run_liftover(input_json):
         with open(overlap, "r") as input:
             for line in input:
                 entry = line.replace("\n", "").split("\t")
+
                 chrom_ref2_5p = entry[0]
                 chrom_ref2_3p = entry[6]
                 flank_strand = entry[5]
@@ -393,6 +467,17 @@ def run_liftover(input_json):
                 if (
                     chrom_ref2_5p == chrom_ref2_3p == chrom
                 ):  # to make sure the entry exists
+
+                    # get flank qc
+                    align_5p_flank_id = "_".join(
+                        [entry[3], entry[0], entry[1], entry[2]]
+                    )
+                    align_5p_flank_qc = align_5p_flank_qcs[align_5p_flank_id]
+                    align_3p_flank_id = "_".join(
+                        [entry[9], entry[6], entry[7], entry[8]]
+                    )
+                    align_3p_flank_qc = align_3p_flank_qcs[align_3p_flank_id]
+
                     start_5p = int(entry[1])
                     end_5p = int(entry[2])
                     start_3p = int(entry[7])
@@ -415,12 +500,28 @@ def run_liftover(input_json):
                         "chrom": chrom,
                         "start": lift_start,
                         "end": lift_end,
-                        "mapp_quality_5p": mapp_quality_5p,
-                        "mapp_quality_3p": mapp_quality_3p,
                         "strand": lift_strand,
                         "gap": lift_gap,
+                        "TSD_length": None,
+                        "TSD_sequence": None,
                         "align_5p": align_5p,
                         "align_3p": align_3p,
+                        "5p_flank_mapping_quality": mapp_quality_5p,
+                        "5p_flank_num_residue_matches": align_5p_flank_qc[
+                            "num_residue_matches"
+                        ],
+                        "5p_flank_alignment_block_length": align_5p_flank_qc[
+                            "alignment_block_length"
+                        ],
+                        "5p_flank_blast_identity": align_5p_flank_qc["blast_identity"],
+                        "3p_flank_mapping_quality": mapp_quality_3p,
+                        "3p_flank_num_residue_matches": align_3p_flank_qc[
+                            "num_residue_matches"
+                        ],
+                        "3p_flank_alignment_block_length": align_3p_flank_qc[
+                            "alignment_block_length"
+                        ],
+                        "3p_flank_blast_identity": align_3p_flank_qc["blast_identity"],
                         "distance_ref_5p": None,
                         "distance_ref_3p": None,
                         "comment": None,
@@ -450,10 +551,10 @@ def run_liftover(input_json):
                         lift_entry["distance_ref_3p"] = str(distance_3p)
 
                     # if the overlap between flank alignments is greater than 50bp, don't report
-                    if lift_gap < -window and lift_gap > -500:
+                    if lift_gap < -flank_overlap_max:
                         if not reported:
-                            reported = False  # redundant
-                    elif abs(lift_gap) <= window:
+                            reported = False  # TODO: redundant
+                    elif lift_gap >= -flank_overlap_max and lift_gap <= flank_gap_max:
                         # if the gap between flank alignments is smaller than 50bp
                         # report as reference if 1) there is a reference 2 TE in between two flanks or 2) the gap size and original TE size is similar or 3) the gap size is bigger than the size of the TE.
                         # report as non-reference otherwise.
@@ -478,12 +579,18 @@ def run_liftover(input_json):
                             lift_entry[
                                 "comment"
                             ] = "flanks overlap/gap size within threshold"
+                            # get TSD length and sequence
+                            if lift_gap <= 0:
+                                lift_entry["TSD_length"] = -lift_gap
+                                lift_entry["TSD_sequence"] = get_ref_seq(
+                                    fasta2, chrom, lift_start, lift_end, out_dir
+                                )
+
                             num_hits = num_hits + 1
                         lift_entries["report"].append(lift_entry)
                         reported = True
-                    else:
-                        # if the gap between flanks is greater than 50bp
-                        if lift_gap <= 0.5 * te_length:
+                    else:  # if the gap between flanks is greater than 50bp
+                        if lift_gap > flank_gap_max and lift_gap <= 0.5 * te_length:
                             # if the gap size is smaller than half of the original TE size
                             # report as reference if 1) there is a reference 2 TE in between two flanks
                             # report as non-reference otherwise.
@@ -569,13 +676,13 @@ def run_liftover(input_json):
         # TODO: if only one flank can be lifted, check to see if there is a reference TE nearby (same family, same strand, similar size?)
         align_5p = []
         align_3p = []
-        if check_file(align_5p_bed):
-            with open(align_5p_bed, "r") as input:
+        if check_file(align_5p_flank_bed):
+            with open(align_5p_flank_bed, "r") as input:
                 for line in input:
                     entry = line.replace("\n", "").split("\t")
                     align_5p.append(entry[0] + ":" + entry[1] + "-" + entry[2])
-        if check_file(align_3p_bed):
-            with open(align_3p_bed, "r") as input:
+        if check_file(align_3p_flank_bed):
+            with open(align_3p_flank_bed, "r") as input:
                 for line in input:
                     entry = line.replace("\n", "").split("\t")
                     align_3p.append(entry[0] + ":" + entry[1] + "-" + entry[2])
@@ -593,8 +700,20 @@ def run_liftover(input_json):
             "mapp_quality_3p": None,
             "strand": None,
             "gap": None,
+            "TSD_length": None,
+            "TSD_sequence": None,
             "align_5p": align_5p,
             "align_3p": align_3p,
+            "5p_flank_mapping_quality": None,
+            "5p_flank_num_residue_matches": None,
+            "5p_flank_alignment_block_length": None,
+            "5p_flank_blast_identity": None,
+            "3p_flank_mapping_quality": None,
+            "3p_flank_num_residue_matches": None,
+            "3p_flank_alignment_block_length": None,
+            "3p_flank_blast_identity": None,
+            "distance_ref_5p": None,
+            "distance_ref_3p": None,
             "comment": "flank alignments not nearby each other / only one flank aligned",
         }
         lift_entries["report"].append(lift_entry)
@@ -644,12 +763,17 @@ def build_index(fa):
 def main():
     args = get_args(program_version=__version__)
 
-    # TODO: merge overlapped/nested insertions?
+    # TODO: create soft link for fa1 and fa2?
 
     # generate ref1 index file if not present
     ref1_index = args.fasta1 + ".fai"
     if not check_file(ref1_index):
         build_index(args.fasta1)
+
+    # generate ref2 index file if not present
+    ref2_index = args.fasta2 + ".fai"
+    if not check_file(ref2_index):
+        build_index(args.fasta2)
 
     # loop through TE annotations, prepare data for parallel liftover jobs
     input_json_dir = os.path.join(args.out, "input_json")
@@ -678,7 +802,8 @@ def main():
                 "fasta2": args.fasta2,
                 "out_dir": tmp_dir,
                 "flank_len": args.flank_len,
-                "window": args.window,
+                "flank_gap_max": args.flank_gap_max,
+                "flank_overlap_max": args.flank_overlap_max,
                 "bed2": args.bed2,
                 "preset": args.preset,
             }
@@ -786,4 +911,5 @@ def main():
     print("Liftover finished!")
 
 
-main()
+if __name__ == "__main__":
+    main()
