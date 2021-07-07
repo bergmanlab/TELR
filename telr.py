@@ -92,7 +92,6 @@ def main():
     # Annotate contig for TE region
     (
         contig_te_annotation,
-        contig_rm_annotation,
         te_freq,
         te_fa,
         merge_contigs,
@@ -104,6 +103,7 @@ def main():
         sample_name,
         args.thread,
         args.presets,
+        args.repeatmasker_family,
         loci_eval,
     )
 
@@ -123,7 +123,6 @@ def main():
     # find TEs
     report_meta, report_out_bed = find_te(
         contig_te_annotation,
-        contig_rm_annotation,
         te_freq,
         merge_contigs,
         reference,

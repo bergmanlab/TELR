@@ -88,6 +88,12 @@ def get_args():
         required=False,
     )
     optional.add_argument(
+        "--repeatmasker_family",
+        action='store_true',
+        help="If provided then repeatmasker will be used to annotate TE families in the assembled contigs (default: use minimap2 for contig TE annotation)",
+        required=False,
+    )
+    optional.add_argument(
         "-k",
         "--keep_files",
         action='store_true',

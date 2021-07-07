@@ -13,7 +13,15 @@ from TELR_assembly import prep_assembly
 
 
 def annotate_contig(
-    contig_dir, te_library, vcf_parsed, out, sample_name, thread, presets, loci_eval
+    contig_dir,
+    te_library,
+    vcf_parsed,
+    out,
+    sample_name,
+    thread,
+    presets,
+    repeatmasker_family,
+    loci_eval,
 ):
     logging.info("Annotate contigs...")
     if presets == "ont":
@@ -241,65 +249,93 @@ def annotate_contig(
             ],
             stdout=output,
         )
-    repeatmasker_dir = os.path.join(out, "contig_te_repeatmask")
-    mkdir(repeatmasker_dir)
-    try:
-        subprocess.call(
-            [
-                "RepeatMasker",
-                "-dir",
-                repeatmasker_dir,
-                "-gff",
-                "-s",
-                "-nolow",
-                "-no_is",
-                "-xsmall",
-                "-e",
-                "ncbi",
-                "-lib",
-                te_library,
-                "-pa",
-                str(thread),
-                te_fa,
-            ]
-        )
-        contig_te_repeatmasked = os.path.join(
-            repeatmasker_dir, os.path.basename(te_fa) + ".out.gff"
-        )
-        open(contig_te_repeatmasked, "r")
-    except Exception as e:
-        print(e)
-        print("Repeatmasking contig TE sequences failed, exiting...")
-        sys.exit(1)
 
-    ## parse and merge
-    te2contig_rm = out + "/" + sample_name + ".te2contig_rm.bed"
-    with open(contig_te_repeatmasked, "r") as input, open(te2contig_rm, "w") as output:
-        for line in input:
-            if "##" not in line:
+    if repeatmasker_family:
+        print("Use repeatmasker to annotate contig TE families instead of minimap2")
+        repeatmasker_dir = os.path.join(out, "contig_te_repeatmask")
+        mkdir(repeatmasker_dir)
+        try:
+            subprocess.call(
+                [
+                    "RepeatMasker",
+                    "-dir",
+                    repeatmasker_dir,
+                    "-gff",
+                    "-s",
+                    "-nolow",
+                    "-no_is",
+                    "-xsmall",
+                    "-e",
+                    "ncbi",
+                    "-lib",
+                    te_library,
+                    "-pa",
+                    str(thread),
+                    te_fa,
+                ]
+            )
+            contig_te_repeatmasked = os.path.join(
+                repeatmasker_dir, os.path.basename(te_fa) + ".out.gff"
+            )
+            open(contig_te_repeatmasked, "r")
+        except Exception as e:
+            print(e)
+            print("Repeatmasking contig TE sequences failed, exiting...")
+            sys.exit(1)
+
+        ## parse and merge
+        te2contig_rm = out + "/" + sample_name + ".te2contig_rm.bed"
+        with open(contig_te_repeatmasked, "r") as input, open(
+            te2contig_rm, "w"
+        ) as output:
+            for line in input:
+                if "##" not in line:
+                    entry = line.replace("\n", "").split("\t")
+                    contig_name = entry[0].rsplit(":", 1)[0]
+                    start = entry[0].rsplit(":", 1)[1].split("-")[0]
+                    end = entry[0].rsplit(":", 1)[1].split("-")[1]
+                    # contigs = entry[0].replace(':', '-').split("-")
+                    family = re.sub('Target "Motif:|".*', "", entry[8])
+                    strand = entry[6]
+                    score = entry[5]
+                    out_line = "\t".join(
+                        [contig_name, start, end, family, score, strand]
+                    )
+                    output.write(out_line + "\n")
+        print("Done\n")
+
+        contig_rm_annotation = out + "/" + sample_name + ".te2contig_rm.merge.bed"
+        command = 'bedtools merge -c 4,6 -o distinct -delim "|" -i ' + te2contig_rm
+        with open(contig_rm_annotation, "w") as output:
+            subprocess.call(command, shell=True, stdout=output)
+        # os.remove(te2contig_rm)
+
+        # replace contig_te_annotation family with ones from RM
+        contig_te_annotation_new = contig_te_annotation.replace(
+            "bed", "family_reannotated.bed"
+        )
+        contig_rm_family_dict = dict()
+        with open(contig_rm_annotation, "r") as input:
+            for line in input:
                 entry = line.replace("\n", "").split("\t")
-                contig_name = entry[0].rsplit(":", 1)[0]
-                start = entry[0].rsplit(":", 1)[1].split("-")[0]
-                end = entry[0].rsplit(":", 1)[1].split("-")[1]
-                # contigs = entry[0].replace(':', '-').split("-")
-                family = re.sub('Target "Motif:|".*', "", entry[8])
-                strand = entry[6]
-                score = entry[5]
-                out_line = "\t".join([contig_name, start, end, family, score, strand])
+                contig_name = entry[0]
+                family = entry[3]
+                contig_rm_family_dict[contig_name] = family
+
+        with open(contig_te_annotation_new, "w") as output, open(
+            contig_te_annotation, "r"
+        ) as input:
+            for line in input:
+                entry = line.replace("\n", "").split("\t")
+                contig_name = entry[0]
+                start = entry[1]
+                end = entry[2]
+                family = contig_rm_family_dict[contig_name]
+                strand = entry[4]
+                out_line = "\t".join([contig_name, start, end, family, strand])
                 output.write(out_line + "\n")
-    print("Done\n")
 
-    contig_rm_annotation = out + "/" + sample_name + ".te2contig_rm.merge.bed"
-    command = 'bedtools merge -c 4,6 -o distinct -delim "|" -i ' + te2contig_rm
-    with open(contig_rm_annotation, "w") as output:
-        subprocess.call(command, shell=True, stdout=output)
-    # os.remove(te2contig_rm)
-
-    # seq_mm2_overlap_merge_rm_loci = create_loci_set(te2contig_rm_merge)
-    # with open(loci_eval, "a") as output:
-    #     for locus in seq_mm2_overlap_merge_loci:
-    #         if locus not in seq_mm2_overlap_merge_rm_loci:
-    #             print(locus, "contig seq RM failed")
+        contig_te_annotation = contig_te_annotation_new
 
     # build frequency dict
     te_freq = dict()
@@ -310,7 +346,7 @@ def annotate_contig(
             freq = entry[5]
             te_freq[contig_name] = freq
 
-    return contig_te_annotation, contig_rm_annotation, te_freq, te_fa, merge_contigs
+    return contig_te_annotation, te_freq, te_fa, merge_contigs
 
 
 def seq2contig(seq, contig, out):
@@ -534,7 +570,6 @@ def get_median_cov(bam, chr, start, end):
 
 def find_te(
     contig_te_annotation,
-    contig_family_annotation,
     te_freq,
     merge_contigs,
     ref,
@@ -548,10 +583,12 @@ def find_te(
     """
     Identify non-reference TE insertions in the reference genome using assembled contigs
     """
-    if presets == "ont":
-        presets = "map-ont"
-    else:
-        presets = "map-pb"
+    # if presets == "ont":
+    #     presets = "map-ont"
+    # else:
+    #     presets = "map-pb"
+
+    presets = "asm10"
 
     # lift over
     logging.info("Map contigs to reference...")
@@ -565,7 +602,6 @@ def find_te(
         overlap=overlap,
         gap=gap,
         flank_len=500,
-        family_rm=contig_family_annotation,
         freq=te_freq,
         loci_eval=loci_eval,
     )
