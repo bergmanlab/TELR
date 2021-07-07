@@ -6,12 +6,12 @@ import pandas as pd
 import subprocess
 import re
 
-# from TELR_utility import report_bad_loci
+from TELR_utility import report_bad_loci
 
 
 def get_args():
     parser = argparse.ArgumentParser(
-        description="Script to lift annotation from one genome to another"
+        description="Script to lift contig TE flanks to reference genome and determine final non-reference insertion coordinate"
     )
 
     ## required ##
@@ -28,14 +28,14 @@ def get_args():
         "-v",
         "--overlap",
         type=int,
-        help="maximum overlap (default = '30000')",
+        help="maximum overlap (default = '50')",
         required=False,
     )
     parser.add_argument(
-        "-g", "--gap", type=int, help="maximum gap (default = '25')", required=False
+        "-g", "--gap", type=int, help="maximum gap (default = '50')", required=False
     )
     parser.add_argument(
-        "-x", "--preset", type=str, help="preset (default = 'map-pb')", required=False
+        "-x", "--preset", type=str, help="preset (default = 'asm10')", required=False
     )
     parser.add_argument(
         "-l",
@@ -62,28 +62,21 @@ def get_args():
         sys.exit(1)
 
     if args.overlap is None:
-        args.overlap = 25
+        args.overlap = 50
 
     if args.gap is None:
-        args.gap = 30000
+        args.gap = 50
 
     if args.length is None:
         args.length = 500
 
     if args.preset is None:
-        args.preset = "map-pb"
+        args.preset = "asm10"
 
     if args.out is None:
         args.out = "."
 
     return args
-
-
-def report_bad_loci(set_raw, set_filtered, report, message):
-    with open(report, "a") as output:
-        for locus in set_raw:
-            if locus not in set_filtered:
-                output.write("\t".join([locus, message]) + "\n")
 
 
 def main():
@@ -118,8 +111,8 @@ def annotation_liftover(
     loci_eval,
     out_dir=".",
     preset="map-pb",
-    overlap=25,
-    gap=30000,
+    overlap=50,
+    gap=50,
     flank_len=500,
     family_rm=None,
     freq=None,
@@ -127,19 +120,24 @@ def annotation_liftover(
     """
     Lift variant annotation from one genome to another.
     """
-    print("Starting lift over workflow...")
+    print("Starting lift over from TELR contigs to reference...")
 
-    # for each annotation, extract flanking sequence, map to another genome, check the distance between mapped flanks
+    
+
+    # for each contig TE annotation, extract flanking sequence, map to reference genome, check the distance between mapped flanks
+
+    # if annotation in GFF format is provided, convert to BED format
     if "gff" in bed:
         ins_bed = out_dir + "/" + sample_name + ".ins.bed"
         gff2bed(bed, ins_bed)
     else:
         ins_bed = bed
 
+    # compute TE flanking sequences coordinates based on TE annotation BED file
     flank_bed = out_dir + "/" + sample_name + ".flank.bed"
     get_flank_bed(ins_bed, fasta1, flank_bed, flank_len)
 
-    # extract flanking sequences
+    # extract TE flanking sequences in the contigs
     flank_fa = out_dir + "/" + sample_name + ".flank.fa"
     print("Generating flanking sequences...")
     with open(flank_fa, "w") as output:
@@ -147,7 +145,7 @@ def annotation_liftover(
             ["bedtools", "getfasta", "-fi", fasta1, "-bed", flank_bed], stdout=output
         )
 
-    # map flanks to genome2 using minimap2
+    # map flanks to reference genome using minimap2
     flank2ref_out = out_dir + "/" + sample_name + ".flank.paf"
     print("Align flanking sequence to reference...")
     with open(flank2ref_out, "w") as output:
@@ -156,7 +154,7 @@ def annotation_liftover(
             stdout=output,
         )
 
-    # report contig flanks that can not be mapped to ref
+    # report contigs if flanking sequences can not be mapped to reference genome
     contig_w_te_set = set()
     with open(bed, "r") as input:
         for line in input:
@@ -223,7 +221,7 @@ def annotation_liftover(
             flank_side_dict[flank_name] = flank_end
             flank_ins_dict[flank_name] = entry[4]
 
-    # process the mapped paf
+    # parse the flank-ref alignment PAF file
     print("Parsing flanking sequence alignments...")
     te_report_tmp = out_dir + "/" + sample_name + ".lift.pass.tmp.tsv"
     header = [
