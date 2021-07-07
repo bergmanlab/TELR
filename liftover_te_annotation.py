@@ -423,8 +423,8 @@ def run_liftover(input_json):
     )  # only keep alignments on the same chromosome as original TE
 
     # clean intermediate files
-    # os.remove(align_3p)
-    # os.remove(align_5p) # TODO: to be removed
+    os.remove(align_5p_flank_paf)
+    os.remove(align_3p_flank_paf)
     os.remove(fa_5p)
     os.remove(fa_3p)
 
@@ -760,29 +760,42 @@ def build_index(fa):
     subprocess.call(["samtools", "faidx", fa])
 
 
-def main():
-    args = get_args(program_version=__version__)
-
-    # TODO: create soft link for fa1 and fa2?
+def liftover(
+    fasta1,
+    fasta2,
+    bed1,
+    bed2,
+    sample_name,
+    preset,
+    flank_len,
+    flank_gap_max,
+    flank_overlap_max,
+    out,
+    threads,
+    keep_files,
+):
+    """
+    Core function to do annotation liftover from one assembly/contig to another
+    """
 
     # generate ref1 index file if not present
-    ref1_index = args.fasta1 + ".fai"
+    ref1_index = fasta1 + ".fai"
     if not check_file(ref1_index):
-        build_index(args.fasta1)
+        build_index(fasta1)
 
     # generate ref2 index file if not present
-    ref2_index = args.fasta2 + ".fai"
+    ref2_index = fasta2 + ".fai"
     if not check_file(ref2_index):
-        build_index(args.fasta2)
+        build_index(fasta2)
 
     # loop through TE annotations, prepare data for parallel liftover jobs
-    input_json_dir = os.path.join(args.out, "input_json")
+    input_json_dir = os.path.join(out, "input_json")
     mkdir(input_json_dir)
-    tmp_dir = os.path.join(args.out, "tmp")
+    tmp_dir = os.path.join(out, "tmp")
     mkdir(tmp_dir)
 
     liftover_pa_list = []
-    with open(args.bed1, "r") as input:
+    with open(bed1, "r") as input:
         for line in input:
             entry = line.replace("\n", "").split("\t")
             chrom = entry[0]
@@ -798,14 +811,14 @@ def main():
                 "end": end,
                 "family": family,
                 "strand": strand,
-                "fasta1": args.fasta1,
-                "fasta2": args.fasta2,
+                "fasta1": fasta1,
+                "fasta2": fasta2,
                 "out_dir": tmp_dir,
-                "flank_len": args.flank_len,
-                "flank_gap_max": args.flank_gap_max,
-                "flank_overlap_max": args.flank_overlap_max,
-                "bed2": args.bed2,
-                "preset": args.preset,
+                "flank_len": flank_len,
+                "flank_gap_max": flank_gap_max,
+                "flank_overlap_max": flank_overlap_max,
+                "bed2": bed2,
+                "preset": preset,
             }
             liftover_input = input_json_dir + "/" + prefix + "_input.json"
             with open(liftover_input, "w") as output:
@@ -815,7 +828,7 @@ def main():
     # run liftover jobs for all annotations in parallel
     print("Perform liftover...")
     try:
-        pool = Pool(processes=args.threads)
+        pool = Pool(processes=threads)
         liftover_report_list = pool.map(run_liftover, liftover_pa_list)
         pool.close()
         pool.join()
@@ -832,14 +845,14 @@ def main():
             report = json.load(f)
             data.append(report)
 
-    json_report = args.out + "/" + "liftover_report.json"
+    json_report = out + "/" + "liftover_report.json"
     with open(json_report, "w") as output:
         json.dump(data, output, indent=4, sort_keys=False)
 
     # add a step to merge close annotations if inserions are : 1) supported by only one flank 2) same family 3) same strand
 
     # write non-reference lifted annotations in BED format
-    bed_report = args.out + "/" + "liftover_nonref.bed"
+    bed_report = out + "/" + "liftover_nonref.bed"
     with open(bed_report, "w") as output:
         for item in data:
             if item["num_hits"] == 1:
@@ -898,17 +911,40 @@ def main():
         "unlifted": {"total": unlift_total, "comments": unlift_comments},
     }
 
-    summary_report = args.out + "/" + "liftover_summary.json"
+    summary_report = out + "/" + "liftover_summary.json"
     with open(summary_report, "w") as output:
         json.dump(summary_data, output, indent=4, sort_keys=False)
 
     # clean tmp files
-    if not args.keep_files:
+    if not keep_files:
         print("Clean intermediate files...")
         shutil.rmtree(tmp_dir)
         shutil.rmtree(input_json_dir)
 
     print("Liftover finished!")
+    return json_report, bed_report, summary_report
+
+
+def main():
+    args = get_args(program_version=__version__)
+
+    sample_name = os.path.splitext(os.path.basename(args.fasta1))[0]
+
+    # TODO: create soft link for fa1 and fa2?
+    json_report, bed_report, summary_report = liftover(
+        fasta1=args.fasta1,
+        fasta2=args.fasta2,
+        bed1=args.bed1,
+        bed2=args.bed2,
+        sample_name=sample_name,
+        preset=args.preset,
+        flank_len=args.flank_len,
+        flank_gap_max=args.flank_gap_max,
+        flank_overlap_max=args.flank_overlap_max,
+        out=args.out,
+        threads=args.threads,
+        keep_files=args.keep_files,
+    )
 
 
 if __name__ == "__main__":
