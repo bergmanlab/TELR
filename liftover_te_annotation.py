@@ -33,7 +33,7 @@ def get_args(program_version, arguments=sys.argv[1:]):
         "--bed2",
         type=str,
         help="annotation file for genome 2 in bed format",
-        required=True,
+        required=False,
     )
 
     ## optional ##
@@ -86,6 +86,18 @@ def get_args(program_version, arguments=sys.argv[1:]):
         required=False,
     )
     parser.add_argument(
+        "--contig_match",
+        action="store_true",
+        help="If provided then require the contig name to match before and after annotation liftover (default: no restriction on contig name matching)",
+        required=False,
+    )
+    parser.add_argument(
+        "--telr_mode",
+        action="store_true",
+        help="If provided then run as a module in TELR (default: run in standalone mode)",
+        required=False,
+    )
+    parser.add_argument(
         "-t",
         "--threads",
         type=int,
@@ -118,12 +130,6 @@ def get_args(program_version, arguments=sys.argv[1:]):
 
     try:
         test = open(args.bed1, "r")
-    except Exception as e:
-        print(e)
-        sys.exit(1)
-
-    try:
-        test = open(args.bed2, "r")
     except Exception as e:
         print(e)
         sys.exit(1)
@@ -271,47 +277,49 @@ def check_nearby_ref(
     """
     Check if flanking seqeunce alignments have nearby TE annotations in genome 2
     """
-    prefix_query = "_".join([chrom, str(start_query), str(end_query), "query"])
-    query_bed = os.path.join(out_dir, prefix_query + ".bed")
-    create_bed(chrom, start_query, end_query, family, strand, query_bed)
-
-    prefix_overlap = "_".join([chrom, str(start_query), str(end_query), "nearby"])
-    overlap = os.path.join(out_dir, prefix_overlap + ".bed")
-    with open(overlap, "w") as output:
-        subprocess.call(
-            [
-                "bedtools",
-                "closest",
-                "-a",
-                query_bed,
-                "-b",
-                ref_bed,
-                "-d",
-                "-D",
-                "ref",
-                "-k",
-                "5"
-                # "-s",
-            ],
-            stdout=output,
-        )
-
     distance = None
-    with open(overlap, "r") as input:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
-            chrom1 = entry[0]
-            chrom2 = entry[6]
-            family1 = entry[3]
-            family2 = entry[9]
-            strand1 = entry[5]
-            strand2 = entry[11]
-            if chrom1 == chrom2 and family1 == family2 and strand1 == strand2:
-                distance_new = int(entry[12])
-                if distance is None:
-                    distance = distance_new
-                else:
-                    distance = absmin(distance, distance_new)
+
+    if check_exist(ref_bed):
+        prefix_query = "_".join([chrom, str(start_query), str(end_query), "query"])
+        query_bed = os.path.join(out_dir, prefix_query + ".bed")
+        create_bed(chrom, start_query, end_query, family, strand, query_bed)
+
+        prefix_overlap = "_".join([chrom, str(start_query), str(end_query), "nearby"])
+        overlap = os.path.join(out_dir, prefix_overlap + ".bed")
+        with open(overlap, "w") as output:
+            subprocess.call(
+                [
+                    "bedtools",
+                    "closest",
+                    "-a",
+                    query_bed,
+                    "-b",
+                    ref_bed,
+                    "-d",
+                    "-D",
+                    "ref",
+                    "-k",
+                    "5"
+                    # "-s",
+                ],
+                stdout=output,
+            )
+
+        with open(overlap, "r") as input:
+            for line in input:
+                entry = line.replace("\n", "").split("\t")
+                chrom1 = entry[0]
+                chrom2 = entry[6]
+                family1 = entry[3]
+                family2 = entry[9]
+                strand1 = entry[5]
+                strand2 = entry[11]
+                if chrom1 == chrom2 and family1 == family2 and strand1 == strand2:
+                    distance_new = int(entry[12])
+                    if distance is None:
+                        distance = distance_new
+                    else:
+                        distance = absmin(distance, distance_new)
     if distance is not None:
         if abs(distance) > threshold:
             distance = None
@@ -345,14 +353,14 @@ def get_paf_info(paf):
                 alignment_block_length = int(entry[10])
                 query_mapp_qual = int(entry[11])
                 alignment_block_length = int(entry[10])
-                blast_identity = float(num_residue_matches / alignment_block_length)
+                sequence_identity = float(num_residue_matches / alignment_block_length)
                 paf_entry_id = "_".join([entry[0], entry[5], entry[7], entry[8]])
                 paf_info[paf_entry_id] = {
                     "query_length": query_length,
                     "query_mapp_qual": query_mapp_qual,
                     "num_residue_matches": num_residue_matches,
                     "alignment_block_length": alignment_block_length,
-                    "blast_identity": blast_identity,
+                    "sequence_identity": sequence_identity,
                 }
 
     return paf_info
@@ -379,9 +387,11 @@ def run_liftover_single_annotation(input_json):
     flank_len = input_values["flank_len"]
     flank_gap_max = input_values["flank_gap_max"]
     flank_overlap_max = input_values["flank_overlap_max"]
-    bed2 = input_values["bed2"]
+    bed2 = input_values["bed2"]  # could be None
     preset = input_values["preset"]
     single_flank = input_values["single_flank"]
+    contig_match = input_values["contig_match"]
+    telr_mode = input_values["telr_mode"]
 
     prefix = "_".join([chrom, str(start), str(end), family])
     lift_entries["ID"] = prefix
@@ -404,6 +414,13 @@ def run_liftover_single_annotation(input_json):
 
     # intiate minimap2 parameters
     num_secondary = 10  # save 10 secondary alignments
+    if contig_match:
+        if telr_mode:
+            filter_chrom = "_".join(chrom.split("_")[:-2])
+        else:
+            filter_chrom = chrom
+    else:
+        filter_chrom = None
 
     # map 5 prime flanks to ref2
     align_5p_flank_paf = out_dir + "/" + prefix_5p + ".paf"
@@ -413,8 +430,9 @@ def run_liftover_single_annotation(input_json):
         align_5p_flank_qcs = get_paf_info(align_5p_flank_paf)
 
     align_5p_flank_bed = out_dir + "/" + prefix_5p + ".bed"
+
     paf_to_bed(
-        align_5p_flank_paf, align_5p_flank_bed, filter=chrom
+        align_5p_flank_paf, align_5p_flank_bed, filter=filter_chrom
     )  # only keep alignments on the same chromosome as original TE
 
     # map 3 prime flanks to ref2
@@ -426,7 +444,7 @@ def run_liftover_single_annotation(input_json):
 
     align_3p_flank_bed = out_dir + "/" + prefix_3p + ".bed"
     paf_to_bed(
-        align_3p_flank_paf, align_3p_flank_bed, filter=chrom
+        align_3p_flank_paf, align_3p_flank_bed, filter=None
     )  # only keep alignments on the same chromosome as original TE
 
     # clean intermediate files
@@ -472,9 +490,9 @@ def run_liftover_single_annotation(input_json):
                 mapp_quality_5p = int(entry[4])
                 mapp_quality_3p = int(entry[10])
                 if (
-                    chrom_ref2_5p == chrom_ref2_3p == chrom
+                    chrom_ref2_5p == chrom_ref2_3p and chrom_ref2_3p != "."
                 ):  # to make sure the entry exists
-
+                    lift_chrom = chrom_ref2_5p
                     # get flank qc
                     align_5p_flank_id = "_".join(
                         [entry[3], entry[0], entry[1], entry[2]]
@@ -508,7 +526,7 @@ def run_liftover_single_annotation(input_json):
                     lift_entry = {
                         "type": None,
                         "family": family,
-                        "chrom": chrom,
+                        "chrom": lift_chrom,
                         "start": lift_start,
                         "end": lift_end,
                         "strand": lift_strand,
@@ -523,7 +541,9 @@ def run_liftover_single_annotation(input_json):
                         "5p_flank_alignment_block_length": align_5p_flank_qc[
                             "alignment_block_length"
                         ],
-                        "5p_flank_blast_identity": align_5p_flank_qc["blast_identity"],
+                        "5p_flank_sequence_identity": align_5p_flank_qc[
+                            "sequence_identity"
+                        ],
                         "3p_flank_align_coord": align_3p_coord,
                         "3p_flank_mapping_quality": mapp_quality_3p,
                         "3p_flank_num_residue_matches": align_3p_flank_qc[
@@ -532,14 +552,16 @@ def run_liftover_single_annotation(input_json):
                         "3p_flank_alignment_block_length": align_3p_flank_qc[
                             "alignment_block_length"
                         ],
-                        "3p_flank_blast_identity": align_3p_flank_qc["blast_identity"],
+                        "3p_flank_sequence_identity": align_3p_flank_qc[
+                            "sequence_identity"
+                        ],
                         "distance_5p_flank_ref_te": None,
                         "distance_3p_flank_ref_te": None,
                         "comment": None,
                     }
                     # check the distance between flank alignment and nearast TE annotation
                     distance_5p = check_nearby_ref(
-                        chrom,
+                        lift_chrom,
                         start_5p,
                         end_5p,
                         family,
@@ -548,7 +570,7 @@ def run_liftover_single_annotation(input_json):
                         out_dir,
                     )
                     distance_3p = check_nearby_ref(
-                        chrom,
+                        lift_chrom,
                         start_3p,
                         end_3p,
                         family,
@@ -557,9 +579,9 @@ def run_liftover_single_annotation(input_json):
                         out_dir,
                     )
                     if distance_5p is not None:
-                        lift_entry["distance_5p_flank_ref_te"] = str(distance_5p)
+                        lift_entry["distance_5p_flank_ref_te"] = distance_5p
                     if distance_3p is not None:
-                        lift_entry["distance_3p_flank_ref_te"] = str(distance_3p)
+                        lift_entry["distance_3p_flank_ref_te"] = distance_3p
 
                     # if the overlap between flank alignments is greater than 50bp, don't report
                     if lift_gap < -flank_overlap_max:
@@ -597,7 +619,7 @@ def run_liftover_single_annotation(input_json):
                             if lift_gap < 0:
                                 lift_entry["TSD_length"] = -lift_gap
                                 lift_entry["TSD_sequence"] = get_ref_seq(
-                                    fasta2, chrom, lift_start, lift_end, out_dir
+                                    fasta2, lift_chrom, lift_start, lift_end, out_dir
                                 )
 
                             num_hits = num_hits + 1
@@ -702,12 +724,12 @@ def run_liftover_single_annotation(input_json):
             "5p_flank_mapping_quality": None,
             "5p_flank_num_residue_matches": None,
             "5p_flank_alignment_block_length": None,
-            "5p_flank_blast_identity": None,
+            "5p_flank_sequence_identity": None,
             "3p_flank_align_coord": None,
             "3p_flank_mapping_quality": None,
             "3p_flank_num_residue_matches": None,
             "3p_flank_alignment_block_length": None,
-            "3p_flank_blast_identity": None,
+            "3p_flank_sequence_identity": None,
             "distance_5p_flank_ref_te": None,
             "distance_3p_flank_ref_te": None,
             "comment": "flank alignments not nearby each other / only one flank aligned",
@@ -772,12 +794,12 @@ def run_liftover_single_annotation(input_json):
                 lift_entry["5p_flank_alignment_block_length"] = align_5p_flank_qc[
                     "alignment_block_length"
                 ]
-                lift_entry["5p_flank_blast_identity"] = align_5p_flank_qc[
-                    "blast_identity"
+                lift_entry["5p_flank_sequence_identity"] = align_5p_flank_qc[
+                    "sequence_identity"
                 ]
 
                 distance_5p = check_nearby_ref(
-                    chrom,
+                    flank_chrom,
                     flank_start,
                     flank_end,
                     family,
@@ -785,21 +807,19 @@ def run_liftover_single_annotation(input_json):
                     bed2,
                     out_dir,
                 )
-
+                lift_entry["distance_5p_flank_ref_te"] = distance_5p
                 # if distance between flank and ref is small, report as ref, otherwise as non-ref
-                if distance_5p is not None:
-                    lift_entry["distance_5p_flank_ref_te"] = distance_5p
-                    if abs(distance_5p) <= 5:
-                        lift_entry["type"] = "reference"
-                        lift_entry[
-                            "comment"
-                        ] = "only one flank aligned, flank alignment adjacent to reference TE"
-                    else:
-                        lift_entry["type"] = "non-reference"
-                        lift_entry[
-                            "comment"
-                        ] = "only one flank aligned, flank alignment not adjacent to reference TE"
-                        num_hits = 1
+                if distance_5p is not None and abs(distance_5p) <= 5:
+                    lift_entry["type"] = "reference"
+                    lift_entry[
+                        "comment"
+                    ] = "only one flank aligned, flank alignment adjacent to reference TE"
+                else:
+                    lift_entry["type"] = "non-reference"
+                    lift_entry[
+                        "comment"
+                    ] = "only one flank aligned, flank alignment not adjacent to reference TE"
+                    num_hits = 1
 
             elif len(align_5p_coords) == 0 and len(align_3p_coords) == 1:
                 with open(align_3p_flank_bed, "r") as input:
@@ -835,12 +855,12 @@ def run_liftover_single_annotation(input_json):
                 lift_entry["5p_flank_alignment_block_length"] = align_3p_flank_qc[
                     "alignment_block_length"
                 ]
-                lift_entry["5p_flank_blast_identity"] = align_3p_flank_qc[
-                    "blast_identity"
+                lift_entry["5p_flank_sequence_identity"] = align_3p_flank_qc[
+                    "sequence_identity"
                 ]
 
                 distance_3p = check_nearby_ref(
-                    chrom,
+                    flank_chrom,
                     flank_start,
                     flank_end,
                     family,
@@ -848,15 +868,19 @@ def run_liftover_single_annotation(input_json):
                     bed2,
                     out_dir,
                 )
-
+                lift_entry["distance_3p_flank_ref_te"] = distance_3p
                 # if distance between flank and ref is small, report as ref, otherwise as non-ref
-                if distance_3p is not None:
-                    lift_entry["distance_3p_flank_ref_te"] = distance_3p
-                    if abs(distance_3p) <= 10:
-                        lift_entry["type"] = "reference"
-                    else:
-                        lift_entry["type"] = "non-reference"
-                        num_hits = 1
+                if distance_3p is not None and abs(distance_3p) <= 5:
+                    lift_entry["type"] = "reference"
+                    lift_entry[
+                        "comment"
+                    ] = "only one flank aligned, flank alignment adjacent to reference TE"
+                else:
+                    lift_entry["type"] = "non-reference"
+                    lift_entry[
+                        "comment"
+                    ] = "only one flank aligned, flank alignment not adjacent to reference TE"
+                    num_hits = 1
 
         lift_entries["report"] = lift_entry
     lift_entries["num_hits"] = num_hits
@@ -915,6 +939,8 @@ def liftover(
     threads,
     keep_files,
     single_flank,
+    contig_match,
+    telr_mode,
 ):
     """
     Core function to do annotation liftover from one assembly/contig to another
@@ -962,6 +988,8 @@ def liftover(
                 "bed2": bed2,
                 "preset": preset,
                 "single_flank": single_flank,
+                "contig_match": contig_match,
+                "telr_mode": telr_mode,
             }
             liftover_input = input_json_dir + "/" + prefix + "_input.json"
             with open(liftover_input, "w") as output:
@@ -1084,6 +1112,8 @@ def main():
         threads=args.threads,
         keep_files=args.keep_files,
         single_flank=args.single_flank,
+        contig_match=args.contig_match,
+        telr_mode=args.telr_mode,
     )
 
 
