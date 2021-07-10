@@ -395,8 +395,8 @@ def run_liftover_single_annotation(input_json):
 
     prefix = "_".join([chrom, str(start), str(end), family])
     lift_entries["ID"] = prefix
-    ref_coord = chrom + ":" + str(start) + "-" + str(end)
-    lift_entries["ref_coord"] = ref_coord
+    genome1_coord = chrom + ":" + str(start) + "-" + str(end)
+    lift_entries["genome1_coord"] = genome1_coord
 
     te_length = int(end) - int(start)
     lift_entries["te_length"] = te_length
@@ -422,7 +422,7 @@ def run_liftover_single_annotation(input_json):
     else:
         filter_chrom = None
 
-    # map 5 prime flanks to ref2
+    # map 5 prime flanks to genome2
     align_5p_flank_paf = out_dir + "/" + prefix_5p + ".paf"
     align_flank(fa_5p, fasta2, align_5p_flank_paf, preset, num_secondary)
     align_5p_flank_qcs = dict()
@@ -435,7 +435,7 @@ def run_liftover_single_annotation(input_json):
         align_5p_flank_paf, align_5p_flank_bed, filter=filter_chrom
     )  # only keep alignments on the same chromosome as original TE
 
-    # map 3 prime flanks to ref2
+    # map 3 prime flanks to genome2
     align_3p_flank_paf = out_dir + "/" + prefix_3p + ".paf"
     align_flank(fa_3p, fasta2, align_3p_flank_paf, preset, num_secondary)
     align_3p_flank_qcs = dict()
@@ -484,15 +484,15 @@ def run_liftover_single_annotation(input_json):
             for line in input:
                 entry = line.replace("\n", "").split("\t")
 
-                chrom_ref2_5p = entry[0]
-                chrom_ref2_3p = entry[6]
+                chrom_genome2_5p = entry[0]
+                chrom_genome2_3p = entry[6]
                 flank_strand = entry[5]
                 mapp_quality_5p = int(entry[4])
                 mapp_quality_3p = int(entry[10])
                 if (
-                    chrom_ref2_5p == chrom_ref2_3p and chrom_ref2_3p != "."
+                    chrom_genome2_5p == chrom_genome2_3p and chrom_genome2_3p != "."
                 ):  # to make sure the entry exists
-                    lift_chrom = chrom_ref2_5p
+                    lift_chrom = chrom_genome2_5p
                     # get flank qc
                     align_5p_flank_id = "_".join(
                         [entry[3], entry[0], entry[1], entry[2]]
@@ -518,10 +518,10 @@ def run_liftover_single_annotation(input_json):
                         lift_strand = "-"
                     # report the flanking sequence alignments
                     align_5p_coord = (
-                        chrom_ref2_5p + ":" + str(start_5p) + "-" + str(end_5p)
+                        chrom_genome2_5p + ":" + str(start_5p) + "-" + str(end_5p)
                     )
                     align_3p_coord = (
-                        chrom_ref2_3p + ":" + str(start_3p) + "-" + str(end_3p)
+                        chrom_genome2_3p + ":" + str(start_3p) + "-" + str(end_3p)
                     )
                     lift_entry = {
                         "type": None,
@@ -606,12 +606,12 @@ def run_liftover_single_annotation(input_json):
                             lift_entry["type"] = "reference"
                             lift_entry[
                                 "comment"
-                            ] = "flanks overlap/gap size within threshold, include ref2 TE in between"
+                            ] = "overlap/gap size between 3p and 5p flanks within threshold, include genome2 TE in between"
                         else:
                             lift_entry["type"] = "non-reference"
                             lift_entry[
                                 "comment"
-                            ] = "flanks overlap/gap size within threshold"
+                            ] = "overlap/gap size between 3p and 5p flanks within threshold"
                             # get TSD length and sequence
                             if lift_gap == 0:
                                 lift_entry["TSD_length"] = 0
@@ -641,12 +641,12 @@ def run_liftover_single_annotation(input_json):
                                 lift_entry["type"] = "reference"
                                 lift_entry[
                                     "comment"
-                                ] = "flanks gap size less than half of TE annotation, include ref2 TE in between"
+                                ] = "flanks gap size less than half of TE annotation, include genome2 TE in between"
                             else:
                                 lift_entry["type"] = "non-reference"
                                 lift_entry[
                                     "comment"
-                                ] = "flanks gap size exceeds threshold but less than half of TE annotation, no ref2 TE in between"
+                                ] = "flanks gap size exceeds threshold but less than half of TE annotation, no genome2 TE in between"
                                 num_hits = num_hits + 1
                             lift_entries["report"].append(lift_entry)
                             reported = True
@@ -663,11 +663,11 @@ def run_liftover_single_annotation(input_json):
                             ):
                                 lift_entry[
                                     "comment"
-                                ] = "flanks gap size greater than half of TE annotation, include ref2 TE in between"  # TODO: check same family?
+                                ] = "flanks gap size greater than half of TE annotation, include genome2 TE in between"  # TODO: check same family?
                             else:
                                 lift_entry[
                                     "comment"
-                                ] = "flanks gap size greater than half of TE annotation, no ref2 TE in between"
+                                ] = "flanks gap size greater than half of TE annotation, no genome2 TE in between"
                             lift_entries["report"].append(lift_entry)
                             reported = True
                         else:
@@ -946,14 +946,14 @@ def liftover(
     Core function to do annotation liftover from one assembly/contig to another
     """
 
-    # generate ref1 index file if not present
-    ref1_index = fasta1 + ".fai"
-    if not check_file(ref1_index):
+    # generate genome1 index file if not present
+    genome1_index = fasta1 + ".fai"
+    if not check_file(genome1_index):
         build_index(fasta1)
 
-    # generate ref2 index file if not present
-    ref2_index = fasta2 + ".fai"
-    if not check_file(ref2_index):
+    # generate genome2 index file if not present
+    genome2_index = fasta2 + ".fai"
+    if not check_file(genome2_index):
         build_index(fasta2)
 
     # loop through TE annotations, prepare data for parallel liftover jobs
@@ -1092,7 +1092,7 @@ def liftover(
         shutil.rmtree(input_json_dir)
 
     print("Liftover finished!")
-    return json_report, bed_report, summary_report
+    return json_report
 
 
 def main():
