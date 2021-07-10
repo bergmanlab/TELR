@@ -89,7 +89,7 @@ def generate_output(
             "tsd_length": None,
             "tsd_sequence": None,
             "te_sequence": None,
-            "gt": None,
+            "genotype": None,
             "num_sv_reads": None,
             "num_ref_reads": None,
             "allele_frequency": None,
@@ -107,7 +107,7 @@ def generate_output(
             "tsd_length": None,
             "tsd_sequence": None,
             "te_sequence": None,
-            "gt": None,
+            "genotype": None,
             "num_sv_reads": None,
             "num_ref_reads": None,
             "allele_frequency": None,
@@ -147,7 +147,8 @@ def generate_output(
             )
             insertion_report["strand"] = report_info["strand"]
             insertion_report["tsd_length"] = report_info["TSD_length"]
-            insertion_report["tsd_sequence"] = report_info["TSD_sequence"]
+            if report_info["TSD_sequence"]:
+                insertion_report["tsd_sequence"] = report_info["TSD_sequence"].upper()
 
             contig_id = ins_name.split(":")[0]
             contig_ids.add(contig_id)
@@ -160,7 +161,7 @@ def generate_output(
                     te_seqs_dict[ins_name].reverse_complement()
                 )
 
-            insertion_report["gt"] = sniffles_info[contig_id]["gt"]
+            insertion_report["genotype"] = sniffles_info[contig_id]["gt"]
             insertion_report["num_sv_reads"] = sniffles_info[contig_id]["alt_count"]
             insertion_report["num_ref_reads"] = sniffles_info[contig_id]["ref_count"]
             insertion_report["allele_frequency"] = te_freq_dict[contig_id]
@@ -291,7 +292,7 @@ def write_vcf(input, ref, ref_info, out_vcf):
         df["QUAL"] = "."
         df["FILTER"] = "PASS"
         df["FORMAT"] = "GT:DR:DV"
-        df["gt"] = df["gt"] + ":" + df["num_sv_reads"] + ":" + df["num_ref_reads"]
+        df["gt"] = df["genotype"] + ":" + df["num_sv_reads"] + ":" + df["num_ref_reads"]
         df["INFO"] = df.apply(
             lambda x: "SVTYPE=INS"
             + ";END="
