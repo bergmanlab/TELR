@@ -179,23 +179,30 @@ def get_ref_seq(ref, chrom, start, end, out_dir):
     return subseq
 
 
-def get_ref_fa(ref, chrom, start, end, prefix, out_dir):
+def extract_genome_seqs(
+    ref, ref_size_dict, chrom, start, end, prefix, out_dir, offset=50
+):
     """
     Extract subsequence from fasta based on coordinates
     """
-    prefix_bed = "_".join([chrom, str(start), str(end)])
-    bed = os.path.join(out_dir, prefix_bed + ".fa")
-    subject = os.path.join(out_dir, prefix + ".fa")
-    with open(bed, "w") as output:
-        out_line = "\t".join([chrom, str(start), str(end)])
-        output.write(out_line + "\n")
-    with open(subject, "w") as output:
-        subprocess.call(
-            ["bedtools", "getfasta", "-fi", ref, "-bed", bed],
-            stdout=output,
-        )
-    os.remove(bed)
-    return subject
+    ref_size = ref_size_dict[chrom]
+
+    if end <= offset or start >= ref_size - offset:
+        return None
+    else:
+        prefix_bed = "_".join([chrom, str(start), str(end)])
+        bed = os.path.join(out_dir, prefix_bed + ".fa")
+        subject = os.path.join(out_dir, prefix + ".fa")
+        with open(bed, "w") as output:
+            out_line = "\t".join([chrom, str(start), str(end)])
+            output.write(out_line + "\n")
+        with open(subject, "w") as output:
+            subprocess.call(
+                ["bedtools", "getfasta", "-fi", ref, "-bed", bed],
+                stdout=output,
+            )
+        os.remove(bed)
+        return subject
 
 
 def paf_to_bed(paf, bed, filter=None):
@@ -366,6 +373,16 @@ def get_paf_info(paf):
     return paf_info
 
 
+def get_genome_size(fasta):
+    genome_index = fasta + ".fai"
+    genome_size_dict = dict()
+    with open(genome_index, "r") as input:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            genome_size_dict[entry[0]] = int(entry[1])
+    return genome_size_dict
+
+
 def run_liftover_single_annotation(input_json):
     """
     Main liftover function for a single annotation
@@ -401,16 +418,35 @@ def run_liftover_single_annotation(input_json):
     te_length = int(end) - int(start)
     lift_entries["te_length"] = te_length
 
+    # get genome 1 size
+    genome1_size_dict = get_genome_size(fasta1)
+
     # extract 5 prime flank
     start_5p_flank = int(start) - flank_len + 1
     end_5p_flank = int(start)
     prefix_5p = prefix + "_5p"
-    fa_5p = get_ref_fa(fasta1, chrom, start_5p_flank, end_5p_flank, prefix_5p, out_dir)
+    fa_5p = extract_genome_seqs(
+        fasta1,
+        genome1_size_dict,
+        chrom,
+        start_5p_flank,
+        end_5p_flank,
+        prefix_5p,
+        out_dir,
+    )
     # extract 3 prime flank
     start_3p_flank = int(end) + 1
     end_3p_flank = int(end) + 1 + flank_len
     prefix_3p = prefix + "_3p"
-    fa_3p = get_ref_fa(fasta1, chrom, start_3p_flank, end_3p_flank, prefix_3p, out_dir)
+    fa_3p = extract_genome_seqs(
+        fasta1,
+        genome1_size_dict,
+        chrom,
+        start_3p_flank,
+        end_3p_flank,
+        prefix_3p,
+        out_dir,
+    )
 
     # intiate minimap2 parameters
     num_secondary = 10  # save 10 secondary alignments
@@ -423,35 +459,35 @@ def run_liftover_single_annotation(input_json):
         filter_chrom = None
 
     # map 5 prime flanks to genome2
-    align_5p_flank_paf = out_dir + "/" + prefix_5p + ".paf"
-    align_flank(fa_5p, fasta2, align_5p_flank_paf, preset, num_secondary)
-    align_5p_flank_qcs = dict()
-    if check_exist(align_5p_flank_paf):
-        align_5p_flank_qcs = get_paf_info(align_5p_flank_paf)
+    if fa_5p:
+        align_5p_flank_paf = out_dir + "/" + prefix_5p + ".paf"
+        align_flank(fa_5p, fasta2, align_5p_flank_paf, preset, num_secondary)
+        align_5p_flank_qcs = dict()
+        if check_exist(align_5p_flank_paf):
+            align_5p_flank_qcs = get_paf_info(align_5p_flank_paf)
 
-    align_5p_flank_bed = out_dir + "/" + prefix_5p + ".bed"
+        align_5p_flank_bed = out_dir + "/" + prefix_5p + ".bed"
 
-    paf_to_bed(
-        align_5p_flank_paf, align_5p_flank_bed, filter=filter_chrom
-    )  # only keep alignments on the same chromosome as original TE
+        paf_to_bed(align_5p_flank_paf, align_5p_flank_bed, filter=filter_chrom)
+        os.remove(align_5p_flank_paf)
+        os.remove(fa_5p)
+    else:
+        align_5p_flank_bed = None
 
     # map 3 prime flanks to genome2
-    align_3p_flank_paf = out_dir + "/" + prefix_3p + ".paf"
-    align_flank(fa_3p, fasta2, align_3p_flank_paf, preset, num_secondary)
-    align_3p_flank_qcs = dict()
-    if check_exist(align_3p_flank_paf):
-        align_3p_flank_qcs = get_paf_info(align_3p_flank_paf)
+    if fa_3p:
+        align_3p_flank_paf = out_dir + "/" + prefix_3p + ".paf"
+        align_flank(fa_3p, fasta2, align_3p_flank_paf, preset, num_secondary)
+        align_3p_flank_qcs = dict()
+        if check_exist(align_3p_flank_paf):
+            align_3p_flank_qcs = get_paf_info(align_3p_flank_paf)
 
-    align_3p_flank_bed = out_dir + "/" + prefix_3p + ".bed"
-    paf_to_bed(
-        align_3p_flank_paf, align_3p_flank_bed, filter=None
-    )  # only keep alignments on the same chromosome as original TE
-
-    # clean intermediate files
-    os.remove(align_5p_flank_paf)
-    os.remove(align_3p_flank_paf)
-    os.remove(fa_5p)
-    os.remove(fa_3p)
+        align_3p_flank_bed = out_dir + "/" + prefix_3p + ".bed"
+        paf_to_bed(align_3p_flank_paf, align_3p_flank_bed, filter=None)
+        os.remove(align_3p_flank_paf)
+        os.remove(fa_3p)
+    else:
+        align_3p_flank_bed = None
 
     # find closest entries between 3 prime and 5 prime flank alignments, require two alignments to be on the same strand, also report distance
     overlap = out_dir + "/" + prefix + ".overlap"
