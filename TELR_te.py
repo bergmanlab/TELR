@@ -8,7 +8,9 @@ import time
 import statistics
 from multiprocessing import Pool
 from TELR_utility import mkdir, create_loci_set, format_time
-from TELR_liftover import annotation_liftover
+
+# from TELR_liftover import annotation_liftover
+from TELR_liftover import liftover
 from TELR_assembly import prep_assembly
 
 
@@ -190,7 +192,7 @@ def annotate_contig(
                     [entry[0], entry[1], entry[2], entry[3], entry[4], entry[5]]
                 )
                 output.write(out_line + "\n")
-    # sort
+    # sort # TODO: package this part, hide variables
     te2contig_filter_tmp_sort_bed = (
         out + "/" + sample_name + ".te2contig_filter.tmp.sort.bed"
     )
@@ -213,13 +215,38 @@ def annotate_contig(
                 )
 
     # merge
-    contig_te_annotation = out + "/" + sample_name + ".te2contig_filter.bed"
+    contig_te_annotation_tmp = out + "/" + sample_name + ".te2contig_filter.bed.tmp"
     command = (
         'bedtools merge -d 10000 -c 4,6 -o distinct,distinct -delim "|" -i '
         + te2contig_filter_tmp_sort_bed
     )
-    with open(contig_te_annotation, "w") as output:
+    with open(contig_te_annotation_tmp, "w") as output:
         subprocess.call(command, shell=True, stdout=output)
+
+    contig_te_annotation = out + "/" + sample_name + ".te2contig_filter.bed"
+    with open(contig_te_annotation_tmp, "r") as input, open(
+        contig_te_annotation, "w"
+    ) as output:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            contig_name = entry[0]
+            contig_te_start = entry[1]
+            contig_te_end = entry[2]
+            contig_te_family = entry[3]
+            contig_te_strand = entry[4]
+            if contig_te_strand != "+" and contig_te_strand != "-":
+                contig_te_strand = "."
+            out_line = "\t".join(
+                [
+                    contig_name,
+                    contig_te_start,
+                    contig_te_end,
+                    contig_te_family,
+                    ".",
+                    contig_te_strand,
+                ]
+            )
+            output.write(out_line + "\n")
 
     # seq_mm2_overlap_merge_loci = create_loci_set(contig_te_annotation)
 
@@ -328,11 +355,20 @@ def annotate_contig(
             for line in input:
                 entry = line.replace("\n", "").split("\t")
                 contig_name = entry[0]
-                start = entry[1]
-                end = entry[2]
-                family = contig_rm_family_dict[contig_name]
-                strand = entry[4]
-                out_line = "\t".join([contig_name, start, end, family, strand])
+                contig_te_start = entry[1]
+                contig_te_end = entry[2]
+                contig_te_family = contig_rm_family_dict[contig_name]
+                contig_te_strand = entry[5]
+                out_line = "\t".join(
+                    [
+                        contig_name,
+                        contig_te_start,
+                        contig_te_end,
+                        contig_te_family,
+                        ".",
+                        contig_te_strand,
+                    ]
+                )
                 output.write(out_line + "\n")
 
         contig_te_annotation = contig_te_annotation_new
@@ -354,6 +390,103 @@ def seq2contig(seq, contig, out):
         subprocess.call(
             ["minimap2", "-cx", "map-pb", "--secondary=no", contig, seq], stdout=output
         )  # only retain primary alignment
+
+
+def repeatmask(ref, library, outdir, thread):
+    mkdir(outdir)
+    try:
+        subprocess.call(
+            [
+                "RepeatMasker",
+                "-dir",
+                outdir,
+                "-gff",
+                "-s",
+                "-nolow",
+                "-no_is",
+                "-e",
+                "ncbi",
+                "-lib",
+                library,
+                "-pa",
+                str(thread),
+                ref,
+            ]
+        )
+        ref_rm = os.path.join(outdir, os.path.basename(ref) + ".masked")
+        gff = os.path.join(outdir, os.path.basename(ref) + ".out.gff")
+        gff3 = os.path.join(outdir, os.path.basename(ref) + ".out.gff3")
+        if not os.path.isfile(ref_rm):
+            ref_rm_out = os.path.join(outdir, os.path.basename(ref) + ".out")
+            with open(ref_rm_out, "r") as input:
+                for line in input:
+                    if "There were no repetitive sequences detected" in line:
+                        print("No repetitive sequences detected")
+                        ref_rm = ref
+                        gff = None
+                        gff3 = None
+                    else:
+                        raise Exception("Repeatmasking failed, exiting...")
+        else:
+            parse_rm_out(gff, gff3)
+            open(ref_rm, "r")
+    except Exception as e:
+        print(e)
+        print("Repeatmasking failed, exiting...")
+        sys.exit(1)
+    return ref_rm, gff3
+
+
+def gff3tobed(gff, bed):
+    # check GFF3 format
+    with open(gff, "r") as input:
+        for line in input:
+            if "#" not in line:
+                if "Target=" not in line:
+                    print(
+                        "Incorrect GFF3 format, please check README for expected format, exiting..."
+                    )
+                    logging.exception(
+                        "Incorrect GFF3 format, please check README for expected format, exiting..."
+                    )
+                    sys.exit(1)
+                break
+    with open(bed, "w") as output, open(gff, "r") as input:
+        for line in input:
+            if "#" not in line:
+                entry = line.replace("\n", "").split("\t")
+                info = entry[8].split(";")
+                for item in info:
+                    if "Target=" in item:
+                        family = item.replace("Target=", "")
+                out_line = "\t".join(
+                    [entry[0], str(int(entry[3]) - 1), entry[4], family, ".", entry[6]]
+                )
+                output.write(out_line + "\n")
+
+
+def parse_rm_out(rm_gff, gff3):
+    with open(gff3, "w") as output, open(rm_gff, "r") as input:
+        for line in input:
+            if "RepeatMasker" in line:
+                entry = line.replace("\n", "").split("\t")
+                family = entry[8].split(" ")[1]
+                family = re.sub('"Motif:', "", family)
+                family = re.sub('"', "", family)
+                out_line = "\t".join(
+                    [
+                        entry[0],
+                        "RepeatMasker",
+                        "dispersed_repeat",
+                        entry[3],
+                        entry[4],
+                        entry[5],
+                        entry[6],
+                        entry[7],
+                        "Target=" + family,
+                    ]
+                )
+                output.write(out_line + "\n")
 
 
 def realignment(args):
@@ -569,44 +702,46 @@ def get_median_cov(bam, chr, start, end):
 
 
 def find_te(
-    contig_te_annotation,
-    te_freq,
-    merge_contigs,
-    ref,
+    contigs_fa,
+    reference,
+    contig_te_bed,
+    ref_te_bed,
     out,
-    sample_name,
     gap,
     overlap,
-    presets,
-    loci_eval,
+    flank_len,
+    single_flank,
+    contig_match,
+    keep_files,
+    thread,
 ):
     """
     Identify non-reference TE insertions in the reference genome using assembled contigs
     """
-    # if presets == "ont":
-    #     presets = "map-ont"
-    # else:
-    #     presets = "map-pb"
-
+    # default parameters
     presets = "asm10"
 
     # lift over
     logging.info("Map contigs to reference...")
-    report_meta, report_out_bed = annotation_liftover(
-        fasta1=merge_contigs,
-        fasta2=ref,
-        bed=contig_te_annotation,
-        sample_name=sample_name,
-        out_dir=out,
+
+    json_report = liftover(
+        fasta1=contigs_fa,
+        fasta2=reference,
+        bed1=contig_te_bed,
+        bed2=ref_te_bed,
         preset=presets,
-        overlap=overlap,
-        gap=gap,
-        flank_len=500,
-        freq=te_freq,
-        loci_eval=loci_eval,
+        flank_len=flank_len,
+        flank_gap_max=gap,
+        flank_overlap_max=overlap,
+        out=out,
+        threads=thread,
+        keep_files=keep_files,
+        single_flank=single_flank,
+        contig_match=contig_match,
+        telr_mode=True,
     )
 
-    return report_meta, report_out_bed
+    return json_report
 
 
 def create_fa(header, seq, out):

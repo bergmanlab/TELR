@@ -429,9 +429,9 @@ def run_eval(args):
     eval_report = {
         "contig_name": contig_name,
         "contig_length": contig_len,
-        "align_contig_start": None,
-        "align_contig_end": None,
-        "align_contig_size": None,
+        "contig_te_plus_flank_start": None,
+        "contig_te_plus_flank_end": None,
+        "contig_te_plus_flank_size": None,
         "num_contig_ref_hits": None,
         "ref_aligned_chrom": None,
         "ref_aligned_start": None,
@@ -474,9 +474,9 @@ def run_eval(args):
     # extract subsequences from contigs including flanks
     (
         contig_fa,
-        eval_report["align_contig_start"],
-        eval_report["align_contig_end"],
-        eval_report["align_contig_size"],
+        eval_report["contig_te_plus_flank_start"],
+        eval_report["contig_te_plus_flank_end"],
+        eval_report["contig_te_plus_flank_size"],
     ) = extract_contig_seqs(
         contigs_fa,
         contig_name,

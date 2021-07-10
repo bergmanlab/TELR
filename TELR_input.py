@@ -88,6 +88,24 @@ def get_args():
         required=False,
     )
     optional.add_argument(
+        "--flank_len",
+        type=int,
+        help="flanking sequence length (default = '500bp')",
+        required=False,
+    )
+    optional.add_argument(
+        "--single_flank",
+        action="store_true",
+        help="If provided then allow single flank support (default: requires both flanks to be aligned to reference genome)",
+        required=False,
+    )
+    optional.add_argument(
+        "--contig_match",
+        action="store_true",
+        help="If provided then require the contig name to match before and after annotation liftover (default: no restriction on contig name matching)",
+        required=False,
+    )
+    optional.add_argument(
         "--repeatmasker_family",
         action='store_true',
         help="If provided then repeatmasker will be used to annotate TE families in the assembled contigs (default: use minimap2 for contig TE annotation)",
@@ -139,6 +157,9 @@ def get_args():
 
     if args.thread is None:
         args.thread = 1
+
+    if args.flank_len is None:
+        args.flank_len = 500
 
     if args.polish is None:
         args.polish = 1

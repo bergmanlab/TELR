@@ -9,7 +9,7 @@ from TELR_input import get_args, parse_input
 from TELR_alignment import alignment, sort_index_bam
 from TELR_sv import detect_sv, vcf_parse_filter
 from TELR_assembly import local_assembly
-from TELR_te import annotate_contig, find_te, get_af
+from TELR_te import annotate_contig, find_te, get_af, repeatmask, gff3tobed
 from TELR_output import generate_output
 from TELR_utility import format_time, mkdir
 
@@ -48,7 +48,14 @@ def main():
     bam = os.path.join(tmp_dir, sample_name + "_sort.bam")
     if not skip_alignment:
         alignment(
-            bam, fasta, reference, tmp_dir, sample_name, args.thread, args.method, args.presets
+            bam,
+            fasta,
+            reference,
+            tmp_dir,
+            sample_name,
+            args.thread,
+            args.method,
+            args.presets,
         )
     else:
         sort_index_bam(reads, bam, args.thread)
@@ -90,12 +97,7 @@ def main():
     )
 
     # Annotate contig for TE region
-    (
-        contig_te_annotation,
-        te_freq,
-        te_fa,
-        merge_contigs,
-    ) = annotate_contig(
+    contig_te_annotation, te_freq, te_fa, merge_contigs = annotate_contig(
         contig_dir,
         library,
         vcf_parsed,
@@ -120,30 +122,48 @@ def main():
         args.thread,
     )
 
+    # repeatmask reference genome using custom TE library
+    repeatmask_ref_dir = os.path.join(tmp_dir, "ref_repeatmask")
+    ref_masked, te_gff = repeatmask(
+        ref=reference,
+        library=library,
+        outdir=repeatmask_ref_dir,
+        thread=args.thread,
+    )
+    ref_te_bed = os.path.join(tmp_dir, os.path.basename(reference) + ".te.bed")
+    if te_gff is not None:
+        gff3tobed(te_gff, ref_te_bed)
+    else:
+        ref_te_bed = None
+
     # find TEs
-    report_meta, report_out_bed = find_te(
-        contig_te_annotation,
-        te_freq,
-        merge_contigs,
-        reference,
-        tmp_dir,
-        sample_name,
-        args.gap,
-        args.overlap,
-        args.presets,
-        loci_eval,
+    liftover_json = find_te(
+        reference=reference,
+        contigs_fa=merge_contigs,
+        contig_te_bed=contig_te_annotation,
+        ref_te_bed=ref_te_bed,
+        out=tmp_dir,
+        gap=args.gap,
+        overlap=args.overlap,
+        flank_len=args.flank_len,
+        single_flank=args.single_flank,
+        contig_match=args.contig_match,
+        keep_files=args.keep_files,
+        thread=args.thread,
     )
 
     # generate output files
-    if report_meta:
+    if liftover_json:
         generate_output(
-            report_meta,
-            report_out_bed,
-            te_fa,
-            vcf_parsed,
-            args.out,
-            sample_name,
-            reference,
+            liftover_report_path=liftover_json,
+            te_freq_dict=te_freq,
+            te_fa=te_fa,
+            vcf_parsed=vcf_parsed,
+            contig_te_annotation=contig_te_annotation,
+            contig_fa=merge_contigs,
+            out=args.out,
+            sample_name=sample_name,
+            ref=reference,
         )
     else:
         print("No non-reference TE insertion found")
