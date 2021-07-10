@@ -1099,7 +1099,7 @@ def main():
     args = get_args(program_version=__version__)
 
     # TODO: create soft link for fa1 and fa2?
-    json_report, bed_report, summary_report = liftover(
+    json_report = liftover(
         fasta1=args.fasta1,
         fasta2=args.fasta2,
         bed1=args.bed1,
