@@ -61,6 +61,7 @@ def get_args():
         print(e)
         sys.exit(1)
 
+    # TODO: check if overlap and gap is positive
     if args.overlap is None:
         args.overlap = 50
 
@@ -114,15 +115,12 @@ def annotation_liftover(
     overlap=50,
     gap=50,
     flank_len=500,
-    family_rm=None,
     freq=None,
 ):
     """
     Lift variant annotation from one genome to another.
     """
     print("Starting lift over from TELR contigs to reference...")
-
-    
 
     # for each contig TE annotation, extract flanking sequence, map to reference genome, check the distance between mapped flanks
 
@@ -170,6 +168,8 @@ def annotation_liftover(
     # read family, strand and TE length info into dict
     te_len_dict = dict()
     contig_ins_dict = dict()
+    family_dict = dict()
+    strand_dict = dict()
     with open(ins_bed, "r") as input:
         for line in input:
             entry = line.replace("\n", "").split("\t")
@@ -177,6 +177,11 @@ def annotation_liftover(
             te_len = int(entry[2]) - int(entry[1])
             te_len_dict[ins_name] = te_len
             contig_ins_dict[entry[0]] = ins_name
+            family_dict[ins_name] = entry[3]
+            if entry[4] != "+" and entry[4] != "-":
+                strand_dict[ins_name] = "."
+            else:
+                strand_dict[ins_name] = entry[4]
 
     if freq is not None:
         freq_dict = dict()
@@ -184,31 +189,6 @@ def annotation_liftover(
             if item in contig_ins_dict.keys():
                 ins_name = contig_ins_dict[item]
                 freq_dict[ins_name] = freq[item]
-
-    if family_rm is not None:
-        family_dict = dict()
-        strand_dict = dict()
-        with open(family_rm, "r") as input:
-            for line in input:
-                entry = line.replace("\n", "").split("\t")
-                ins_name = contig_ins_dict[entry[0]]
-                family_dict[ins_name] = entry[3]
-                if entry[4] != "+" and entry[4] != "-":
-                    strand_dict[ins_name] = "."
-                else:
-                    strand_dict[ins_name] = entry[4]
-    else:
-        family_dict = dict()
-        strand_dict = dict()
-        with open(ins_bed, "r") as input:
-            for line in input:
-                entry = line.replace("\n", "").split("\t")
-                ins_name = entry[0] + ":" + entry[1] + "-" + entry[2]
-                family_dict[ins_name] = entry[3]
-                if entry[4] != "+" and entry[4] != "-":
-                    strand_dict[ins_name] = "."
-                else:
-                    strand_dict[ins_name] = entry[4]
 
     # read flanking info into dict
     flank_side_dict = dict()  # used later for flanking sequence extraction
