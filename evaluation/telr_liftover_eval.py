@@ -89,7 +89,7 @@ def main():
         exclude_families=args.exclude_families,
     )
 
-    # find and read VCF files from TELR runs
+    # find and read BED files from TELR runs
     pattern = "/**/*telr.bed"  # TODO: update here
     pred_file_list = glob.glob(args.telr_out_dir + pattern, recursive=True)
     print(pred_file_list)

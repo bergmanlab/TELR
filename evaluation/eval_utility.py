@@ -4,6 +4,11 @@ import subprocess
 from datetime import datetime, timedelta
 
 
+def string2set(string, delimiter="|"):
+    string_set = set(string.split(delimiter))
+    return string_set
+
+
 def filter_family_bed(bed_in, family_filter, bed_out, method):
     """
     Filter BED file by including or excluding given TE families
@@ -11,12 +16,13 @@ def filter_family_bed(bed_in, family_filter, bed_out, method):
     with open(bed_out, "w") as output, open(bed_in, "r") as input:
         for line in input:
             entry = line.replace("\n", "").split("\t")
-            family = entry[3].split("|")[0]
+            family_input = string2set(entry[3], delimiter="|")
+            family_filter = string2set(family_filter, delimiter=",")
             if method == "include":
-                if family in family_filter:
+                if family_input.intersection(family_filter) == family_input:
                     output.write(line)
             else:
-                if family not in family_filter:
+                if len(family_input.intersection(family_filter)) > 0:
                     output.write(line)
 
 

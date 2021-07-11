@@ -411,6 +411,7 @@ def run_liftover_single_annotation(input_json):
     telr_mode = input_values["telr_mode"]
 
     prefix = "_".join([chrom, str(start), str(end), family])
+    prefix = prefix.replace("|", "_")
     lift_entries["ID"] = prefix
     genome1_coord = chrom + ":" + str(start) + "-" + str(end)
     lift_entries["genome1_coord"] = genome1_coord
@@ -563,8 +564,8 @@ def run_liftover_single_annotation(input_json):
                         "type": None,
                         "family": family,
                         "chrom": lift_chrom,
-                        "start": lift_start,
-                        "end": lift_end,
+                        "start": int(lift_start),
+                        "end": int(lift_end),
                         "strand": lift_strand,
                         "gap": lift_gap,
                         "TSD_length": None,
@@ -801,9 +802,9 @@ def run_liftover_single_annotation(input_json):
                     for line in input:
                         entry = line.replace("\n", "").split("\t")
                         flank_chrom = entry[0]
-                        flank_start = entry[1]
-                        flank_end = entry[2]
-                        flank_mapping_quality = entry[4]
+                        flank_start = int(entry[1])
+                        flank_end = int(entry[2])
+                        flank_mapping_quality = int(entry[4])
                         flank_strand = entry[5]
                         align_5p_flank_id = "_".join(
                             [entry[3], entry[0], entry[1], entry[2]]
@@ -820,8 +821,8 @@ def run_liftover_single_annotation(input_json):
                 align_5p_flank_qc = align_5p_flank_qcs[align_5p_flank_id]
 
                 lift_entry["chrom"] = flank_chrom
-                lift_entry["start"] = flank_start
-                lift_entry["end"] = flank_end
+                lift_entry["start"] = int(lift_start)
+                lift_entry["end"] = int(lift_end)
                 lift_entry["mapp_quality_5p"] = flank_mapping_quality
                 lift_entry["strand"] = lift_strand
                 lift_entry["5p_flank_num_residue_matches"] = align_5p_flank_qc[
@@ -862,9 +863,9 @@ def run_liftover_single_annotation(input_json):
                     for line in input:
                         entry = line.replace("\n", "").split("\t")
                         flank_chrom = entry[0]
-                        flank_start = entry[1]
-                        flank_end = entry[2]
-                        flank_mapping_quality = entry[4]
+                        flank_start = int(entry[1])
+                        flank_end = int(entry[2])
+                        flank_mapping_quality = int(entry[4])
                         flank_strand = entry[5]
                         align_3p_flank_id = "_".join(
                             [entry[3], entry[0], entry[1], entry[2]]
@@ -881,8 +882,8 @@ def run_liftover_single_annotation(input_json):
                 align_3p_flank_qc = align_3p_flank_qcs[align_3p_flank_id]
 
                 lift_entry["chrom"] = flank_chrom
-                lift_entry["start"] = flank_start
-                lift_entry["end"] = flank_end
+                lift_entry["start"] = int(lift_start)
+                lift_entry["end"] = int(lift_end)
                 lift_entry["mapp_quality_5p"] = flank_mapping_quality
                 lift_entry["strand"] = lift_strand
                 lift_entry["5p_flank_num_residue_matches"] = align_3p_flank_qc[
@@ -951,9 +952,12 @@ def mkdir(dir):
         print("Creation of the directory %s failed" % dir)
 
 
-def check_file(filename):
-    if os.path.isfile(filename) and os.path.getsize(filename) > 0:
-        return True
+def check_file(file):
+    if file:
+        if os.path.isfile(file) and os.stat(file).st_size != 0:
+            return True
+        else:
+            return False
     else:
         return False
 
@@ -1003,8 +1007,8 @@ def liftover(
         for line in input:
             entry = line.replace("\n", "").split("\t")
             chrom = entry[0]
-            start = entry[1]
-            end = entry[2]
+            start = int(entry[1])
+            end = int(entry[2])
             family = entry[3]
             strand = entry[5]
 
