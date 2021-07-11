@@ -4,8 +4,8 @@ import subprocess
 from datetime import datetime, timedelta
 
 
-def string2set(string, delimiter="|"):
-    string_set = set(string.split(delimiter))
+def string2set(input_string, delimiter):
+    string_set = set(input_string.split(delimiter))
     return string_set
 
 
@@ -16,13 +16,13 @@ def filter_family_bed(bed_in, family_filter, bed_out, method):
     with open(bed_out, "w") as output, open(bed_in, "r") as input:
         for line in input:
             entry = line.replace("\n", "").split("\t")
-            family_input = string2set(entry[3], delimiter="|")
-            family_filter = string2set(family_filter, delimiter=",")
+            family_input_set = string2set(entry[3], delimiter="|")
+            family_filter_set = string2set(family_filter, delimiter=",")
             if method == "include":
-                if family_input.intersection(family_filter) == family_input:
+                if family_input_set.intersection(family_filter_set) == family_input_set:
                     output.write(line)
             else:
-                if len(family_input.intersection(family_filter)) > 0:
+                if len(family_input_set.intersection(family_filter_set)) == 0:
                     output.write(line)
 
 

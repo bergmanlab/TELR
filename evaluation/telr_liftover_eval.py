@@ -5,7 +5,7 @@ import os
 import subprocess
 import glob
 import json
-from eval_utility import filter_annotation, count_lines
+from eval_utility import filter_annotation, count_lines, string2set
 
 
 def get_args():
@@ -40,10 +40,16 @@ def get_args():
         help="TE families to exclude in the analysis (separated by comma)",
         required=False,
     )
+    # parser.add_argument(
+    #     "--exclude_nested",
+    #     action="store_true",
+    #     help="Exclude nested TEs in the analysis",
+    #     required=False,
+    # )
     parser.add_argument(
-        "--exclude_nested",
+        "--relax_mode",
         action="store_true",
-        help="Exclude nested TEs in the analysis",
+        help="A TELR insertion will be considered true positive if any of the predicted families overlap the annotated families",
         required=False,
     )
     parser.add_argument(
@@ -79,6 +85,10 @@ def get_args():
 def main():
     args = get_args()
 
+    # print("family_filter:" + args.include_families)
+    print(args.exclude_families)
+    print(isinstance(args.exclude_families, str))
+
     # filter TE annotation file
     annotation_filtered = os.path.join(args.out, "annotation.filter.bed")
     filter_annotation(
@@ -89,7 +99,7 @@ def main():
         exclude_families=args.exclude_families,
     )
 
-    # find and read BED files from TELR runs
+    # find and read VCF files from TELR runs
     pattern = "/**/*telr.bed"  # TODO: update here
     pred_file_list = glob.glob(args.telr_out_dir + pattern, recursive=True)
     print(pred_file_list)
@@ -136,15 +146,24 @@ def main():
         with open(overlap, "r") as input:
             for line in input:
                 entry = line.replace("\n", "").split("\t")
-                family1 = entry[3]  # telr
-                family2 = entry[9]  # liftover
-                if (
-                    family1 == family2
-                ):  # TODO: think about nested insertions, should I remove them in both set?
-                    te_locus = "_".join([entry[0], entry[1], entry[2], entry[3]])
-                    match_set.add(te_locus)
+                family1 = string2set(entry[3], delimiter="|")  # telr
+                family2 = string2set(entry[9], delimiter="|")  # liftover
+                if args.relax_mode:
+                    if (
+                        len(family1.intersection(family2)) > 0
+                    ):  # TODO: think about nested insertions, should I remove them in both set?
+                        te_locus = "_".join([entry[0], entry[1], entry[2], entry[3]])
+                        match_set.add(te_locus)
+                    else:
+                        print(line)
                 else:
-                    print(line)
+                    if (
+                        family1 == family2
+                    ):  # TODO: think about nested insertions, should I remove them in both set?
+                        te_locus = "_".join([entry[0], entry[1], entry[2], entry[3]])
+                        match_set.add(te_locus)
+                    else:
+                        print(line)
         num_tp = len(match_set)  # TEs predicted by TELR that are true positives
         print("Number of TELR true positives:" + str(num_tp))
 
@@ -199,50 +218,50 @@ def main():
         num_liftover = count_lines(annotation_filtered)
         recall = round(num_tp / num_liftover, 3)
 
-        coverage = prefix.split("_")[0]
-        coverage = int(coverage.replace("x", ""))
-        ploidy = prefix.split("_")[1]
-        data_zygosity = prefix.split("_")[2]
+        # coverage = prefix.split("_")[0]
+        # coverage = int(coverage.replace("x", ""))
+        # ploidy = prefix.split("_")[1]
+        # data_zygosity = prefix.split("_")[2]
 
-        # get af eval
-        n_hom = 0
-        n_het = 0
-        n_unknown = 0
+        # # get af eval
+        # n_hom = 0
+        # n_het = 0
+        # n_unknown = 0
 
-        # document this
-        if ploidy == "diploid":
-            hom_min = 0.75
-            het_min = 0.25
-            het_max = 0.75
-        elif ploidy == "tetraploid":
-            hom_min = 0.9
-            het_min = 0.1
-            het_max = 0.4
-        else:
-            print("unrecognized ploidy, please provide diploid/tetraploid, exiting...")
-            sys.exit(1)
+        # # document this
+        # if ploidy == "diploid":
+        #     hom_min = 0.75
+        #     het_min = 0.25
+        #     het_max = 0.75
+        # elif ploidy == "tetraploid":
+        #     hom_min = 0.9
+        #     het_min = 0.1
+        #     het_max = 0.4
+        # else:
+        #     print("unrecognized ploidy, please provide diploid/tetraploid, exiting...")
+        #     sys.exit(1)
 
-        with open(pred_filtered, "r") as input:  # TODO: mention this in the doc
-            for line in input:
-                entry = line.replace("\n", "").split("\t")
-                af = float(entry[4])
-                if af > hom_min:
-                    n_hom = n_hom + 1
-                elif af > het_min and af < het_max:
-                    n_het = n_het + 1
-                else:
-                    n_unknown = n_unknown + 1
+        # with open(pred_filtered, "r") as input:  # TODO: mention this in the doc
+        #     for line in input:
+        #         entry = line.replace("\n", "").split("\t")
+        #         af = float(entry[4])
+        #         if af > hom_min:
+        #             n_hom = n_hom + 1
+        #         elif af > het_min and af < het_max:
+        #             n_het = n_het + 1
+        #         else:
+        #             n_unknown = n_unknown + 1
 
-        if "het" in data_zygosity:
-            false_af_rate = round((n_hom + n_unknown) / num_pred_total, 3)
-        else:
-            false_af_rate = round((n_het + n_unknown) / num_pred_total, 3)
+        # if "het" in data_zygosity:
+        #     false_af_rate = round((n_hom + n_unknown) / num_pred_total, 3)
+        # else:
+        #     false_af_rate = round((n_het + n_unknown) / num_pred_total, 3)
 
         summary_dict = {
             "prefix": prefix,
-            "coverage": coverage,
-            "ploidy": ploidy,
-            "data_zygosity": data_zygosity,
+            # "coverage": coverage,
+            # "ploidy": ploidy,
+            # "data_zygosity": data_zygosity,
             "num_pred_total": num_pred_total,
             "num_tp": num_tp,
             "num_fp": num_fp,
@@ -250,10 +269,10 @@ def main():
             "num_fn": num_fn,
             "precision": precision,
             "recall": recall,
-            "num_hom": n_hom,
-            "num_het": n_het,
-            "num_unclassified": n_unknown,
-            "false_af_rate": false_af_rate,
+            # "num_hom": n_hom,
+            # "num_het": n_het,
+            # "num_unclassified": n_unknown,
+            # "false_af_rate": false_af_rate,
         }
 
     # write
