@@ -146,8 +146,8 @@ def main():
         gap=args.gap,
         overlap=args.overlap,
         flank_len=args.flank_len,
-        single_flank=args.single_flank,
-        contig_match=args.contig_match,
+        # single_flank=args.single_flank,
+        different_contig_name=args.different_contig_name,
         keep_files=args.keep_files,
         thread=args.thread,
     )

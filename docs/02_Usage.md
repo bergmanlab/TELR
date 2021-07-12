@@ -35,10 +35,16 @@ optional arguments:
   -v OVERLAP, --overlap OVERLAP
                         max overlap size for flanking sequence alignment
                         (default = '20')
-  --repeatmasker_family
-                        If provided then repeatmasker will be used to annotate
-                        TE families in the assembled contigs (default: use
-                        minimap2 for contig TE annotation)
+  --flank_len FLANK_LEN
+                        flanking sequence length (default = '500bp')
+  --different_contig_name
+                        If provided then TELR does not require the contig name
+                        to match before and after annotation liftover
+                        (default: require contig name to be the same before
+                        and after liftover)
+  --minimap2_family     If provided then minimap2 will be used to annotate TE
+                        families in the assembled contigs (default: use
+                        repeatmasker for contig TE annotation)
   -k, --keep_files      If provided then all intermediate files will be kept
                         (default: remove intermediate files)
 ```
@@ -60,5 +66,5 @@ In addition to the required program options listed above, there are some optiona
 - `-t (--thread) <int>` Maximum cpu threads to use (default = '1').
 - `-g (--gap) <int>` Maximum gap size between sequence alignments of two contig flanks (default= '20').
 - `-v (--overlap) <int>` Maximum overlap size between sequence alignments of two contig flanks (default= '20').
-- `--repeatmasker_family` If provided then repeatmasker will be used to annotate TE families in the assembled contigs (default: use minimap2 for contig TE annotation)
+- `--minimap2_family` If provided then minimap2 will be used to annotate TE families in the assembled contigs (default: use repeatmasker for contig TE annotation)
 - `-k (--keep_files)` If provided then all intermediate files will be kept (default: remove intermediate files).

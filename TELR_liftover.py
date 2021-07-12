@@ -79,16 +79,16 @@ def get_args(program_version, arguments=sys.argv[1:]):
         help="If provided then all intermediate files will be kept (default: remove intermediate files)",
         required=False,
     )
+    # parser.add_argument(
+    #     "--single_flank",
+    #     action="store_true",
+    #     help="If provided then allow single flank support (default: requires both flanks to be aligned to reference genome)",
+    #     required=False,
+    # )
     parser.add_argument(
-        "--single_flank",
+        "--different_contig_name",
         action="store_true",
-        help="If provided then allow single flank support (default: requires both flanks to be aligned to reference genome)",
-        required=False,
-    )
-    parser.add_argument(
-        "--contig_match",
-        action="store_true",
-        help="If provided then require the contig name to match before and after annotation liftover (default: no restriction on contig name matching)",
+        help="If provided then TELR does not require the contig name to match before and after annotation liftover (default: require contig name to be the same before and after liftover)",
         required=False,
     )
     parser.add_argument(
@@ -406,8 +406,8 @@ def run_liftover_single_annotation(input_json):
     flank_overlap_max = input_values["flank_overlap_max"]
     bed2 = input_values["bed2"]  # could be None
     preset = input_values["preset"]
-    single_flank = input_values["single_flank"]
-    contig_match = input_values["contig_match"]
+    # single_flank = input_values["single_flank"]
+    different_contig_name = input_values["different_contig_name"]
     telr_mode = input_values["telr_mode"]
 
     prefix = "_".join([chrom, str(start), str(end), family])
@@ -451,7 +451,7 @@ def run_liftover_single_annotation(input_json):
 
     # intiate minimap2 parameters
     num_secondary = 10  # save 10 secondary alignments
-    if contig_match:
+    if not different_contig_name:
         if telr_mode:
             filter_chrom = "_".join(chrom.split("_")[:-2])
         else:
@@ -796,128 +796,128 @@ def run_liftover_single_annotation(input_json):
             lift_entry["3p_flank_align_coord"] = align_3p_coords
 
         # if single flank mode is turned on, inspect single flanks and report as lifted
-        if single_flank:
-            if len(align_5p_coords) == 1 and len(align_3p_coords) == 0:
-                with open(align_5p_flank_bed, "r") as input:
-                    for line in input:
-                        entry = line.replace("\n", "").split("\t")
-                        flank_chrom = entry[0]
-                        flank_start = int(entry[1])
-                        flank_end = int(entry[2])
-                        flank_mapping_quality = int(entry[4])
-                        flank_strand = entry[5]
-                        align_5p_flank_id = "_".join(
-                            [entry[3], entry[0], entry[1], entry[2]]
-                        )
-                if flank_strand == strand:
-                    lift_strand = "+"
-                else:
-                    lift_strand = "-"
-                if flank_strand == "+":
-                    lift_start = lift_end = flank_end
-                else:
-                    lift_start = lift_end = flank_start
+        # if single_flank:
+        if len(align_5p_coords) == 1 and len(align_3p_coords) == 0:
+            with open(align_5p_flank_bed, "r") as input:
+                for line in input:
+                    entry = line.replace("\n", "").split("\t")
+                    flank_chrom = entry[0]
+                    flank_start = int(entry[1])
+                    flank_end = int(entry[2])
+                    flank_mapping_quality = int(entry[4])
+                    flank_strand = entry[5]
+                    align_5p_flank_id = "_".join(
+                        [entry[3], entry[0], entry[1], entry[2]]
+                    )
+            if flank_strand == strand:
+                lift_strand = "+"
+            else:
+                lift_strand = "-"
+            if flank_strand == "+":
+                lift_start = lift_end = flank_end
+            else:
+                lift_start = lift_end = flank_start
 
-                align_5p_flank_qc = align_5p_flank_qcs[align_5p_flank_id]
+            align_5p_flank_qc = align_5p_flank_qcs[align_5p_flank_id]
 
-                lift_entry["chrom"] = flank_chrom
-                lift_entry["start"] = int(lift_start)
-                lift_entry["end"] = int(lift_end)
-                lift_entry["mapp_quality_5p"] = flank_mapping_quality
-                lift_entry["strand"] = lift_strand
-                lift_entry["5p_flank_num_residue_matches"] = align_5p_flank_qc[
-                    "num_residue_matches"
-                ]
-                lift_entry["5p_flank_alignment_block_length"] = align_5p_flank_qc[
-                    "alignment_block_length"
-                ]
-                lift_entry["5p_flank_sequence_identity"] = align_5p_flank_qc[
-                    "sequence_identity"
-                ]
+            lift_entry["chrom"] = flank_chrom
+            lift_entry["start"] = int(lift_start)
+            lift_entry["end"] = int(lift_end)
+            lift_entry["mapp_quality_5p"] = flank_mapping_quality
+            lift_entry["strand"] = lift_strand
+            lift_entry["5p_flank_num_residue_matches"] = align_5p_flank_qc[
+                "num_residue_matches"
+            ]
+            lift_entry["5p_flank_alignment_block_length"] = align_5p_flank_qc[
+                "alignment_block_length"
+            ]
+            lift_entry["5p_flank_sequence_identity"] = align_5p_flank_qc[
+                "sequence_identity"
+            ]
 
-                distance_5p = check_nearby_ref(
-                    flank_chrom,
-                    flank_start,
-                    flank_end,
-                    family,
-                    lift_strand,
-                    bed2,
-                    out_dir,
-                )
-                lift_entry["distance_5p_flank_ref_te"] = distance_5p
-                # if distance between flank and ref is small, report as ref, otherwise as non-ref
-                if distance_5p is not None and abs(distance_5p) <= 5:
-                    lift_entry["type"] = "reference"
-                    lift_entry[
-                        "comment"
-                    ] = "only one flank aligned, flank alignment adjacent to reference TE"
-                else:
-                    lift_entry["type"] = "non-reference"
-                    lift_entry[
-                        "comment"
-                    ] = "only one flank aligned, flank alignment not adjacent to reference TE"
-                    num_hits = 1
+            distance_5p = check_nearby_ref(
+                flank_chrom,
+                flank_start,
+                flank_end,
+                family,
+                lift_strand,
+                bed2,
+                out_dir,
+            )
+            lift_entry["distance_5p_flank_ref_te"] = distance_5p
+            # if distance between flank and ref is small, report as ref, otherwise as non-ref
+            if distance_5p is not None and abs(distance_5p) <= 5:
+                lift_entry["type"] = "reference"
+                lift_entry[
+                    "comment"
+                ] = "only one flank aligned, flank alignment adjacent to reference TE"
+            else:
+                lift_entry["type"] = "non-reference"
+                lift_entry[
+                    "comment"
+                ] = "only one flank aligned, flank alignment not adjacent to reference TE"
+                num_hits = 1
 
-            elif len(align_5p_coords) == 0 and len(align_3p_coords) == 1:
-                with open(align_3p_flank_bed, "r") as input:
-                    for line in input:
-                        entry = line.replace("\n", "").split("\t")
-                        flank_chrom = entry[0]
-                        flank_start = int(entry[1])
-                        flank_end = int(entry[2])
-                        flank_mapping_quality = int(entry[4])
-                        flank_strand = entry[5]
-                        align_3p_flank_id = "_".join(
-                            [entry[3], entry[0], entry[1], entry[2]]
-                        )
-                if flank_strand == strand:
-                    lift_strand = "+"
-                else:
-                    lift_strand = "-"
-                if flank_strand == "+":
-                    lift_start = lift_end = flank_start
-                else:
-                    lift_start = lift_end = flank_end
+        elif len(align_5p_coords) == 0 and len(align_3p_coords) == 1:
+            with open(align_3p_flank_bed, "r") as input:
+                for line in input:
+                    entry = line.replace("\n", "").split("\t")
+                    flank_chrom = entry[0]
+                    flank_start = int(entry[1])
+                    flank_end = int(entry[2])
+                    flank_mapping_quality = int(entry[4])
+                    flank_strand = entry[5]
+                    align_3p_flank_id = "_".join(
+                        [entry[3], entry[0], entry[1], entry[2]]
+                    )
+            if flank_strand == strand:
+                lift_strand = "+"
+            else:
+                lift_strand = "-"
+            if flank_strand == "+":
+                lift_start = lift_end = flank_start
+            else:
+                lift_start = lift_end = flank_end
 
-                align_3p_flank_qc = align_3p_flank_qcs[align_3p_flank_id]
+            align_3p_flank_qc = align_3p_flank_qcs[align_3p_flank_id]
 
-                lift_entry["chrom"] = flank_chrom
-                lift_entry["start"] = int(lift_start)
-                lift_entry["end"] = int(lift_end)
-                lift_entry["mapp_quality_5p"] = flank_mapping_quality
-                lift_entry["strand"] = lift_strand
-                lift_entry["5p_flank_num_residue_matches"] = align_3p_flank_qc[
-                    "num_residue_matches"
-                ]
-                lift_entry["5p_flank_alignment_block_length"] = align_3p_flank_qc[
-                    "alignment_block_length"
-                ]
-                lift_entry["5p_flank_sequence_identity"] = align_3p_flank_qc[
-                    "sequence_identity"
-                ]
+            lift_entry["chrom"] = flank_chrom
+            lift_entry["start"] = int(lift_start)
+            lift_entry["end"] = int(lift_end)
+            lift_entry["mapp_quality_5p"] = flank_mapping_quality
+            lift_entry["strand"] = lift_strand
+            lift_entry["5p_flank_num_residue_matches"] = align_3p_flank_qc[
+                "num_residue_matches"
+            ]
+            lift_entry["5p_flank_alignment_block_length"] = align_3p_flank_qc[
+                "alignment_block_length"
+            ]
+            lift_entry["5p_flank_sequence_identity"] = align_3p_flank_qc[
+                "sequence_identity"
+            ]
 
-                distance_3p = check_nearby_ref(
-                    flank_chrom,
-                    flank_start,
-                    flank_end,
-                    family,
-                    lift_strand,
-                    bed2,
-                    out_dir,
-                )
-                lift_entry["distance_3p_flank_ref_te"] = distance_3p
-                # if distance between flank and ref is small, report as ref, otherwise as non-ref
-                if distance_3p is not None and abs(distance_3p) <= 5:
-                    lift_entry["type"] = "reference"
-                    lift_entry[
-                        "comment"
-                    ] = "only one flank aligned, flank alignment adjacent to reference TE"
-                else:
-                    lift_entry["type"] = "non-reference"
-                    lift_entry[
-                        "comment"
-                    ] = "only one flank aligned, flank alignment not adjacent to reference TE"
-                    num_hits = 1
+            distance_3p = check_nearby_ref(
+                flank_chrom,
+                flank_start,
+                flank_end,
+                family,
+                lift_strand,
+                bed2,
+                out_dir,
+            )
+            lift_entry["distance_3p_flank_ref_te"] = distance_3p
+            # if distance between flank and ref is small, report as ref, otherwise as non-ref
+            if distance_3p is not None and abs(distance_3p) <= 5:
+                lift_entry["type"] = "reference"
+                lift_entry[
+                    "comment"
+                ] = "only one flank aligned, flank alignment adjacent to reference TE"
+            else:
+                lift_entry["type"] = "non-reference"
+                lift_entry[
+                    "comment"
+                ] = "only one flank aligned, flank alignment not adjacent to reference TE"
+                num_hits = 1
 
         lift_entries["report"] = lift_entry
     lift_entries["num_hits"] = num_hits
@@ -978,8 +978,8 @@ def liftover(
     out,
     threads,
     keep_files,
-    single_flank,
-    contig_match,
+    # single_flank,
+    different_contig_name,
     telr_mode,
 ):
     """
@@ -1027,8 +1027,8 @@ def liftover(
                 "flank_overlap_max": flank_overlap_max,
                 "bed2": bed2,
                 "preset": preset,
-                "single_flank": single_flank,
-                "contig_match": contig_match,
+                # "single_flank": single_flank,
+                "different_contig_name": different_contig_name,
                 "telr_mode": telr_mode,
             }
             liftover_input = input_json_dir + "/" + prefix + "_input.json"
@@ -1151,8 +1151,8 @@ def main():
         out=args.out,
         threads=args.threads,
         keep_files=args.keep_files,
-        single_flank=args.single_flank,
-        contig_match=args.contig_match,
+        # single_flank=args.single_flank,
+        different_contig_name=args.different_contig_name,
         telr_mode=args.telr_mode,
     )
 

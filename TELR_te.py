@@ -22,7 +22,7 @@ def annotate_contig(
     sample_name,
     thread,
     presets,
-    repeatmasker_family,
+    minimap2_family,
     loci_eval,
 ):
     logging.info("Annotate contigs...")
@@ -277,7 +277,7 @@ def annotate_contig(
             stdout=output,
         )
 
-    if repeatmasker_family:
+    if not minimap2_family:
         print("Use repeatmasker to annotate contig TE families instead of minimap2")
         repeatmasker_dir = os.path.join(out, "contig_te_repeatmask")
         mkdir(repeatmasker_dir)
@@ -710,8 +710,8 @@ def find_te(
     gap,
     overlap,
     flank_len,
-    single_flank,
-    contig_match,
+    # single_flank,
+    different_contig_name,
     keep_files,
     thread,
 ):
@@ -736,8 +736,8 @@ def find_te(
         out=out,
         threads=thread,
         keep_files=keep_files,
-        single_flank=single_flank,
-        contig_match=contig_match,
+        # single_flank=single_flank,
+        different_contig_name=different_contig_name,
         telr_mode=True,
     )
 
