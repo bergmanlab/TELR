@@ -328,6 +328,7 @@ def write_vcf(input, ref, ref_info, out_vcf):
                 "gt",
             ]
         ]
+        df = df.fillna("NA")
     with open(out_vcf, "w") as vcf:
         vcf.write("##fileformat=VCFv4.1" + "\n")
         vcf.write("##fileDate={}".format(date.today()) + "\n")
@@ -356,7 +357,15 @@ def write_vcf(input, ref, ref_info, out_vcf):
             '##INFO=<ID=RE,Number=1,Type=Integer,Description="read support">' + "\n"
         )
         vcf.write(
-            '##INFO=<ID=SUPPORT_TYPE,Number=1,Type=String,Description="Type of TE flank alignment to reference genome (1: single flank; 2: two flanks with gap; 3: two flanks with overlap)">'
+            '##INFO=<ID=SUPPORT_TYPE,Number=1,Type=String,Description="single_side or both_sides">'
+            + "\n"
+        )
+        vcf.write(
+            '##INFO=<ID=TSD_LEN,Number=1,Type=String,Description="Length of the TSD sequence if available">'
+            + "\n"
+        )
+        vcf.write(
+            '##INFO=<ID=TSD_SEQ,Number=1,Type=String,Description="TSD sequence if available">'
             + "\n"
         )
         vcf.write('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">' + "\n")
