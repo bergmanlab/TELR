@@ -20,8 +20,11 @@ def mkdir(dir):
 
 
 def check_exist(file):
-    if os.path.isfile(file) and os.stat(file).st_size != 0:
-        return True
+    if file:
+        if os.path.isfile(file) and os.stat(file).st_size != 0:
+            return True
+        else:
+            return False
     else:
         return False
 

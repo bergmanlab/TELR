@@ -31,10 +31,20 @@ optional arguments:
   -t THREAD, --thread THREAD
                         max cpu threads to use (default = '1')
   -g GAP, --gap GAP     max gap size for flanking sequence alignment (default
-                        = '20')
+                        = '50')
   -v OVERLAP, --overlap OVERLAP
                         max overlap size for flanking sequence alignment
-                        (default = '20')
+                        (default = '50')
+  --flank_len FLANK_LEN
+                        flanking sequence length in the TELR assembled contigs (default = '500')
+  --different_contig_name
+                        If provided then TELR does not require the contig name
+                        to match before and after annotation liftover
+                        (default: require contig name to be the same before
+                        and after liftover)
+  --minimap2_family     If provided then minimap2 will be used to annotate TE
+                        families in the assembled contigs (default: use
+                        repeatmasker for contig TE annotation)
   -k, --keep_files      If provided then all intermediate files will be kept
                         (default: remove intermediate files)
 ```
@@ -54,6 +64,9 @@ In addition to the required program options listed above, there are some optiona
 - `-p (--polish) <int>` Rounds of contig polishing using polisher from [wtdbg2](https://github.com/ruanjue/wtdbg2) (default = 1).
 - `-o (--out) <arg>` Output directory (default = '.').
 - `-t (--thread) <int>` Maximum cpu threads to use (default = '1').
-- `-g (--gap) <int>` Maximum gap size between sequence alignments of two contig flanks (default= '20').
-- `-v (--overlap) <int>` Maximum overlap size between sequence alignments of two contig flanks (default= '20').
+- `-g (--gap) <int>` Maximum gap size between sequence alignments of two contig flanks (default= '50').
+- `-v (--overlap) <int>` Maximum overlap size between sequence alignments of two contig flanks (default= '50').
+- `--flank_len <int>` flanking sequence length in the TELR assembled contigs (default= '500').
+- `--different_contig_name` If provided then TELR does not require the contig name to match before and after annotation liftover (default: require contig name to be the same before and after liftover).
+- `--minimap2_family` If provided then minimap2 will be used to annotate TE families in the assembled contigs (default: use repeatmasker for contig TE annotation).
 - `-k (--keep_files)` If provided then all intermediate files will be kept (default: remove intermediate files).

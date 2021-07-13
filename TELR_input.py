@@ -88,6 +88,30 @@ def get_args():
         required=False,
     )
     optional.add_argument(
+        "--flank_len",
+        type=int,
+        help="flanking sequence length (default = '500bp')",
+        required=False,
+    )
+    # optional.add_argument(
+    #     "--both_flanks",
+    #     action="store_true",
+    #     help="If provided then allow single flank support (default: requires both flanks to be aligned to reference genome)",
+    #     required=False,
+    # )
+    optional.add_argument(
+        "--different_contig_name",
+        action="store_true",
+        help="If provided then TELR does not require the contig name to match before and after annotation liftover (default: require contig name to be the same before and after liftover)",
+        required=False,
+    )
+    optional.add_argument(
+        "--minimap2_family",
+        action='store_true',
+        help="If provided then minimap2 will be used to annotate TE families in the assembled contigs (default: use repeatmasker for contig TE annotation)",
+        required=False,
+    )
+    optional.add_argument(
         "-k",
         "--keep_files",
         action='store_true',
@@ -133,6 +157,9 @@ def get_args():
 
     if args.thread is None:
         args.thread = 1
+
+    if args.flank_len is None:
+        args.flank_len = 500
 
     if args.polish is None:
         args.polish = 1

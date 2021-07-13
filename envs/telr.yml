@@ -19,6 +19,7 @@ dependencies:
   - cycler=0.10.0=py_2
   - decorator=4.4.2=py_0
   - editdistance=0.5.3=py36hc4f0c31_3
+  - flye=2.8.3=py36hb377018_1
   - freetype=2.10.2=he06d7ca_0
   - gmp=6.1.2=hf484d3e_1000
   - gnutls=3.5.19=h2a4e5f8_1
