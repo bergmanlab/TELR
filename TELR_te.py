@@ -357,19 +357,20 @@ def annotate_contig(
                 contig_name = entry[0]
                 contig_te_start = entry[1]
                 contig_te_end = entry[2]
-                contig_te_family = contig_rm_family_dict[contig_name]
-                contig_te_strand = entry[5]
-                out_line = "\t".join(
-                    [
-                        contig_name,
-                        contig_te_start,
-                        contig_te_end,
-                        contig_te_family,
-                        ".",
-                        contig_te_strand,
-                    ]
-                )
-                output.write(out_line + "\n")
+                if contig_name in contig_rm_family_dict:
+                    contig_te_family = contig_rm_family_dict[contig_name]
+                    contig_te_strand = entry[5]
+                    out_line = "\t".join(
+                        [
+                            contig_name,
+                            contig_te_start,
+                            contig_te_end,
+                            contig_te_family,
+                            ".",
+                            contig_te_strand,
+                        ]
+                    )
+                    output.write(out_line + "\n")
 
         contig_te_annotation = contig_te_annotation_new
 
