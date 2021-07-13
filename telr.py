@@ -105,7 +105,7 @@ def main():
         sample_name,
         args.thread,
         args.presets,
-        args.repeatmasker_family,
+        args.minimap2_family,
         loci_eval,
     )
 
