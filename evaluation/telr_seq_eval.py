@@ -412,23 +412,33 @@ def check_contig_overlap_annotation(
     )
 
 
-def run_eval(args):
-    contigs_fa = args[0]
-    contig_name = args[1]
-    contig_len = args[2]
-    contig_te_start = args[3]
-    contig_te_end = args[4]
-    contig_te_family = args[5]
-    seq = args[6]
-    reference = args[7]
-    annotation = args[8]
-    out_dir = args[9]
-    flank_len = args[10]
+def run_eval(eval_inputs):
+    contigs_fa = eval_inputs["contigs"]
+    contig_name = eval_inputs["contig_id"]
+    contig_len = eval_inputs["contig_length"]
+    contig_te_start = eval_inputs["contig_te_start"]
+    contig_te_end = eval_inputs["contig_te_end"]
+    contig_te_family = eval_inputs["family"]
+    seq = eval_inputs["te_sequence"]
+    reference = eval_inputs["reference"]
+    annotation = eval_inputs["annotation"]
+    out_dir = eval_inputs["out_dir"]
+    flank_len = eval_inputs["flank_len"]
+
+    # contigs_fa = args[0]
+    # contig_name = args[1]
+    # contig_len = args[2]
+    # contig_te_start = args[3]
+    # contig_te_end = args[4]
+    # contig_te_family = args[5]
+    # seq = args[6]
+    # reference = args[7]
+    # annotation = args[8]
+    # out_dir = args[9]
+    # flank_len = args[10]
 
     # initiate final report
     eval_report = {
-        "contig_name": contig_name,
-        "contig_length": contig_len,
         "contig_te_plus_flank_start": None,
         "contig_te_plus_flank_end": None,
         "contig_te_plus_flank_size": None,
@@ -441,9 +451,6 @@ def run_eval(args):
         "contig_num_residue_matches": None,
         "contig_alignment_block_length": None,
         "contig_blast_identity": None,
-        "contig_te_family": contig_te_family,
-        "contig_te_start": contig_te_start,
-        "contig_te_end": contig_te_end,
         "contig_te_length": None,
         "ref_te_family": None,
         "ref_te_length": None,
@@ -470,6 +477,51 @@ def run_eval(args):
         "ref_te_num_del": None,
         "ref_te_num_indel": None,
     }
+
+    # eval_report = {
+    #     "contig_name": contig_name,
+    #     "contig_length": contig_len,
+    #     "contig_te_plus_flank_start": None,
+    #     "contig_te_plus_flank_end": None,
+    #     "contig_te_plus_flank_size": None,
+    #     "num_contig_ref_hits": None,
+    #     "ref_aligned_chrom": None,
+    #     "ref_aligned_start": None,
+    #     "ref_aligned_end": None,
+    #     "contig_max_base_mapped_prop": None,
+    #     "contig_mapp_qual": None,
+    #     "contig_num_residue_matches": None,
+    #     "contig_alignment_block_length": None,
+    #     "contig_blast_identity": None,
+    #     "contig_te_family": contig_te_family,
+    #     "contig_te_start": contig_te_start,
+    #     "contig_te_end": contig_te_end,
+    #     "contig_te_length": None,
+    #     "ref_te_family": None,
+    #     "ref_te_length": None,
+    #     "num_contig_ref_te_hits": None,
+    #     "ref_te_aligned_chrom": None,
+    #     "ref_te_aligned_start": None,
+    #     "ref_te_aligned_end": None,
+    #     "contig_te_mapp_qual": None,
+    #     "contig_te_max_base_mapped_prop": None,
+    #     "contig_te_num_residue_matches": None,
+    #     "contig_te_alignment_block_length": None,
+    #     "contig_te_blast_identity": None,
+    #     "ref_te_num_bases_covered": None,
+    #     "ref_te_num_snvs": None,
+    #     "ref_te_num_1bp_del": None,
+    #     "ref_te_num_1bp_ins": None,
+    #     "ref_te_num_2bp_del": None,
+    #     "ref_te_num_2bp_ins": None,
+    #     "ref_te_num_50bp_del": None,
+    #     "ref_te_num_50bp_ins": None,
+    #     "ref_te_num_1kb_del": None,
+    #     "ref_te_num_1kb_ins": None,
+    #     "ref_te_num_ins": None,
+    #     "ref_te_num_del": None,
+    #     "ref_te_num_indel": None,
+    # }
 
     # extract subsequences from contigs including flanks
     (
@@ -576,9 +628,13 @@ def run_eval(args):
         eval_report["ref_te_length"] = len_ref_te
         eval_report["ref_te_family"] = ref_te_family
 
+    eval_inputs.update(eval_report)
+
     contig_stats_json = out_dir + "/" + contig_name + ".eval.json"
     with open(contig_stats_json, "w") as output:
-        json.dump(eval_report, output, indent=4, sort_keys=False)
+        json.dump(eval_inputs, output, indent=4, sort_keys=False)
+
+    return contig_stats_json
 
 
 def main():
@@ -587,13 +643,13 @@ def main():
     # get prefix
     prefix = "telr_seq_eval"
 
-    # Get contig TE annotation files
-    pattern = "/**/*te2contig_rm.merge.bed"
-    contig_te_annotation_list = glob.glob(args.telr_out_dir + pattern, recursive=True)
-    contig_te_annotation = contig_te_annotation_list[0]
+    # # Get contig TE annotation files
+    # pattern = "/**/*te2contig_rm.merge.bed"
+    # contig_te_annotation_list = glob.glob(args.telr_out_dir + pattern, recursive=True)
+    # contig_te_annotation = contig_te_annotation_list[0]
 
     # Get contig fasta file
-    pattern = "/**/*contigs.fa"
+    pattern = "/**/*telr.contig.fasta"
     contigs_list = glob.glob(args.telr_out_dir + pattern, recursive=True)
     contigs_file = contigs_list[0]
     # Create soft link for contig fasta, build index
@@ -601,7 +657,7 @@ def main():
     subprocess.call(["samtools", "faidx", contigs])
 
     # Get TELR final output
-    pattern = "/**/*telr.json"
+    pattern = "/**/*telr.expanded.json"
     json_list = glob.glob(args.telr_out_dir + pattern, recursive=True)
     json_file = json_list[0]
 
@@ -620,7 +676,7 @@ def main():
         exclude_families=args.exclude_families,
     )
     # get the coordinate ID set
-    coord_ids = set()
+    ins_ids = set()
     with open(pred_filtered, "r") as input:
         for line in input:
             entry = line.replace("\n", "").split("\t")
@@ -628,70 +684,52 @@ def main():
             start = entry[1]
             end = entry[2]
             family = entry[3]
-            coord_id = "_".join([chrom, str(start), str(end), family])
-            coord_ids.add(coord_id)
-
-    # get contig TE annotation info
-    contig_info = dict()
-    with open(contig_te_annotation, "r") as input:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
-            contig_name = entry[0]
-            contig_te_start = int(entry[1])
-            contig_te_end = int(entry[2])
-            contig_info[contig_name] = dict()
-            contig_info[contig_name]["start"] = contig_te_start
-            contig_info[contig_name]["end"] = contig_te_end
-
-    # get contig length
-    with open(contigs, "r") as input:
-        for line in input:
-            if ">" in line:
-                entry = line.replace("\n", "").split(" ")
-                contig_name = entry[0].replace(">", "")
-                contig_len = int(entry[1].replace("len=", ""))
-                if contig_name in contig_info:
-                    contig_info[contig_name]["length"] = contig_len
+            ins_id = "_".join([chrom, str(start), str(end), family])
+            ins_ids.add(ins_id)
 
     # load TELR json output
     with open(json_file) as f:
         telr_out = json.load(f)
     # look through each contig in TELR output and prepare for parallel run
-    contig_ids = set()
     eval_pa_list = []
     for item in telr_out:
-        contig_name = item["ID"]
+        # contig_name = item["contig_id"]
         family = item["family"]
-        chrom = item["chr"]
+        chrom = item["chrom"]
         start = item["start"]
         end = item["end"]
-        coord_id = "_".join([chrom, str(start), str(end), family])
-        if coord_id in coord_ids:
-            contig_ids.add(contig_name)
-            contig_len = contig_info[contig_name]["length"]
-            contig_te_start = contig_info[contig_name]["start"]
-            contig_te_end = contig_info[contig_name]["end"]
-            seq = item["sequence"]
-            eval_pa = [
-                contigs,
-                contig_name,
-                contig_len,
-                contig_te_start,
-                contig_te_end,
-                family,
-                seq,
-                args.ref,
-                args.annotation,
-                args.out_dir,
-                args.flank_len,
-            ]
+        # contig_length = item["contig_length"]
+        # contig_te_start = item["contig_te_start"]
+        # contig_te_end = item["contig_te_end"]
+        ins_id = "_".join([chrom, str(start), str(end), family])
+        if ins_id in ins_ids:
+            eval_pa = item
+            eval_pa["contigs"] = contigs
+            eval_pa["reference"] = args.ref
+            eval_pa["annotation"] = args.annotation
+            eval_pa["out_dir"] = args.out_dir
+            eval_pa["flank_len"] = args.flank_len
+            # seq = item["sequence"]
+            # eval_pa = [
+            #     contigs,
+            #     contig_name,
+            #     contig_length,
+            #     contig_te_start,
+            #     contig_te_end,
+            #     family,
+            #     seq,
+            #     args.ref,
+            #     args.annotation,
+            #     args.out_dir,
+            #     args.flank_len,
+            # ]
             eval_pa_list.append(eval_pa)
     # run contig evaluation in parallel
     print("Perform TELR sequence evaluation...")
     start_time = time.time()
     try:
         pool = Pool(processes=args.threads)
-        pool.map(run_eval, eval_pa_list)
+        seq_eval_report_list = pool.map(run_eval, eval_pa_list)
         pool.close()
         pool.join()
     except Exception as e:
@@ -703,24 +741,31 @@ def main():
     print("TELR sequence evaluation finished in " + format_time(proc_time))
 
     # report stats
-    contig_stats_all = []
-    for item in telr_out:
-        contig_name = item["ID"]
-        if contig_name in contig_ids:
-            contig_stats_json = args.out_dir + "/" + contig_name + ".eval.json"
-            with open(contig_stats_json) as f:
-                contig_stats = json.load(f)
-                contig_stats["telr_family"] = item["family"]
-                contig_stats["telr_support_type"] = item["support_type"]
-                contig_stats["telr_frequency"] = item["frequency"]
-                contig_stats["telr_alt_count"] = item["alt_count"]
-                contig_stats["telr_ref_count"] = item["gt"].split(":")[1]
-                contig_stats_all.append(contig_stats)
-            os.remove(contig_stats_json)
+    print("Generate final report...")
+    data = []
+    for seq_eval_report in seq_eval_report_list:
+        with open(seq_eval_report) as f:
+            report = json.load(f)
+            data.append(report)
 
-    contig_stats_all_json = args.out_dir + "/" + "eval_stat.json"
-    with open(contig_stats_all_json, "w") as output:
-        json.dump(contig_stats_all, output, indent=4, sort_keys=False)
+    # contig_stats_all = []
+    # for item in telr_out:
+    #     contig_name = item["ID"]
+    #     if contig_name in contig_ids:
+    #         contig_stats_json = args.out_dir + "/" + contig_name + ".eval.json"
+    #         with open(contig_stats_json) as f:
+    #             contig_stats = json.load(f)
+    #             contig_stats["telr_family"] = item["family"]
+    #             contig_stats["telr_support_type"] = item["support_type"]
+    #             contig_stats["telr_frequency"] = item["frequency"]
+    #             contig_stats["telr_alt_count"] = item["alt_count"]
+    #             contig_stats["telr_ref_count"] = item["gt"].split(":")[1]
+    #             contig_stats_all.append(contig_stats)
+    #         os.remove(contig_stats_json)
+
+    seq_eval_report_json = args.out_dir + "/" + "seq_eval.json"
+    with open(seq_eval_report_json, "w") as output:
+        json.dump(data, output, indent=4, sort_keys=False)
 
 
 if __name__ == "__main__":
