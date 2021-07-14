@@ -26,10 +26,10 @@ def annotate_contig(
     loci_eval,
 ):
     logging.info("Annotate contigs...")
-    if presets == "ont":
-        presets = "map-ont"
-    else:
+    if presets == "pacbio":
         presets = "map-pb"
+    else:
+        presets = "map-ont"
 
     all_loci = create_loci_set(vcf_parsed)
     assembly_passed_loci = set()
@@ -43,7 +43,7 @@ def annotate_contig(
                 with open(assembly, "r") as handle:
                     records = SeqIO.parse(handle, "fasta")
                     for record in records:
-                        if record.id == "ctg1":
+                        if record.id == "ctg1" or record.id == "contig_1":
                             record.id = locus
                             record.description = "len=" + str(len(record.seq))
                             SeqIO.write(record, MERGE, "fasta")

@@ -40,16 +40,23 @@ def get_args():
     # optional
     optional.add_argument(
         "-m",
-        "--method",
+        "--align_method",
         type=str,
-        help="method for read alignment, please provide 'nglmr' or 'minimap2' (default = 'nglmr')",
+        help="choose method for read alignment, please provide 'nglmr' or 'minimap2' (default = 'nglmr')",
+        required=False,
+    )
+    optional.add_argument(
+        "-s",
+        "--asm_method",
+        type=str,
+        help="Choose the method to be used for local contig assembly and polishing step, please provide 'wtdbg2' or 'flye' (default = 'wtdbg2')",
         required=False,
     )
     optional.add_argument(
         "-x",
         "--presets",
         type=str,
-        help="parameter presets for different sequencing technologies, please provide 'ont' or 'pacbio' (default = 'pacbio')",
+        help="parameter presets for different sequencing technologies, please provide 'pacbio' or 'ont' (default = 'pacbio')",
         required=False,
     )
     optional.add_argument(
@@ -107,14 +114,14 @@ def get_args():
     )
     optional.add_argument(
         "--minimap2_family",
-        action='store_true',
+        action="store_true",
         help="If provided then minimap2 will be used to annotate TE families in the assembled contigs (default: use repeatmasker for contig TE annotation)",
         required=False,
     )
     optional.add_argument(
         "-k",
         "--keep_files",
-        action='store_true',
+        action="store_true",
         help="If provided then all intermediate files will be kept (default: remove intermediate files)",
         required=False,
     )
@@ -143,11 +150,23 @@ def get_args():
         logging.exception("Can not open input file: " + args.library)
         sys.exit(1)
 
-    if args.method is None:
-        args.method = "nglmr"
+    if args.align_method is None:
+        args.align_method = "nglmr"
+    elif args.align_method not in ["nglmr", "minimap2"]:
+        print("Please provide a valid alignment method, exiting...")
+        sys.exit(1)
+
+    if args.asm_method is None:
+        args.asm_method = "wtdbg2"
+    elif args.asm_method not in ["wtdbg2", "flye"]:
+        print("Please provide a valid asm_method")
+        sys.exit(1)
 
     if args.presets is None:
         args.presets = "pacbio"
+    elif args.presets not in ["pacbio", "ont"]:
+        print("Please provide a valid preset option")
+        sys.exit(1)
 
     # sets up out dir variable
     if args.out is None:
@@ -201,7 +220,7 @@ def parse_input(input_reads, input_reference, input_library, sample_name, out_di
     except Exception:
         logging.exception("Create symbolic link for " + input_reference + " failed")
         sys.exit(1)
-    
+
     input_library_copy = os.path.join(out_dir, os.path.basename(input_library))
     if not os.path.isabs(input_library):
         input_library = os.path.abspath(input_library)
@@ -234,7 +253,13 @@ def parse_input(input_reads, input_reference, input_library, sample_name, out_di
         logging.error("Input format not recognized")
         sys.exit(1)
 
-    return input_reads_copy, input_reference_copy, input_library_copy, fasta, skip_alignment
+    return (
+        input_reads_copy,
+        input_reference_copy,
+        input_library_copy,
+        fasta,
+        skip_alignment,
+    )
 
 
 def bam2fasta(bam, fasta):

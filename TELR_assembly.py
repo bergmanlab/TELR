@@ -1,6 +1,7 @@
 import sys
 import os
 import subprocess
+import shutil
 import time
 import logging
 from Bio import SeqIO
@@ -10,25 +11,32 @@ from TELR_utility import mkdir, check_exist, format_time
 
 
 def local_assembly(
-    contig_dir, vcf_parsed, out, sample_name, bam, raw_reads, thread, presets, polish
+    method,
+    contig_dir,
+    vcf_parsed,
+    out,
+    sample_name,
+    bam,
+    raw_reads,
+    thread,
+    presets,
+    polish_iterations,
 ):
     """Perform local assembly using reads from parsed VCF file"""
 
     # Prepare reads used for local assembly and polishing
     sv_reads_dir = os.path.join(out, "sv_reads")
-    
-    prep_assembly(
-        vcf_parsed, out, sample_name, bam, raw_reads, sv_reads_dir, read_type="sv"
-    )
+
+    try:
+        prep_assembly(
+            vcf_parsed, out, sample_name, bam, raw_reads, sv_reads_dir, read_type="sv"
+        )
+    except Exception as e:
+        print(e)
+        print("Prepare local assembly input data failed, exiting...")
+        sys.exit(1)
 
     mkdir(contig_dir)
-
-    if presets == "ont":
-        presets_wtdbg2 = "ont"
-        presets_minimap2 = "map-ont"
-    else:
-        presets_wtdbg2 = "rs"
-        presets_minimap2 = "map-pb"
 
     k = 0
     asm_pa_list = []
@@ -46,24 +54,35 @@ def local_assembly(
                 contig_dir,
                 contig_name,
                 thread_asm,
-                presets_wtdbg2,
-                presets_minimap2,
-                polish,
+                presets,
+                polish_iterations,
             ]
             asm_pa_list.append(asm_pa)
             k = k + 1
     # run assembly in parallel
     logging.info("Perform local assembly of non-reference TE loci...")
     start_time = time.time()
-    try:
-        pool = Pool(processes=thread)
-        pool.map(run_wtdbg2, asm_pa_list)
-        pool.close()
-        pool.join()
-    except Exception as e:
-        print(e)
-        print("Local assembly failed, exiting...")
-        sys.exit(1)
+
+    if method == "wtdbg2":
+        try:
+            pool = Pool(processes=thread)
+            pool.map(run_wtdbg2, asm_pa_list)
+            pool.close()
+            pool.join()
+        except Exception as e:
+            print(e)
+            print("Local assembly failed, exiting...")
+            sys.exit(1)
+    else:
+        try:
+            pool = Pool(processes=thread)
+            pool.map(run_flye, asm_pa_list)
+            pool.close()
+            pool.join()
+        except Exception as e:
+            print(e)
+            print("Local assembly failed, exiting...")
+            sys.exit(1)
 
     proc_time = time.time() - start_time
     logging.info("Local assembly finished in " + format_time(proc_time))
@@ -75,7 +94,7 @@ def prep_assembly(
     """Prepare reads for local assembly"""
     # logging.info("Prepare reads for local assembly")
 
-    if read_type == "sv":
+    if read_type == "sv":  # TODO: figure out what this does
         # extract read IDs
         read_ids = os.path.join(out, sample_name + ".id")
         with open(vcf_parsed, "r") as input, open(read_ids, "w") as output:
@@ -163,14 +182,62 @@ def prep_assembly(
     os.remove(subset_fa_reorder)
 
 
+def run_flye(args):
+    sv_reads = args[0]
+    asm_dir = args[1]
+    contig_name = args[2]
+    thread = args[3]
+    presets = args[4]
+    polish = args[5]
+
+    if presets == "pacbio":
+        presets_flye = "--pacbio-raw"
+    else:
+        presets_flye = "--nano-raw"
+
+    tmp_out_dir = os.path.join(asm_dir, contig_name)
+    mkdir(tmp_out_dir)
+    try:
+        subprocess.call(
+            [
+                "flye",
+                presets_flye,
+                sv_reads,
+                "--out-dir",
+                tmp_out_dir,
+                "--thread",
+                str(thread),
+                "--iterations",
+                str(polish),
+            ]
+        )
+    except Exception as e:
+        print(e)
+        print("Assembly failed, exiting...")
+        return
+    # rename contigs
+    contig_path = os.path.join(tmp_out_dir, "assembly.fasta")
+    contig_path_new = os.path.join(asm_dir, contig_name + ".cns.fa")
+    if os.path.isfile(contig_path):
+        os.rename(contig_path, contig_path_new)
+    # remove tmp files
+    shutil.rmtree(tmp_out_dir)
+
+
 def run_wtdbg2(args):
     sv_reads = args[0]
     asm_dir = args[1]
     contig_name = args[2]
     thread = args[3]
-    presets_wtdbg2 = args[4]
-    presets_minimap2 = args[5]
-    polish = args[6]
+    presets = args[4]
+    polish = args[5]
+
+    if presets == "pacbio":
+        presets_wtdbg2 = "rs"
+        presets_minimap2 = "map-pb"
+    else:
+        presets_wtdbg2 = "ont"
+        presets_minimap2 = "map-ont"
 
     prefix = sv_reads.replace(".reads.fa", "")
     try:

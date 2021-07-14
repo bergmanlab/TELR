@@ -54,7 +54,7 @@ def main():
             tmp_dir,
             sample_name,
             args.thread,
-            args.method,
+            args.align_method,
             args.presets,
         )
     else:
@@ -85,15 +85,16 @@ def main():
     # Local assembly
     contig_dir = os.path.join(tmp_dir, "contig_assembly")
     local_assembly(
-        contig_dir,
-        vcf_parsed,
-        tmp_dir,
-        sample_name,
-        bam,
-        fasta,
-        args.thread,
-        args.presets,
-        args.polish,
+        method=args.asm_method,
+        contig_dir=contig_dir,
+        vcf_parsed=vcf_parsed,
+        out=tmp_dir,
+        sample_name=sample_name,
+        bam=bam,
+        raw_reads=fasta,
+        thread=args.thread,
+        presets=args.presets,
+        polish_iterations=args.polish,
     )
 
     # Annotate contig for TE region
