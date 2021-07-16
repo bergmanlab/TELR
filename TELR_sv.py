@@ -78,9 +78,7 @@ def vcf_parse_filter(
     # merge entries
     vcf_merged = vcf_in + ".merged.tmp.tsv"
     merge_vcf(vcf_filtered, vcf_merged)
-
     os.rename(vcf_merged, vcf_out)
-    # os.remove(vcf_parsed_tmp)
 
 
 def merge_vcf(vcf_in, vcf_out, window=20):

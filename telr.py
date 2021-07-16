@@ -8,7 +8,7 @@ import shutil
 from TELR_input import get_args, parse_input
 from TELR_alignment import alignment, sort_index_bam
 from TELR_sv import detect_sv, vcf_parse_filter
-from TELR_assembly import local_assembly
+from TELR_assembly import get_local_contigs
 from TELR_te import annotate_contig, find_te, get_af, repeatmask, gff3tobed
 from TELR_output import generate_output
 from TELR_utility import format_time, mkdir
@@ -84,8 +84,9 @@ def main():
 
     # Local assembly
     contig_dir = os.path.join(tmp_dir, "contig_assembly")
-    local_assembly(
-        method=args.asm_method,
+    merged_contigs, assembly_passed_loci = get_local_contigs(
+        asm_method=args.asm_method,
+        polish_method=args.polish_method,
         contig_dir=contig_dir,
         vcf_parsed=vcf_parsed,
         out=tmp_dir,
@@ -94,12 +95,13 @@ def main():
         raw_reads=fasta,
         thread=args.thread,
         presets=args.presets,
-        polish_iterations=args.polish,
+        polish_iterations=args.polish_iterations,
     )
 
     # Annotate contig for TE region
-    contig_te_annotation, te_freq, te_fa, merge_contigs = annotate_contig(
-        contig_dir,
+    contig_te_annotation, te_freq, te_fa = annotate_contig(
+        merged_contigs,
+        assembly_passed_loci,
         library,
         vcf_parsed,
         tmp_dir,
@@ -140,14 +142,13 @@ def main():
     # find TEs
     liftover_json = find_te(
         reference=reference,
-        contigs_fa=merge_contigs,
+        contigs_fa=merged_contigs,
         contig_te_bed=contig_te_annotation,
         ref_te_bed=ref_te_bed,
         out=tmp_dir,
         gap=args.gap,
         overlap=args.overlap,
         flank_len=args.flank_len,
-        # single_flank=args.single_flank,
         different_contig_name=args.different_contig_name,
         keep_files=args.keep_files,
         thread=args.thread,
@@ -161,7 +162,7 @@ def main():
             te_fa=te_fa,
             vcf_parsed=vcf_parsed,
             contig_te_annotation=contig_te_annotation,
-            contig_fa=merge_contigs,
+            contig_fa=merged_contigs,
             out=args.out,
             sample_name=sample_name,
             ref=reference,

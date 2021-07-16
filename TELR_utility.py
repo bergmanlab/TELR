@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timedelta
+import subprocess
 
 
 def rm_file(file):
@@ -53,3 +54,10 @@ def report_bad_loci(set_raw, set_filtered, report, message):
         for locus in set_raw:
             if locus not in set_filtered:
                 output.write("\t".join([locus, message]) + "\n")
+
+
+def get_cmd_output(cmd_list):
+    """get output from subprocess"""
+    output = subprocess.check_output(cmd_list)
+    output = output.decode("utf-8")
+    return output

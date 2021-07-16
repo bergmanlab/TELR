@@ -39,17 +39,21 @@ def get_args():
 
     # optional
     optional.add_argument(
-        "-m",
         "--align_method",
         type=str,
         help="choose method for read alignment, please provide 'nglmr' or 'minimap2' (default = 'nglmr')",
         required=False,
     )
     optional.add_argument(
-        "-s",
         "--asm_method",
         type=str,
-        help="Choose the method to be used for local contig assembly and polishing step, please provide 'wtdbg2' or 'flye' (default = 'wtdbg2')",
+        help="Choose the method to be used for local contig assembly step, please provide 'wtdbg2' or 'flye' (default = 'wtdbg2')",
+        required=False,
+    )
+    optional.add_argument(
+        "--polish_method",
+        type=str,
+        help="Choose the method to be used for local contig polishing step, please provide 'wtdbg2' or 'flye' (default = 'wtdbg2')",
         required=False,
     )
     optional.add_argument(
@@ -61,9 +65,9 @@ def get_args():
     )
     optional.add_argument(
         "-p",
-        "--polish",
+        "--polish_iterations",
         type=int,
-        help="rounds of contig polishing (default = 1)",
+        help="iterations of contig polishing (default = 1)",
         required=False,
     )
     optional.add_argument(
@@ -100,12 +104,6 @@ def get_args():
         help="flanking sequence length (default = '500bp')",
         required=False,
     )
-    # optional.add_argument(
-    #     "--both_flanks",
-    #     action="store_true",
-    #     help="If provided then allow single flank support (default: requires both flanks to be aligned to reference genome)",
-    #     required=False,
-    # )
     optional.add_argument(
         "--different_contig_name",
         action="store_true",
@@ -150,23 +148,35 @@ def get_args():
         logging.exception("Can not open input file: " + args.library)
         sys.exit(1)
 
+    # check if optional arguments are valid
     if args.align_method is None:
         args.align_method = "nglmr"
     elif args.align_method not in ["nglmr", "minimap2"]:
-        print("Please provide a valid alignment method, exiting...")
+        print("Please provide a valid alignment method (nglmr/minimap2), exiting...")
         sys.exit(1)
 
     if args.asm_method is None:
         args.asm_method = "wtdbg2"
     elif args.asm_method not in ["wtdbg2", "flye"]:
-        print("Please provide a valid asm_method")
+        print("Please provide a valid assembly method (wtdbg2/flye), exiting...")
+        sys.exit(1)
+
+    if args.polish_method is None:
+        args.polish_method = "wtdbg2"
+    elif args.polish_method not in ["wtdbg2", "flye"]:
+        print("Please provide a valid polish method (wtdbg2/flye), exiting...")
         sys.exit(1)
 
     if args.presets is None:
         args.presets = "pacbio"
     elif args.presets not in ["pacbio", "ont"]:
-        print("Please provide a valid preset option")
+        print("Please provide a valid preset option (pacbio/ont), exiting...")
         sys.exit(1)
+
+    if args.polish_iterations is None:
+        args.polish_iterations = 1
+    elif args.polish_iterations < 1:
+        print("Please provide a valid number of iterations for polishing, exiting...")
 
     # sets up out dir variable
     if args.out is None:
@@ -179,9 +189,6 @@ def get_args():
 
     if args.flank_len is None:
         args.flank_len = 500
-
-    if args.polish is None:
-        args.polish = 1
 
     if args.gap is None:
         args.gap = 20

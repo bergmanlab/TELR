@@ -7,15 +7,14 @@ import logging
 import time
 import statistics
 from multiprocessing import Pool
-from TELR_utility import mkdir, create_loci_set, format_time
-
-# from TELR_liftover import annotation_liftover
+from TELR_utility import mkdir, create_loci_set, format_time, get_cmd_output
 from TELR_liftover import liftover
-from TELR_assembly import prep_assembly
+from TELR_assembly import prep_assembly_inputs
 
 
 def annotate_contig(
-    contig_dir,
+    contigs,
+    assembly_passed_loci,
     te_library,
     vcf_parsed,
     out,
@@ -27,85 +26,61 @@ def annotate_contig(
 ):
     logging.info("Annotate contigs...")
     if presets == "pacbio":
-        presets = "map-pb"
+        minimap2_presets = "map-pb"
     else:
-        presets = "map-ont"
-
-    all_loci = create_loci_set(vcf_parsed)
-    assembly_passed_loci = set()
-    merge_contigs = os.path.join(out, sample_name + ".contigs.fa")
-    with open(merge_contigs, "w") as MERGE:
-        for locus in all_loci:
-            assembly = os.path.join(contig_dir, locus + ".cns.fa")
-            new_assembly = os.path.join(contig_dir, locus + ".cns.ctg1.fa")
-            if os.path.isfile(assembly) and os.stat(assembly).st_size > 0:
-                assembly_passed_loci.add(locus)
-                with open(assembly, "r") as handle:
-                    records = SeqIO.parse(handle, "fasta")
-                    for record in records:
-                        if record.id == "ctg1" or record.id == "contig_1":
-                            record.id = locus
-                            record.description = "len=" + str(len(record.seq))
-                            SeqIO.write(record, MERGE, "fasta")
-                            with open(new_assembly, "w") as CTG1:
-                                SeqIO.write(record, CTG1, "fasta")
-
-    # report assembly failed loci
-    with open(loci_eval, "a") as output:
-        for locus in all_loci:
-            if locus not in assembly_passed_loci:
-                output.write("\t".join([locus, "Contig assembly failed"]) + "\n")
+        minimap2_presets = "map-ont"
 
     # map sequence to contigs
-    seq2contig_out = os.path.join(out, "seq2contig.paf")
-    if os.path.isfile(seq2contig_out):
-        os.remove(seq2contig_out)
+    vcf_seq2contig_out = os.path.join(out, "seq2contig.paf")
+    # if os.path.isfile(vcf_seq2contig_out):
+    #     os.remove(vcf_seq2contig_out)
 
     # TODO: consider that some contigs might not exist
     seq2contig_passed_loci = set()
-    seq2contig_dir = os.path.join(out, "seq2contig")
-    mkdir(seq2contig_dir)
-    with open(vcf_parsed, "r") as input:
+    vcf_seq2contig_dir = os.path.join(out, "vcf_seq2contig")
+    mkdir(vcf_seq2contig_dir)
+    with open(vcf_parsed, "r") as input, open(vcf_seq2contig_out, "w") as output:
         for line in input:
             entry = line.replace("\n", "").split("\t")
             contig_name = "_".join([entry[0], entry[1], entry[2]])
             if contig_name in assembly_passed_loci:
                 vcf_seq = entry[7]
-                query = os.path.join(seq2contig_dir, contig_name + ".seq.fa")
+                query = os.path.join(vcf_seq2contig_dir, contig_name + ".seq.fa")
                 create_fa(contig_name, vcf_seq, query)
-                subject = os.path.join(seq2contig_dir, contig_name + ".contig.fa")
-                with open(subject, "w") as output:
+                subject = os.path.join(
+                    vcf_seq2contig_dir, contig_name + ".contig.fa"
+                )  ## TODO: this can be replaced
+                with open(subject, "w") as subject_output_handle:
                     try:
                         subprocess.call(
-                            ["samtools", "faidx", merge_contigs, contig_name],
-                            stdout=output,
+                            ["samtools", "faidx", contigs, contig_name],
+                            stdout=subject_output_handle,
                         )
                     except subprocess.CalledProcessError:
                         print(contig_name + ":contig assembly doesn't exist")
                         continue
-                seq2contig_output = subprocess.check_output(
-                    [
-                        "minimap2",
-                        "-cx",
-                        presets,
-                        "--secondary=no",
-                        "-v",
-                        "0",
-                        subject,
-                        query,
-                    ]
-                )
-                seq2contig_output = seq2contig_output.decode("utf-8")
-                if seq2contig_output != "":
+                cmd = [
+                    "minimap2",
+                    "-cx",
+                    minimap2_presets,
+                    "--secondary=no",
+                    "-v",
+                    "0",
+                    subject,
+                    query,
+                ]
+                vcf_seq2contig_output = get_cmd_output(cmd)
+                if vcf_seq2contig_output != "":
+                    output.write(vcf_seq2contig_output)
                     seq2contig_passed_loci.add(contig_name)
-                    with open(seq2contig_out, "a") as output:
-                        output.write(seq2contig_output)
+                    # with open(vcf_seq2contig_out, "a") as output:
                 os.remove(query)
                 os.remove(subject)
-    os.rmdir(seq2contig_dir)
+    os.rmdir(vcf_seq2contig_dir)
+
     # covert to bed format
     seq2contig_bed = os.path.join(out, "seq2contig.bed")
-    with open(seq2contig_out, "r") as input, open(seq2contig_bed, "w") as output:
+    with open(vcf_seq2contig_out, "r") as input, open(seq2contig_bed, "w") as output:
         for line in input:
             entry = line.replace("\n", "").split("\t")
             bed_line = "\t".join(
@@ -113,16 +88,16 @@ def annotate_contig(
             )
             output.write(bed_line + "\n")
 
-    # report ins-contig failed loci
-    with open(loci_eval, "a") as output:
-        for locus in assembly_passed_loci:
-            if locus not in seq2contig_passed_loci:
-                output.write(
-                    "\t".join(
-                        [locus, "Sniffles VCF sequence not mapped to assembled contig"]
-                    )
-                    + "\n"
-                )
+    # # report ins-contig failed loci
+    # with open(loci_eval, "a") as output:
+    #     for locus in assembly_passed_loci:
+    #         if locus not in seq2contig_passed_loci:
+    #             output.write(
+    #                 "\t".join(
+    #                     [locus, "Sniffles VCF sequence not mapped to assembled contig"]
+    #                 )
+    #                 + "\n"
+    #             )
 
     # map TE library to contigs using minimap2
     # TE-contig alignment
@@ -132,14 +107,14 @@ def annotate_contig(
     for locus in seq2contig_passed_loci:
         contig_fa = os.path.join(out, locus + ".fa")
         with open(contig_fa, "w") as output:
-            subprocess.call(["samtools", "faidx", merge_contigs, locus], stdout=output)
+            subprocess.call(["samtools", "faidx", contigs, locus], stdout=output)
         # map TE library to contig using minimap2
         with open(te2contig_out, "a") as output:
             subprocess.call(
                 [
                     "minimap2",
                     "-cx",
-                    presets,
+                    minimap2_presets,
                     contig_fa,
                     te_library,
                     "-v",
@@ -270,7 +245,7 @@ def annotate_contig(
                 "bedtools",
                 "getfasta",
                 "-fi",
-                merge_contigs,
+                contigs,
                 "-bed",
                 contig_te_annotation,
             ],
@@ -383,7 +358,7 @@ def annotate_contig(
             freq = entry[5]
             te_freq[contig_name] = freq
 
-    return contig_te_annotation, te_freq, te_fa, merge_contigs
+    return contig_te_annotation, te_freq, te_fa
 
 
 def seq2contig(seq, contig, out):
@@ -577,7 +552,7 @@ def get_af(
 
     # prepare reads
     telr_reads_dir = os.path.join(out, "telr_reads")
-    prep_assembly(
+    prep_assembly_inputs(
         vcf_parsed, out, sample_name, bam, raw_reads, telr_reads_dir, read_type="all"
     )
 
