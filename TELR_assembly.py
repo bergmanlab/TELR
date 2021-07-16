@@ -11,8 +11,8 @@ from TELR_utility import mkdir, check_exist, format_time, create_loci_set
 
 
 def get_local_contigs(
-    asm_method,
-    polish_method,
+    assembler,
+    polisher,
     contig_dir,
     vcf_parsed,
     out,
@@ -56,8 +56,8 @@ def get_local_contigs(
                 contig_name,
                 thread_asm,
                 presets,
-                asm_method,
-                polish_method,
+                assembler,
+                polisher,
                 polish_iterations,
             ]
             asm_pa_list.append(asm_pa)
@@ -107,12 +107,12 @@ def run_assembly_polishing(args):
     contig_name = args[2]
     thread = args[3]
     presets = args[4]
-    asm_method = args[5]
-    polish_method = args[6]
+    assembler = args[5]
+    polisher = args[6]
     polish_iterations = args[7]
 
     # run assembly
-    if asm_method == "wtdbg2":
+    if assembler == "wtdbg2":
         asm_cns = run_wtdbg2_assembly(reads, asm_dir, contig_name, thread, presets)
     else:
         asm_cns = run_flye_assembly(reads, asm_dir, contig_name, thread, presets)
@@ -123,7 +123,7 @@ def run_assembly_polishing(args):
 
     # run polishing
     if polish_iterations > 0:
-        if polish_method == "wtdbg2":
+        if polisher == "wtdbg2":
             asm_cns = run_wtdbg2_polishing(
                 asm_cns, reads, thread, polish_iterations, presets
             )

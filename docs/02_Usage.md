@@ -18,15 +18,13 @@ required arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
-  --align_method ALIGN_METHOD
-                        choose method for read alignment, please provide
+  --aligner ALIGNER     choose method for read alignment, please provide
                         'nglmr' or 'minimap2' (default = 'nglmr')
-  --asm_method ASM_METHOD
+  --assembler ASSEMBLER
                         Choose the method to be used for local contig assembly
                         step, please provide 'wtdbg2' or 'flye' (default =
                         'wtdbg2')
-  --polish_method POLISH_METHOD
-                        Choose the method to be used for local contig
+  --polisher POLISHER   Choose the method to be used for local contig
                         polishing step, please provide 'wtdbg2' or 'flye'
                         (default = 'wtdbg2')
   -x PRESETS, --presets PRESETS
@@ -68,9 +66,9 @@ python3 telr.py -i (--reads) <reads in fasta/fastq format or read alignments in 
 ## Optional arguments
 In addition to the required program options listed above, there are some optional arguments. The full list of program options with descriptions can also be obtained by running `telr.py -h`.
 - `-x/--presets <str>` Preset for different sequencing technologies, please provide 'pacbio' or 'ont' (default = 'pacbio').
-- `--align_method <str>` Method for read alignment, please provide 'nglmr' or or 'minimap2' (default = 'nglmr').
-- `--asm_method <str>` Method for for local contig assembly step, please provide 'wtdbg2' or or 'flye' (default = 'wtdbg2').
-- `--polish_method <str>` Method for for local contig polishing step, please provide 'wtdbg2' or or 'flye' (default = 'wtdbg2').
+- `--aligner <str>` Method for read alignment, please provide 'nglmr' or or 'minimap2' (default = 'nglmr').
+- `--assembler <str>` Method for for local contig assembly step, please provide 'wtdbg2' or or 'flye' (default = 'wtdbg2').
+- `--polisher <str>` Method for for local contig polishing step, please provide 'wtdbg2' or or 'flye' (default = 'wtdbg2').
 - `-p/--polish_iterations <int>` Iterations of contig polishing (default = '1').
 - `-o/--out <str>` Output directory (default = '.').
 - `-t/--thread <int>` Maximum cpu threads to use (default = '1').

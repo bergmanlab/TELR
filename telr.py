@@ -54,7 +54,7 @@ def main():
             tmp_dir,
             sample_name,
             args.thread,
-            args.align_method,
+            args.aligner,
             args.presets,
         )
     else:
@@ -85,8 +85,8 @@ def main():
     # Local assembly
     contig_dir = os.path.join(tmp_dir, "contig_assembly")
     merged_contigs, assembly_passed_loci = get_local_contigs(
-        asm_method=args.asm_method,
-        polish_method=args.polish_method,
+        assembler=args.assembler,
+        polisher=args.polisher,
         contig_dir=contig_dir,
         vcf_parsed=vcf_parsed,
         out=tmp_dir,

@@ -39,19 +39,19 @@ def get_args():
 
     # optional
     optional.add_argument(
-        "--align_method",
+        "--aligner",
         type=str,
         help="choose method for read alignment, please provide 'nglmr' or 'minimap2' (default = 'nglmr')",
         required=False,
     )
     optional.add_argument(
-        "--asm_method",
+        "--assembler",
         type=str,
         help="Choose the method to be used for local contig assembly step, please provide 'wtdbg2' or 'flye' (default = 'wtdbg2')",
         required=False,
     )
     optional.add_argument(
-        "--polish_method",
+        "--polisher",
         type=str,
         help="Choose the method to be used for local contig polishing step, please provide 'wtdbg2' or 'flye' (default = 'wtdbg2')",
         required=False,
@@ -101,7 +101,7 @@ def get_args():
     optional.add_argument(
         "--flank_len",
         type=int,
-        help="flanking sequence length (default = '500bp')",
+        help="flanking sequence length (default = '500')",
         required=False,
     )
     optional.add_argument(
@@ -149,21 +149,21 @@ def get_args():
         sys.exit(1)
 
     # check if optional arguments are valid
-    if args.align_method is None:
-        args.align_method = "nglmr"
-    elif args.align_method not in ["nglmr", "minimap2"]:
+    if args.aligner is None:
+        args.aligner = "nglmr"
+    elif args.aligner not in ["nglmr", "minimap2"]:
         print("Please provide a valid alignment method (nglmr/minimap2), exiting...")
         sys.exit(1)
 
-    if args.asm_method is None:
-        args.asm_method = "wtdbg2"
-    elif args.asm_method not in ["wtdbg2", "flye"]:
+    if args.assembler is None:
+        args.assembler = "wtdbg2"
+    elif args.assembler not in ["wtdbg2", "flye"]:
         print("Please provide a valid assembly method (wtdbg2/flye), exiting...")
         sys.exit(1)
 
-    if args.polish_method is None:
-        args.polish_method = "wtdbg2"
-    elif args.polish_method not in ["wtdbg2", "flye"]:
+    if args.polisher is None:
+        args.polisher = "wtdbg2"
+    elif args.polisher not in ["wtdbg2", "flye"]:
         print("Please provide a valid polish method (wtdbg2/flye), exiting...")
         sys.exit(1)
 
