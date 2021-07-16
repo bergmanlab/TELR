@@ -18,25 +18,31 @@ required arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
-  -m METHOD, --method METHOD
-                        method for read alignment, please provide 'nglmr' or
-                        'minimap2' (default = 'nglmr')
+  --aligner ALIGNER     choose method for read alignment, please provide
+                        'nglmr' or 'minimap2' (default = 'nglmr')
+  --assembler ASSEMBLER
+                        Choose the method to be used for local contig assembly
+                        step, please provide 'wtdbg2' or 'flye' (default =
+                        'wtdbg2')
+  --polisher POLISHER   Choose the method to be used for local contig
+                        polishing step, please provide 'wtdbg2' or 'flye'
+                        (default = 'wtdbg2')
   -x PRESETS, --presets PRESETS
                         parameter presets for different sequencing
-                        technologies, please provide 'ont' or 'pacbio'
+                        technologies, please provide 'pacbio' or 'ont'
                         (default = 'pacbio')
-  -p POLISH, --polish POLISH
-                        rounds of contig polishing (default = 1)
+  -p POLISH_ITERATIONS, --polish_iterations POLISH_ITERATIONS
+                        iterations of contig polishing (default = 1)
   -o OUT, --out OUT     directory to output data (default = '.')
   -t THREAD, --thread THREAD
                         max cpu threads to use (default = '1')
   -g GAP, --gap GAP     max gap size for flanking sequence alignment (default
-                        = '50')
+                        = '20')
   -v OVERLAP, --overlap OVERLAP
                         max overlap size for flanking sequence alignment
-                        (default = '50')
+                        (default = '20')
   --flank_len FLANK_LEN
-                        flanking sequence length in the TELR assembled contigs (default = '500')
+                        flanking sequence length (default = '500')
   --different_contig_name
                         If provided then TELR does not require the contig name
                         to match before and after annotation liftover
@@ -59,14 +65,16 @@ python3 telr.py -i (--reads) <reads in fasta/fastq format or read alignments in 
 
 ## Optional arguments
 In addition to the required program options listed above, there are some optional arguments. The full list of program options with descriptions can also be obtained by running `telr.py -h`.
-- `-m (--method) <arg>` Method for read alignment, please provide 'nglmr' or or 'minimap2' (default = 'nglmr').
-- `-x (--presets) <arg>` Preset for different sequencing technologies, please provide 'ont' or 'pacbio' (default = 'pacbio').
-- `-p (--polish) <int>` Rounds of contig polishing using polisher from [wtdbg2](https://github.com/ruanjue/wtdbg2) (default = 1).
-- `-o (--out) <arg>` Output directory (default = '.').
-- `-t (--thread) <int>` Maximum cpu threads to use (default = '1').
-- `-g (--gap) <int>` Maximum gap size between sequence alignments of two contig flanks (default= '50').
-- `-v (--overlap) <int>` Maximum overlap size between sequence alignments of two contig flanks (default= '50').
+- `-x/--presets <str>` Preset for different sequencing technologies, please provide 'pacbio' or 'ont' (default = 'pacbio').
+- `--aligner <str>` Method for read alignment, please provide 'nglmr' or or 'minimap2' (default = 'nglmr').
+- `--assembler <str>` Method for for local contig assembly step, please provide 'wtdbg2' or or 'flye' (default = 'wtdbg2').
+- `--polisher <str>` Method for for local contig polishing step, please provide 'wtdbg2' or or 'flye' (default = 'wtdbg2').
+- `-p/--polish_iterations <int>` Iterations of contig polishing (default = '1').
+- `-o/--out <str>` Output directory (default = '.').
+- `-t/--thread <int>` Maximum cpu threads to use (default = '1').
+- `-g/--gap <int>` Maximum gap size between sequence alignments of two contig flanks (default= '50').
+- `-v/--overlap <int>` Maximum overlap size between sequence alignments of two contig flanks (default= '50').
 - `--flank_len <int>` flanking sequence length in the TELR assembled contigs (default= '500').
 - `--different_contig_name` If provided then TELR does not require the contig name to match before and after annotation liftover (default: require contig name to be the same before and after liftover).
 - `--minimap2_family` If provided then minimap2 will be used to annotate TE families in the assembled contigs (default: use repeatmasker for contig TE annotation).
-- `-k (--keep_files)` If provided then all intermediate files will be kept (default: remove intermediate files).
+- `-k/--keep_files` If provided then all intermediate files will be kept (default: remove intermediate files).

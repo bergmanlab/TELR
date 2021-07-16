@@ -39,24 +39,35 @@ def get_args():
 
     # optional
     optional.add_argument(
-        "-m",
-        "--method",
+        "--aligner",
         type=str,
-        help="method for read alignment, please provide 'nglmr' or 'minimap2' (default = 'nglmr')",
+        help="choose method for read alignment, please provide 'nglmr' or 'minimap2' (default = 'nglmr')",
+        required=False,
+    )
+    optional.add_argument(
+        "--assembler",
+        type=str,
+        help="Choose the method to be used for local contig assembly step, please provide 'wtdbg2' or 'flye' (default = 'wtdbg2')",
+        required=False,
+    )
+    optional.add_argument(
+        "--polisher",
+        type=str,
+        help="Choose the method to be used for local contig polishing step, please provide 'wtdbg2' or 'flye' (default = 'wtdbg2')",
         required=False,
     )
     optional.add_argument(
         "-x",
         "--presets",
         type=str,
-        help="parameter presets for different sequencing technologies, please provide 'ont' or 'pacbio' (default = 'pacbio')",
+        help="parameter presets for different sequencing technologies, please provide 'pacbio' or 'ont' (default = 'pacbio')",
         required=False,
     )
     optional.add_argument(
         "-p",
-        "--polish",
+        "--polish_iterations",
         type=int,
-        help="rounds of contig polishing (default = 1)",
+        help="iterations of contig polishing (default = 1)",
         required=False,
     )
     optional.add_argument(
@@ -90,15 +101,9 @@ def get_args():
     optional.add_argument(
         "--flank_len",
         type=int,
-        help="flanking sequence length (default = '500bp')",
+        help="flanking sequence length (default = '500')",
         required=False,
     )
-    # optional.add_argument(
-    #     "--both_flanks",
-    #     action="store_true",
-    #     help="If provided then allow single flank support (default: requires both flanks to be aligned to reference genome)",
-    #     required=False,
-    # )
     optional.add_argument(
         "--different_contig_name",
         action="store_true",
@@ -107,14 +112,14 @@ def get_args():
     )
     optional.add_argument(
         "--minimap2_family",
-        action='store_true',
+        action="store_true",
         help="If provided then minimap2 will be used to annotate TE families in the assembled contigs (default: use repeatmasker for contig TE annotation)",
         required=False,
     )
     optional.add_argument(
         "-k",
         "--keep_files",
-        action='store_true',
+        action="store_true",
         help="If provided then all intermediate files will be kept (default: remove intermediate files)",
         required=False,
     )
@@ -143,11 +148,35 @@ def get_args():
         logging.exception("Can not open input file: " + args.library)
         sys.exit(1)
 
-    if args.method is None:
-        args.method = "nglmr"
+    # check if optional arguments are valid
+    if args.aligner is None:
+        args.aligner = "nglmr"
+    elif args.aligner not in ["nglmr", "minimap2"]:
+        print("Please provide a valid alignment method (nglmr/minimap2), exiting...")
+        sys.exit(1)
+
+    if args.assembler is None:
+        args.assembler = "wtdbg2"
+    elif args.assembler not in ["wtdbg2", "flye"]:
+        print("Please provide a valid assembly method (wtdbg2/flye), exiting...")
+        sys.exit(1)
+
+    if args.polisher is None:
+        args.polisher = "wtdbg2"
+    elif args.polisher not in ["wtdbg2", "flye"]:
+        print("Please provide a valid polish method (wtdbg2/flye), exiting...")
+        sys.exit(1)
 
     if args.presets is None:
         args.presets = "pacbio"
+    elif args.presets not in ["pacbio", "ont"]:
+        print("Please provide a valid preset option (pacbio/ont), exiting...")
+        sys.exit(1)
+
+    if args.polish_iterations is None:
+        args.polish_iterations = 1
+    elif args.polish_iterations < 1:
+        print("Please provide a valid number of iterations for polishing, exiting...")
 
     # sets up out dir variable
     if args.out is None:
@@ -160,9 +189,6 @@ def get_args():
 
     if args.flank_len is None:
         args.flank_len = 500
-
-    if args.polish is None:
-        args.polish = 1
 
     if args.gap is None:
         args.gap = 20
@@ -201,7 +227,7 @@ def parse_input(input_reads, input_reference, input_library, sample_name, out_di
     except Exception:
         logging.exception("Create symbolic link for " + input_reference + " failed")
         sys.exit(1)
-    
+
     input_library_copy = os.path.join(out_dir, os.path.basename(input_library))
     if not os.path.isabs(input_library):
         input_library = os.path.abspath(input_library)
@@ -234,7 +260,13 @@ def parse_input(input_reads, input_reference, input_library, sample_name, out_di
         logging.error("Input format not recognized")
         sys.exit(1)
 
-    return input_reads_copy, input_reference_copy, input_library_copy, fasta, skip_alignment
+    return (
+        input_reads_copy,
+        input_reference_copy,
+        input_library_copy,
+        fasta,
+        skip_alignment,
+    )
 
 
 def bam2fasta(bam, fasta):

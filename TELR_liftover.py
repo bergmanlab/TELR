@@ -48,21 +48,21 @@ def get_args(program_version, arguments=sys.argv[1:]):
         "-l",
         "--flank_len",
         type=int,
-        help="flanking sequence length (default = '500bp')",
+        help="flanking sequence length (default = '500')",
         required=False,
     )
     parser.add_argument(
         "-g",
         "--flank_gap_max",
         type=int,
-        help="maximum gap size between 5p and 3p flanking sequence alignments (default = '50bp')",
+        help="maximum gap size between 5p and 3p flanking sequence alignments (default = '50')",
         required=False,
     )
     parser.add_argument(
         "-p",
         "--flank_overlap_max",
         type=int,
-        help="maximum overlap size between 5p and 3p flanking sequence alignments (default = '50bp')",
+        help="maximum overlap size between 5p and 3p flanking sequence alignments (default = '50')",
         required=False,
     )
     parser.add_argument(
