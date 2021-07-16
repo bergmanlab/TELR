@@ -2,10 +2,13 @@
 
 ## Command line help page
 ```
-usage: telr.py [-h] -i READS -r REFERENCE -l LIBRARY [-x PRESETS] [-p POLISH]
-               [-o OUT] [-t THREAD] [-g GAP] [-v OVERLAP] [-k]
+usage: telr.py [-h] -i READS -r REFERENCE -l LIBRARY [--aligner ALIGNER]
+               [--assembler ASSEMBLER] [--polisher POLISHER] [-x PRESETS]
+               [-p POLISH_ITERATIONS] [-o OUT] [-t THREAD] [-g GAP]
+               [-v OVERLAP] [--flank_len FLANK_LEN] [--different_contig_name]
+               [--minimap2_family] [-k]
 
-Script to detect TEs in long read data
+Program for detecting non-reference TEs in long read data
 
 required arguments:
   -i READS, --reads READS

@@ -9,7 +9,7 @@ from TELR_utility import mkdir
 
 def get_args():
     parser = argparse.ArgumentParser(
-        description="Script to detect TEs in long read data"
+        description="Program for detecting non-reference TEs in long read data"
     )
     optional = parser._action_groups.pop()
     required = parser.add_argument_group("required arguments")
