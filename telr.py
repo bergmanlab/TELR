@@ -121,6 +121,8 @@ def main():
         contig_te_annotation,
         contig_dir,
         vcf_parsed,
+        args.af_flank_interval_size,
+        args.af_flank_offset,
         args.presets,
         args.thread,
     )

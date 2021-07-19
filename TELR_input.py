@@ -105,6 +105,18 @@ def get_args():
         required=False,
     )
     optional.add_argument(
+        "--af_flank_interval_size",
+        type=int,
+        help="interval size to be used for allele frequency estimation (default = '100')",
+        required=False,
+    )
+    optional.add_argument(
+        "--af_flank_offset",
+        type=int,
+        help="offset to be used for allele frequency estimation (default = '200')",
+        required=False,
+    )
+    optional.add_argument(
         "--different_contig_name",
         action="store_true",
         help="If provided then TELR does not require the contig name to match before and after annotation liftover (default: require contig name to be the same before and after liftover)",
@@ -189,6 +201,12 @@ def get_args():
 
     if args.flank_len is None:
         args.flank_len = 500
+
+    if args.af_flank_interval_size is None:
+        args.af_flank_interval_size = 100
+
+    if args.af_flank_offset is None:
+        args.af_flank_offset = 200
 
     if args.gap is None:
         args.gap = 20

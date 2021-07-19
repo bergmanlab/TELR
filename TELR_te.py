@@ -540,6 +540,8 @@ def get_af(
     contig_te_annotation,
     contig_dir,
     vcf_parsed,
+    intervel_size,
+    offset,
     presets,
     thread,
 ):
@@ -610,8 +612,6 @@ def get_af(
 
     # analyze realignment and estimate coverage
     vcf_parsed_freq = vcf_parsed + ".freq"
-    flank_len = 100
-    offset = 200
     with open(vcf_parsed, "r") as input, open(vcf_parsed_freq, "w") as output:
         for line in input:
             entry = line.replace("\n", "").split("\t")
@@ -623,10 +623,17 @@ def get_af(
                     # get contig size
                     contig = os.path.join(contig_dir, contig_name + ".cns.ctg1.fa")
                     contig_length = get_contig_length(contig)
-                    # get TE coverage
+                    # get TE locus coverage
                     te_cov = get_median_cov(bam, contig_name, start, end)
+                    # get flanking coverage
                     left_flank_cov, right_flank_cov, flank_cov = get_flank_cov(
-                        bam, contig_name, contig_length, start, end, flank_len, offset
+                        bam,
+                        contig_name,
+                        contig_length,
+                        start,
+                        end,
+                        intervel_size,
+                        offset,
                     )
                     out_line = "\t".join(
                         entry
