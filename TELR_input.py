@@ -105,15 +105,27 @@ def get_args():
         required=False,
     )
     optional.add_argument(
-        "--af_flank_interval_size",
+        "--af_flank_interval",
         type=int,
-        help="interval size to be used for allele frequency estimation (default = '100')",
+        help="5' and 3'flanking sequence interval size used for allele frequency estimation (default = '100')",
         required=False,
     )
     optional.add_argument(
         "--af_flank_offset",
         type=int,
-        help="offset to be used for allele frequency estimation (default = '200')",
+        help="5' and 3' flanking sequence offset size used for allele frequency estimation (default = '200')",
+        required=False,
+    )
+    optional.add_argument(
+        "--af_te_interval",
+        type=int,
+        help="5' and 3' te sequence interval size used for allele frequency estimation (default: whole te locus)",
+        required=False,
+    )
+    optional.add_argument(
+        "--af_te_offset",
+        type=int,
+        help="5' and 3' te sequence offset size used for allele frequency estimation (default: '0')",
         required=False,
     )
     optional.add_argument(
@@ -202,11 +214,20 @@ def get_args():
     if args.flank_len is None:
         args.flank_len = 500
 
-    if args.af_flank_interval_size is None:
-        args.af_flank_interval_size = 100
+    if args.af_flank_interval is None:
+        args.af_flank_interval = 100
 
     if args.af_flank_offset is None:
         args.af_flank_offset = 200
+
+    if args.af_te_interval:
+        if args.af_te_interval <= 0:
+            print(
+                "Please provide a valid interval size (positive integer) for allele frequency estimation, exiting..."
+            )
+
+    if args.af_te_offset:
+        args.af_te_offset = 0
 
     if args.gap is None:
         args.gap = 20
