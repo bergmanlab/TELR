@@ -2,10 +2,16 @@
 
 ## Command line help page
 ```
-usage: telr.py [-h] -i READS -r REFERENCE -l LIBRARY [-x PRESETS] [-p POLISH]
-               [-o OUT] [-t THREAD] [-g GAP] [-v OVERLAP] [-k]
+usage: telr.py [-h] -i READS -r REFERENCE -l LIBRARY [--aligner ALIGNER]
+               [--assembler ASSEMBLER] [--polisher POLISHER] [-x PRESETS]
+               [-p POLISH_ITERATIONS] [-o OUT] [-t THREAD] [-g GAP]
+               [-v OVERLAP] [--flank_len FLANK_LEN]
+               [--af_flank_interval AF_FLANK_INTERVAL]
+               [--af_flank_offset AF_FLANK_OFFSET]
+               [--af_te_interval AF_TE_INTERVAL] [--af_te_offset AF_TE_OFFSET]
+               [--different_contig_name] [--minimap2_family] [-k]
 
-Script to detect TEs in long read data
+Program for detecting non-reference TEs in long read data
 
 required arguments:
   -i READS, --reads READS
@@ -43,6 +49,18 @@ optional arguments:
                         (default = '20')
   --flank_len FLANK_LEN
                         flanking sequence length (default = '500')
+  --af_flank_interval AF_FLANK_INTERVAL
+                        5' and 3'flanking sequence interval size used for
+                        allele frequency estimation (default = '100')
+  --af_flank_offset AF_FLANK_OFFSET
+                        5' and 3' flanking sequence offset size used for
+                        allele frequency estimation (default = '200')
+  --af_te_interval AF_TE_INTERVAL
+                        5' and 3' te sequence interval size used for allele
+                        frequency estimation (default: whole te locus)
+  --af_te_offset AF_TE_OFFSET
+                        5' and 3' te sequence offset size used for allele
+                        frequency estimation (default: '0')
   --different_contig_name
                         If provided then TELR does not require the contig name
                         to match before and after annotation liftover
@@ -75,6 +93,10 @@ In addition to the required program options listed above, there are some optiona
 - `-g/--gap <int>` Maximum gap size between sequence alignments of two contig flanks (default= '50').
 - `-v/--overlap <int>` Maximum overlap size between sequence alignments of two contig flanks (default= '50').
 - `--flank_len <int>` flanking sequence length in the TELR assembled contigs (default= '500').
+- `--af_flank_interval <int>` 5' and 3' flanking sequence interval size used for allele frequency estimation (default= '100').
+- `--af_flank_offset <int>` 5' and 3' flanking sequence offset size used for allele frequency estimation (default= '200').
+- `--af_te_interval <int>` 5' and 3' TE interval size used for allele frequency estimation (default: whole te locus).
+- `--af_te_offset <int>` 5' and 3' TE offset size used for allele frequency estimation (default= '0').
 - `--different_contig_name` If provided then TELR does not require the contig name to match before and after annotation liftover (default: require contig name to be the same before and after liftover).
 - `--minimap2_family` If provided then minimap2 will be used to annotate TE families in the assembled contigs (default: use repeatmasker for contig TE annotation).
 - `-k/--keep_files` If provided then all intermediate files will be kept (default: remove intermediate files).

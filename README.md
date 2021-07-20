@@ -20,7 +20,7 @@ Please use the [Github Issue page](https://github.com/bergmanlab/TELR/issues) if
 
 ## License
 
-Copyright (c) 2020 Shunhua Han, Guilherme Dias and Casey M. Bergman
+Copyright (c) 2021 Shunhua Han, Guilherme Dias and Casey M. Bergman
 
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
 

@@ -487,9 +487,10 @@ def realignment(args):
     os.remove(bam)
 
 
-def get_flank_cov(
-    bam, contig_name, contig_length, start, end, flank_len=100, offset=200
-):
+def get_flank_cov(bam, contig_name, contig_length, start, end, flank_len, offset):
+    """
+    Get the coverage of the flanking regions of a TE
+    """
     left_flank_present = True
     right_flank_present = True
     left_flank_cov = 0
@@ -540,6 +541,10 @@ def get_af(
     contig_te_annotation,
     contig_dir,
     vcf_parsed,
+    flank_intervel_size,
+    flank_offset,
+    te_interval_size,
+    te_offset,
     presets,
     thread,
 ):
@@ -610,8 +615,6 @@ def get_af(
 
     # analyze realignment and estimate coverage
     vcf_parsed_freq = vcf_parsed + ".freq"
-    flank_len = 100
-    offset = 200
     with open(vcf_parsed, "r") as input, open(vcf_parsed_freq, "w") as output:
         for line in input:
             entry = line.replace("\n", "").split("\t")
@@ -623,18 +626,29 @@ def get_af(
                     # get contig size
                     contig = os.path.join(contig_dir, contig_name + ".cns.ctg1.fa")
                     contig_length = get_contig_length(contig)
-                    # get TE coverage
-                    te_cov = get_median_cov(bam, contig_name, start, end)
-                    left_flank_cov, right_flank_cov, flank_cov = get_flank_cov(
-                        bam, contig_name, contig_length, start, end, flank_len, offset
+                    # get TE locus coverage
+                    # te_cov = get_median_cov(bam, contig_name, start, end)
+                    te_5p_cov, te_3p_cov, te_avg_cov = get_te_cov(
+                        bam, contig_name, start, end, te_interval_size, te_offset
+                    )
+
+                    # get flanking coverage
+                    flank_5p_cov, flank_3p_cov, flank_avg_cov = get_flank_cov(
+                        bam,
+                        contig_name,
+                        contig_length,
+                        start,
+                        end,
+                        flank_intervel_size,
+                        flank_offset,
                     )
                     out_line = "\t".join(
                         entry
                         + [
-                            str(te_cov),
-                            str(left_flank_cov),
-                            str(right_flank_cov),
-                            str(flank_cov),
+                            str(te_avg_cov),
+                            str(flank_5p_cov),
+                            str(flank_3p_cov),
+                            str(flank_avg_cov),
                         ]
                     )
                     output.write(out_line + "\n")
@@ -658,6 +672,38 @@ def get_af(
     proc_time = time.time() - start_time
     logging.info("Allele frequency estimation finished in " + format_time(proc_time))
     return te_freq
+
+
+def get_te_cov(bam, contig_name, start, end, te_interval_size, te_offset):
+    """
+    Get TE locus coverage
+    """
+    te_5p_cov = 0
+    te_3p_cov = 0
+    te_cov = 0
+    whole_te_locus_cov = False
+    if te_interval_size:
+        if start + te_offset + te_interval_size < end:
+            te_5p_cov = get_median_cov(
+                bam,
+                contig_name,
+                start + te_offset,
+                start + te_offset + te_interval_size,
+            )
+            te_3p_cov = get_median_cov(
+                bam, contig_name, end - te_interval_size - te_offset, end - te_offset
+            )
+        else:
+            whole_te_locus_cov = True
+    else:
+        whole_te_locus_cov = True
+
+    if whole_te_locus_cov:
+        te_5p_cov = get_median_cov(bam, contig_name, start, end)
+        te_3p_cov = te_5p_cov
+
+    te_cov = (te_5p_cov + te_3p_cov) / 2
+    return te_5p_cov, te_3p_cov, te_cov
 
 
 def get_median_cov(bam, chr, start, end):
