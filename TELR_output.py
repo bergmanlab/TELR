@@ -164,9 +164,21 @@ def generate_output(
             insertion_report["genotype"] = sniffles_info[contig_id]["gt"]
             insertion_report["num_sv_reads"] = sniffles_info[contig_id]["alt_count"]
             insertion_report["num_ref_reads"] = sniffles_info[contig_id]["ref_count"]
-            insertion_report["allele_frequency"] = te_freq_dict[contig_id]
+            insertion_report["allele_frequency"] = te_freq_dict[contig_id]["freq"]
 
             # fill expaned report
+            insertion_report_expanded["te_5p_cov"] = te_freq_dict[contig_id][
+                "te_5p_cov"
+            ]
+            insertion_report_expanded["te_3p_cov"] = te_freq_dict[contig_id][
+                "te_3p_cov"
+            ]
+            insertion_report_expanded["flank_5p_cov"] = te_freq_dict[contig_id][
+                "flank_5p_cov"
+            ]
+            insertion_report_expanded["flank_3p_cov"] = te_freq_dict[contig_id][
+                "flank_3p_cov"
+            ]
             insertion_report_expanded["contig_length"] = contig_length_dict[contig_id]
             insertion_report_expanded["gap_between_flank"] = report_info["gap"]
             if report_info["gap"] is not None:

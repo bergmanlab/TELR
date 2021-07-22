@@ -99,7 +99,7 @@ def main():
     )
 
     # Annotate contig for TE region
-    contig_te_annotation, te_freq, te_fa = annotate_contig(
+    contig_te_annotation, te_fa = annotate_contig(
         merged_contigs,
         assembly_passed_loci,
         library,
