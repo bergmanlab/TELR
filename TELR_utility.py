@@ -1,6 +1,7 @@
 import os
 from datetime import datetime, timedelta
 import subprocess
+from Bio import SeqIO
 
 
 def rm_file(file):
@@ -61,3 +62,12 @@ def get_cmd_output(cmd_list):
     output = subprocess.check_output(cmd_list)
     output = output.decode("utf-8")
     return output
+
+
+def get_rev_comp_sequence(fasta_in, fasta_out):
+    """get reverse complement of a sequence"""
+    with open(fasta_out, "w") as output:
+        for record in SeqIO.parse(fasta_in, "fasta"):
+            output.write(
+                ">" + record.id + "\n" + str(record.seq.reverse_complement()) + "\n"
+            )

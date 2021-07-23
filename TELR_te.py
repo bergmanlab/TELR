@@ -7,7 +7,14 @@ import logging
 import time
 import statistics
 from multiprocessing import Pool
-from TELR_utility import mkdir, create_loci_set, format_time, get_cmd_output
+from TELR_utility import (
+    check_exist,
+    mkdir,
+    create_loci_set,
+    format_time,
+    get_cmd_output,
+    get_rev_comp_sequence,
+)
 from TELR_liftover import liftover
 from TELR_assembly import prep_assembly_inputs
 
@@ -469,17 +476,18 @@ def realignment(args):
     query = args[0]
     subject = args[1]
     presets = args[2]
+    prefix = args[3]
     thread = 1
 
-    sam = query.replace(".reads.fa", ".realign.sam")
+    sam = prefix + ".sam"
     with open(sam, "w") as output:
         subprocess.call(
             ["minimap2", "-a", "-x", presets, "-v", "0", subject, query], stdout=output
         )
-    bam = query.replace(".reads.fa", ".realign.bam")
+    bam = prefix + ".realign.bam"
     with open(bam, "w") as output:
         subprocess.call(["samtools", "view", "-bS", sam], stdout=output)
-    sorted_bam = query.replace(".reads.fa", ".realign.sort.bam")
+    sorted_bam = prefix + ".realign.sort.bam"
     subprocess.call(["samtools", "sort", "-@", str(thread), "-o", sorted_bam, bam])
     subprocess.call(["samtools", "index", "-@", str(thread), sorted_bam])
 
@@ -571,19 +579,10 @@ def get_af(
         vcf_parsed, out, sample_name, bam, raw_reads, telr_reads_dir, read_type="all"
     )
 
-    # read contig annotation to dict
-    contig_te_dict = dict()
-    with open(contig_te_annotation, "r") as input:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
-            contig_name = entry[0]
-            start = entry[1]
-            end = entry[2]
-            contig_te_dict[contig_name] = int(start), int(end)
-
-    # re-align reads to assembly
+    # re-align reads to assembly, both forward and reverse
     k = 0
-    realign_pa_list = []
+    realign_pa1_list = []
+    realign_pa2_list = []
     with open(vcf_parsed, "r") as input:
         for line in input:
             entry = line.replace("\n", "").split("\t")
@@ -595,24 +594,32 @@ def get_af(
             k = k + 1
 
             contig = os.path.join(contig_dir, contig_name + ".cns.ctg1.fa")
-
-            # get contig length
             if not os.path.isfile(contig):
                 print(contig_name + " no assembly")
                 continue
+            contig_rev_comp = os.path.join(
+                contig_dir, contig_name + ".cns.ctg1.revcomp.fa"
+            )
+            get_rev_comp_sequence(contig, contig_rev_comp)
 
             # prepare reads for assembly
             raw_reads = os.path.join(telr_reads_dir, contig_name + ".reads.fa")
 
-            align_pa = [raw_reads, contig, presets]
-            realign_pa_list.append(align_pa)
+            prefix1 = os.path.join(telr_reads_dir, contig_name)
+            align_pa1 = [raw_reads, contig, presets, prefix1]
+            realign_pa1_list.append(align_pa1)
+
+            prefix2 = os.path.join(telr_reads_dir, contig_name + ".revcomp")
+            align_pa2 = [raw_reads, contig_rev_comp, presets, prefix2]
+            realign_pa2_list.append(align_pa2)
 
     # run realignment in parallel
     logging.info("Perform local realignment...")
     start_time = time.time()
     try:
         pool = Pool(processes=thread)
-        pool.map(realignment, realign_pa_list)
+        pool.map(realignment, realign_pa1_list)
+        pool.map(realignment, realign_pa2_list)
         pool.close()
         pool.join()
     except Exception as e:
@@ -622,6 +629,27 @@ def get_af(
     proc_time = time.time() - start_time
     logging.info("Local realignment finished in " + format_time(proc_time))
 
+    # read contig annotation to dict
+    contig_te_coord_dict = dict()
+    with open(contig_te_annotation, "r") as input:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            contig_name = entry[0]
+            # get coordinates of TEs on reverse complement
+            contig = os.path.join(contig_dir, contig_name + ".cns.ctg1.fa")
+            if check_exist(contig):
+                start = int(entry[1])
+                end = int(entry[2])
+                contig_length = get_contig_length(contig)
+                start_revcomp = contig_length - end
+                end_revcomp = contig_length - start
+                contig_te_coord_dict[contig_name] = {
+                    "fw": (start, end),
+                    "rc": (start_revcomp, end_revcomp),
+                }
+            else:
+                continue
+
     # analyze realignment and estimate coverage
     vcf_parsed_freq = vcf_parsed + ".freq"
     with open(vcf_parsed, "r") as input, open(vcf_parsed_freq, "w") as output:
@@ -630,17 +658,57 @@ def get_af(
             contig_name = "_".join([entry[0], entry[1], entry[2]])
             bam = os.path.join(telr_reads_dir, contig_name + ".realign.sort.bam")
             if os.path.isfile(bam):
-                if contig_name in contig_te_dict:
-                    start, end = contig_te_dict[contig_name]
+                if contig_name in contig_te_coord_dict:
+                    start, end = contig_te_coord_dict[contig_name]["fw"]
                     # get contig size
                     contig = os.path.join(contig_dir, contig_name + ".cns.ctg1.fa")
                     contig_length = get_contig_length(contig)
                     # get TE locus coverage
-                    # te_cov = get_median_cov(bam, contig_name, start, end)
                     te_5p_cov, te_3p_cov = get_te_cov(
                         bam, contig_name, start, end, te_interval_size, te_offset
                     )
+                    # get flanking coverage
+                    flank_5p_cov, flank_3p_cov = get_flank_cov(
+                        bam,
+                        contig_name,
+                        contig_length,
+                        start,
+                        end,
+                        flank_intervel_size,
+                        flank_offset,
+                    )
+                    out_line = "\t".join(
+                        entry
+                        + [
+                            str(te_5p_cov),
+                            str(te_3p_cov),
+                            str(flank_5p_cov),
+                            str(flank_3p_cov),
+                        ]
+                    )
+                    output.write(out_line + "\n")
 
+    # analyze realignment and estimate coverage, on rev-comp contigs
+    vcf_parsed_freq_revcomp = vcf_parsed + ".revcomp.freq"
+    with open(vcf_parsed, "r") as input, open(vcf_parsed_freq_revcomp, "w") as output:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            contig_name = "_".join([entry[0], entry[1], entry[2]])
+            bam = os.path.join(
+                telr_reads_dir, contig_name + ".revcomp.realign.sort.bam"
+            )
+            if os.path.isfile(bam):
+                if contig_name in contig_te_coord_dict:
+                    start, end = contig_te_coord_dict[contig_name]["rc"]
+                    # get contig size
+                    contig = os.path.join(
+                        contig_dir, contig_name + ".cns.ctg1.revcomp.fa"
+                    )
+                    contig_length = get_contig_length(contig)
+                    # get TE locus coverage
+                    te_5p_cov, te_3p_cov = get_te_cov(
+                        bam, contig_name, start, end, te_interval_size, te_offset
+                    )
                     # get flanking coverage
                     flank_5p_cov, flank_3p_cov = get_flank_cov(
                         bam,
@@ -669,24 +737,73 @@ def get_af(
             entry = line.replace("\n", "").split("\t")
             contig_name = "_".join([entry[0], entry[1], entry[2]])
             te_freq[contig_name] = dict()
-            if entry[14] != 'None':
+            if entry[14] != "None":
                 te_5p_cov = float(entry[14])
             else:
                 te_5p_cov = None
-            if entry[15] != 'None':
+            if entry[15] != "None":
                 te_3p_cov = float(entry[15])
             else:
                 te_3p_cov = None
-            if entry[16] != 'None':
+            if entry[16] != "None":
                 flank_5p_cov = float(entry[16])
             else:
                 flank_5p_cov = None
-            if entry[17] != 'None':
+            if entry[17] != "None":
                 flank_3p_cov = float(entry[17])
             else:
                 flank_3p_cov = None
             taf_5p = get_te_flank_ratio(te_5p_cov, flank_5p_cov)
             taf_3p = get_te_flank_ratio(te_3p_cov, flank_3p_cov)
+            # if taf_5p and taf_3p:
+            #     freq = round((taf_5p + taf_3p) / 2, 2)
+            # elif taf_5p:
+            #     freq = taf_5p
+            # elif taf_3p:
+            #     freq = taf_3p
+            # else:
+            #     freq = None
+            # if freq > 1:
+            #     freq = 1
+            # te_freq[contig_name]["freq"] = freq
+            te_freq[contig_name]["te_5p_cov"] = te_5p_cov
+            te_freq[contig_name]["te_3p_cov"] = te_3p_cov
+            te_freq[contig_name]["flank_5p_cov"] = flank_5p_cov
+            te_freq[contig_name]["flank_3p_cov"] = flank_3p_cov
+
+    # get TAF on reverse-complemented contigs
+    with open(vcf_parsed_freq_revcomp, "r") as input:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            contig_name = "_".join([entry[0], entry[1], entry[2]])
+            if entry[14] != "None":
+                te_5p_cov = float(entry[14])
+            else:
+                te_5p_cov = None
+            if entry[15] != "None":
+                te_3p_cov = float(entry[15])
+            else:
+                te_3p_cov = None
+            if entry[16] != "None":
+                flank_5p_cov = float(entry[16])
+            else:
+                flank_5p_cov = None
+            if entry[17] != "None":
+                flank_3p_cov = float(entry[17])
+            else:
+                flank_3p_cov = None
+            te_freq[contig_name]["te_5p_cov_rc"] = te_5p_cov
+            te_freq[contig_name]["te_3p_cov_rc"] = te_3p_cov
+            te_freq[contig_name]["flank_5p_cov_rc"] = flank_5p_cov
+            te_freq[contig_name]["flank_3p_cov_rc"] = flank_3p_cov
+            taf_5p = get_te_flank_ratio(
+                te_freq[contig_name]["te_5p_cov"],
+                te_freq[contig_name]["flank_5p_cov_rc"],
+            )
+            taf_3p = get_te_flank_ratio(
+                te_freq[contig_name]["te_5p_cov_rc"],
+                te_freq[contig_name]["flank_5p_cov_rc"],
+            )
             if taf_5p and taf_3p:
                 freq = round((taf_5p + taf_3p) / 2, 2)
             elif taf_5p:
@@ -695,18 +812,11 @@ def get_af(
                 freq = taf_3p
             else:
                 freq = None
-            # if flank_cov == 0:
-            #     freq = 1
-            #     print(contig_name + " zero flank coverage for")
-            # else:
-            #     freq = round(te_cov / flank_cov, 2)
             if freq > 1:
                 freq = 1
             te_freq[contig_name]["freq"] = freq
-            te_freq[contig_name]["te_5p_cov"] = te_5p_cov
-            te_freq[contig_name]["te_3p_cov"] = te_3p_cov
-            te_freq[contig_name]["flank_5p_cov"] = flank_5p_cov
-            te_freq[contig_name]["flank_3p_cov"] = flank_3p_cov
+
+    print(te_freq)
     proc_time = time.time() - start_time
     logging.info("Allele frequency estimation finished in " + format_time(proc_time))
     return te_freq
