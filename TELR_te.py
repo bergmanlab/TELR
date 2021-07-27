@@ -546,7 +546,11 @@ def get_te_flank_ratio(te_cov, flank_cov):
         if flank_cov == 0:
             return None
         else:
-            return te_cov / flank_cov
+            ratio = te_cov / flank_cov
+            if ratio > 1.5:
+                return None
+            else:
+                return ratio
     else:
         return None
 
@@ -753,19 +757,6 @@ def get_af(
                 flank_3p_cov = float(entry[17])
             else:
                 flank_3p_cov = None
-            taf_5p = get_te_flank_ratio(te_5p_cov, flank_5p_cov)
-            taf_3p = get_te_flank_ratio(te_3p_cov, flank_3p_cov)
-            # if taf_5p and taf_3p:
-            #     freq = round((taf_5p + taf_3p) / 2, 2)
-            # elif taf_5p:
-            #     freq = taf_5p
-            # elif taf_3p:
-            #     freq = taf_3p
-            # else:
-            #     freq = None
-            # if freq > 1:
-            #     freq = 1
-            # te_freq[contig_name]["freq"] = freq
             te_freq[contig_name]["te_5p_cov"] = te_5p_cov
             te_freq[contig_name]["te_3p_cov"] = te_3p_cov
             te_freq[contig_name]["flank_5p_cov"] = flank_5p_cov
@@ -805,18 +796,20 @@ def get_af(
                 te_freq[contig_name]["flank_5p_cov_rc"],
             )
             if taf_5p and taf_3p:
-                freq = round((taf_5p + taf_3p) / 2, 2)
+                if abs(taf_5p - taf_3p) > 0.3:
+                    freq = round((taf_5p + taf_3p) / 2, 2)
+                else:
+                    freq = None
             elif taf_5p:
                 freq = taf_5p
             elif taf_3p:
                 freq = taf_3p
             else:
                 freq = None
-            if freq > 1:
-                freq = 1
+            if freq:
+                if freq > 1:
+                    freq = 1
             te_freq[contig_name]["freq"] = freq
-
-    print(te_freq)
     proc_time = time.time() - start_time
     logging.info("Allele frequency estimation finished in " + format_time(proc_time))
     return te_freq
