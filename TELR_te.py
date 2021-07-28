@@ -10,7 +10,6 @@ from multiprocessing import Pool
 from TELR_utility import (
     check_exist,
     mkdir,
-    create_loci_set,
     format_time,
     get_cmd_output,
     get_rev_comp_sequence,
