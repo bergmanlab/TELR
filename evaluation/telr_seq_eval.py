@@ -315,7 +315,6 @@ def compare_contig_ref_te_seqs(fa1, fa2, contig_name, out_dir):
     # seqs_similarity = dict_merge(paf_info, paftools_var_summary)
 
     seqs_similarity = {
-        "contig_te_length": contig_te_length,
         "num_contig_ref_te_hits": num_contig_ref_te_hits,
         "ref_te_aligned_chrom": ref_te_aligned_chrom,
         "ref_te_aligned_start": ref_te_aligned_start,
@@ -451,7 +450,6 @@ def run_eval(eval_inputs):
         "contig_num_residue_matches": None,
         "contig_alignment_block_length": None,
         "contig_blast_identity": None,
-        "contig_te_length": None,
         "ref_te_family": None,
         "ref_te_length": None,
         "num_contig_ref_te_hits": None,
@@ -698,31 +696,17 @@ def main():
         chrom = item["chrom"]
         start = item["start"]
         end = item["end"]
-        # contig_length = item["contig_length"]
-        # contig_te_start = item["contig_te_start"]
-        # contig_te_end = item["contig_te_end"]
         ins_id = "_".join([chrom, str(start), str(end), family])
         if ins_id in ins_ids:
             eval_pa = item
+            eval_pa["contig_te_length"] = (
+                eval_pa["contig_te_end"] - eval_pa["contig_te_start"]
+            )
             eval_pa["contigs"] = contigs
             eval_pa["reference"] = args.ref
             eval_pa["annotation"] = args.annotation
             eval_pa["out_dir"] = args.out_dir
             eval_pa["flank_len"] = args.flank_len
-            # seq = item["sequence"]
-            # eval_pa = [
-            #     contigs,
-            #     contig_name,
-            #     contig_length,
-            #     contig_te_start,
-            #     contig_te_end,
-            #     family,
-            #     seq,
-            #     args.ref,
-            #     args.annotation,
-            #     args.out_dir,
-            #     args.flank_len,
-            # ]
             eval_pa_list.append(eval_pa)
     # run contig evaluation in parallel
     print("Perform TELR sequence evaluation...")
