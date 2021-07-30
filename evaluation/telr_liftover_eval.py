@@ -100,7 +100,7 @@ def main():
     pattern = "/**/*telr.bed"  # TODO: update here
     pred_file_list = glob.glob(args.telr_out_dir + pattern, recursive=True)
     pred_file = pred_file_list[0]
-    print("TELR output BED file: " + pred_file_list)
+    print("TELR output BED file: " + pred_file)
 
     # for each file, do evaluations
     summary_dict = dict()
