@@ -795,7 +795,7 @@ def get_af(
                 te_freq[contig_name]["flank_5p_cov_rc"],
             )
             if taf_5p and taf_3p:
-                if abs(taf_5p - taf_3p) > 0.3:
+                if abs(taf_5p - taf_3p) <= 0.3:
                     freq = round((taf_5p + taf_3p) / 2, 2)
                 else:
                     freq = None
