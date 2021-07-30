@@ -788,7 +788,7 @@ def get_af(
             te_freq[contig_name]["flank_3p_cov_rc"] = flank_3p_cov
             taf_5p = get_te_flank_ratio(
                 te_freq[contig_name]["te_5p_cov"],
-                te_freq[contig_name]["flank_5p_cov_rc"],
+                te_freq[contig_name]["flank_5p_cov"],
             )
             taf_3p = get_te_flank_ratio(
                 te_freq[contig_name]["te_5p_cov_rc"],

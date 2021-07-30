@@ -1,4 +1,3 @@
-from TELR_utility import check_exist
 import os
 import pandas as pd
 import logging
