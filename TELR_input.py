@@ -231,14 +231,16 @@ def get_args():
                 "Please provide a valid flanking sequence offset size (positive integer) for allele frequency estimation, exiting..."
             )
 
-    if args.af_te_interval:
+    if args.af_te_interval is None:
+        args.af_te_interval = 50
+    else:
         if args.af_te_interval <= 0:
             print(
                 "Please provide a valid TE interval size (positive integer) for allele frequency estimation, exiting..."
             )
 
     if args.af_te_offset is None:
-        args.af_te_offset = 0
+        args.af_te_offset = 50
     else:
         if args.af_te_offset < 0:
             print(
