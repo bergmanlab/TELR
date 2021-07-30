@@ -7,7 +7,7 @@ import logging
 from Bio import SeqIO
 from multiprocessing import Pool
 import pysam
-from TELR_utility import mkdir, check_exist, format_time
+from telr.TELR_utility import mkdir, check_exist, format_time
 
 
 def get_local_contigs(

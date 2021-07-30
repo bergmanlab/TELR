@@ -10,7 +10,7 @@ import json
 import subprocess
 import shutil
 from multiprocessing import Pool
-from TELR_utility import check_exist
+from telr.TELR_utility import check_exist
 
 
 def get_args(program_version, arguments=sys.argv[1:]):

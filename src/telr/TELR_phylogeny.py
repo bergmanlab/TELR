@@ -8,14 +8,14 @@ import random
 import string
 import editdistance
 from multiprocessing import Pool
-from TELR_te import create_fa
+from telr.TELR_te import create_fa
 
 # import time
 import logging
 import subprocess
 from Bio import SeqIO
 import shutil
-from TELR_utility import mkdir
+from telr.TELR_utility import mkdir
 
 """
 This script builds maximum likelihood tree using TE sequences from TELR run

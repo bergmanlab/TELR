@@ -7,15 +7,15 @@ import logging
 import time
 import statistics
 from multiprocessing import Pool
-from TELR_utility import (
+from telr.TELR_utility import (
     check_exist,
     mkdir,
     format_time,
     get_cmd_output,
     get_rev_comp_sequence,
 )
-from TELR_liftover import liftover
-from TELR_assembly import prep_assembly_inputs
+from telr.TELR_liftover import liftover
+from telr.TELR_assembly import prep_assembly_inputs
 
 
 def annotate_contig(

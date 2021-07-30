@@ -4,7 +4,7 @@ import os
 import subprocess
 import logging
 from Bio import SeqIO
-from TELR_utility import mkdir
+from telr.TELR_utility import mkdir
 
 
 def get_args():

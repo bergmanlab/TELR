@@ -5,7 +5,7 @@ import pandas as pd
 import logging
 import time
 from Bio import SeqIO
-from TELR_utility import mkdir, format_time, create_loci_set
+from telr.TELR_utility import mkdir, format_time, create_loci_set
 
 
 def detect_sv(
