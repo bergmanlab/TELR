@@ -796,7 +796,7 @@ def get_af(
             )
             if taf_5p and taf_3p:
                 if abs(taf_5p - taf_3p) <= 0.3:
-                    freq = round((taf_5p + taf_3p) / 2, 2)
+                    freq = (taf_5p + taf_3p) / 2
                 else:
                     freq = None
             elif taf_5p:
@@ -808,7 +808,7 @@ def get_af(
             if freq:
                 if freq > 1:
                     freq = 1
-            te_freq[contig_name]["freq"] = freq
+            te_freq[contig_name]["freq"] = round(freq, 3)
     proc_time = time.time() - start_time
     logging.info("Allele frequency estimation finished in " + format_time(proc_time))
     return te_freq
