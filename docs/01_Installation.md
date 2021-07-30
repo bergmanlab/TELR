@@ -1,23 +1,24 @@
 # Installation
 ## Use Conda to install software dependencies
-TELR is written in python3 and is designed to run on linux operating system. Installation of software dependencies for TELR is automated by Conda, thus a working installation of Conda is required to install TELR. Conda can be installed via the Miniconda installer.
-
-### Installing Miniconda (Python 3.X)
+TELR is written in python3 and is designed to run on linux operating system. You can use pip to install TELR locally. Installation of software dependencies for TELR is automated by Conda, thus a working installation of Conda is required to install TELR. Conda can be installed via the Miniconda installer.
+### Install TELR using pip
+```
+git clone git@github.com:bergmanlab/TELR.git
+cd TELR
+pip install .
+```
+### Install Miniconda
+The pip installation doesn't include software dependencies to run TELR. To install TELR software dependencies, the recommended way is using conda. If your system doesn't have conda installed, you could use following steps to install Miniconda (Python 3.X).
 ```
 wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O $HOME//miniconda.sh
 bash ~/miniconda.sh -b -p $HOME/miniconda # silent mode
 echo "export PATH=\$PATH:\$HOME/miniconda/bin" >> $HOME/.bashrc # add to .bashrc
 source $HOME/.bashrc
-conda init
-```
-- `conda init` requires you to close and open a new terminal before it take effect
 
-### Update Conda
+conda init # this step requires you to close and open a new terminal before it take effect
+conda update conda # update conda
 ```
-conda update conda
-```
-
-## Install software dependencies
+## Install software dependencies using conda
 After installing and updating Conda, you can now use conda to install dependencies and create running environment for TELR.
 ### Clone TELR Repository
 ```
@@ -44,10 +45,10 @@ conda activate TELR_env
 ```
 - For more on Conda: see the [Conda User Guide](https://docs.conda.io/projects/conda/en/latest/index.html).
 
-## Running TELR on test dataset
+## Run TELR on test dataset
 - A test dataset is provided in the `test/` directory, you can test whether your TELR installation is successful by running TELR on this dataset, which should take less than one minute to finish on a single thread machine.
 ```
 conda activate TELR_env
 cd test
-../telr.py -o test_output -i reads.fasta -r ref_38kb.fasta -l library.fasta
+telr -o test_output -i reads.fasta -r ref_38kb.fasta -l library.fasta
 ```
