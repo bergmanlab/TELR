@@ -808,7 +808,10 @@ def get_af(
             if freq:
                 if freq > 1:
                     freq = 1
-            te_freq[contig_name]["freq"] = round(freq, 3)
+            if freq:
+                te_freq[contig_name]["freq"] = round(freq, 3)
+            else:
+                te_freq[contig_name]["freq"] = None
     proc_time = time.time() - start_time
     logging.info("Allele frequency estimation finished in " + format_time(proc_time))
     return te_freq
