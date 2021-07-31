@@ -10,7 +10,6 @@ import json
 import subprocess
 import shutil
 from multiprocessing import Pool
-from TELR_utility import check_exist
 
 
 def get_args(program_version, arguments=sys.argv[1:]):
@@ -177,6 +176,16 @@ def get_ref_seq(ref, chrom, start, end, out_dir):
     # os.remove(bed)
     # os.remove(subject)
     return subseq
+
+
+def check_exist(file):
+    if file:
+        if os.path.isfile(file) and os.stat(file).st_size != 0:
+            return True
+        else:
+            return False
+    else:
+        return False
 
 
 def extract_genome_seqs(

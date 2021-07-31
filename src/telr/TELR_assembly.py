@@ -7,7 +7,7 @@ import logging
 from Bio import SeqIO
 from multiprocessing import Pool
 import pysam
-from TELR_utility import mkdir, check_exist, format_time, create_loci_set
+from telr.TELR_utility import mkdir, check_exist, format_time
 
 
 def get_local_contigs(
@@ -458,48 +458,6 @@ def prep_assembly_inputs(
     os.remove(read_ids_unique)
     os.remove(subset_fa)
     os.remove(subset_fa_reorder)
-
-
-# def run_flye(args):
-#     sv_reads = args[0]
-#     asm_dir = args[1]
-#     contig_name = args[2]
-#     thread = args[3]
-#     presets = args[4]
-#     polish = args[5]
-
-#     if presets == "pacbio":
-#         presets_flye = "--pacbio-raw"
-#     else:
-#         presets_flye = "--nano-raw"
-
-#     tmp_out_dir = os.path.join(asm_dir, contig_name)
-#     mkdir(tmp_out_dir)
-#     try:
-#         subprocess.call(
-#             [
-#                 "flye",
-#                 presets_flye,
-#                 sv_reads,
-#                 "--out-dir",
-#                 tmp_out_dir,
-#                 "--thread",
-#                 str(thread),
-#                 "--iterations",
-#                 str(polish),
-#             ]
-#         )
-#     except Exception as e:
-#         print(e)
-#         print("Assembly failed, exiting...")
-#         return
-#     # rename contigs
-#     contig_path = os.path.join(tmp_out_dir, "assembly.fasta")
-#     contig_path_new = os.path.join(asm_dir, contig_name + ".cns.fa")
-#     if os.path.isfile(contig_path):
-#         os.rename(contig_path, contig_path_new)
-#     # remove tmp files
-#     shutil.rmtree(tmp_out_dir)
 
 
 def extract_reads(reads, list, out):

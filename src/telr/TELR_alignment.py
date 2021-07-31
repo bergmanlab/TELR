@@ -3,7 +3,7 @@ import os
 import subprocess
 import logging
 import time
-from TELR_utility import format_time
+from telr.TELR_utility import format_time
 
 
 def alignment(bam, read, reference, out, sample_name, thread, method, presets):

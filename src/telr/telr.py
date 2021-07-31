@@ -5,13 +5,13 @@ import os
 import time
 import logging
 import shutil
-from TELR_input import get_args, parse_input
-from TELR_alignment import alignment, sort_index_bam
-from TELR_sv import detect_sv, vcf_parse_filter
-from TELR_assembly import get_local_contigs
-from TELR_te import annotate_contig, find_te, get_af, repeatmask, gff3tobed
-from TELR_output import generate_output
-from TELR_utility import format_time, mkdir
+from telr.TELR_input import get_args, parse_input
+from telr.TELR_alignment import alignment, sort_index_bam
+from telr.TELR_sv import detect_sv, vcf_parse_filter
+from telr.TELR_assembly import get_local_contigs
+from telr.TELR_te import annotate_contig, find_te, get_af, repeatmask, gff3tobed
+from telr.TELR_output import generate_output
+from telr.TELR_utility import format_time, mkdir
 
 """
 Author: Shunhua Han <hanshunhua0829@gmail.com>
@@ -99,7 +99,7 @@ def main():
     )
 
     # Annotate contig for TE region
-    contig_te_annotation, te_freq, te_fa = annotate_contig(
+    contig_te_annotation, te_fa = annotate_contig(
         merged_contigs,
         assembly_passed_loci,
         library,
@@ -184,4 +184,5 @@ def main():
     logging.info("TELR finished in " + format_time(proc_time))
 
 
-main()
+if __name__ == "__main__":
+    main()
