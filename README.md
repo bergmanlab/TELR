@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="https://github.com/bergmanlab/TELR/blob/develop/img/TELR.png?raw=true" alt="TELR"/>
+    <img src="https://github.com/bergmanlab/TELR/blob/master/img/TELR.png?raw=true" alt="TELR"/>
 </p>
 
 ## Introduction
@@ -16,7 +16,7 @@ The TELR pipeline consists of four main stages: (1) general SV detection and fil
 - In stage 4, raw reads aligned to the reference genome are extracted within a 1kb interval on either side of the insertion breakpoints initially defined by Sniffles. The reads are then aligned to the assembled polished contig to identify reads that support the TE insertion and reference alleles, respectively, in following steps: 1) Reads are aligned to the forward strand of the contig, 5' flanking sequence depth (5p_flank_cov) and 5' TE depth (5p_te_cov) are calculated. 2) Reads are aligned to the reverse complement strand of the contig, 5' flanking sequence depth (3p_flank_cov) and 5' TE depth (3p_te_cov) are calculated. 3) The TE allele frequency is estimated as (5p_te_cov/5p_flank_cov + 3p_te_cov/3p_flank_cov)/2.
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/bergmanlab/TELR/develop/img/TELR_workflow.png?raw=true"/>
+<img src="https://github.com/bergmanlab/TELR/blob/master/img/TELR_workflow.png?raw=true"/>
 </p>
 
 The current version of TELR shows good performance on real Drosophila melanogaster data sets, including datasets with heterozygous TE insertions.
