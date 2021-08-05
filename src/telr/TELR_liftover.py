@@ -1067,16 +1067,91 @@ def liftover(
             report = json.load(f)
             data.append(report)
 
-    json_report = out + "/" + "liftover_report.json"
-    with open(json_report, "w") as output:
+    json_report_tmp = out + "/" + "liftover_report.tmp.json"
+    with open(json_report_tmp, "w") as output:
         json.dump(data, output, indent=4, sort_keys=False)
 
     # add a step to merge close annotations if inserions are : 1) supported by only one flank 2) same family 3) same strand
 
+    # merge entries with overlapping or identical coordinates, choose one with longest TE length
+    ## step one: write json into bed format
+    bed_report_tmp = out + "/" + "liftover_report.tmp.bed"
+    with open(bed_report_tmp, "w") as output:
+        for entry in data:
+            num_hits = entry["num_hits"]
+            te_id = entry["ID"]
+            te_length = entry["te_length"]
+            if num_hits == 1:
+                report = entry["report"]
+                te_type = report["type"]
+                if te_type == "non-reference":
+                    chrom = report["chrom"]
+                    start = report["start"]
+                    end = report["end"]
+                    family = report["family"]
+                    strand = report["strand"]
+                    score = "."
+                    out_line = "\t".join(
+                        [
+                            chrom,
+                            str(start),
+                            str(end),
+                            family,
+                            score,
+                            strand,
+                            str(te_length),
+                            te_id,
+                        ]
+                    )
+                    output.write(out_line + "\n")
+
+    ## step two: sort bed file
+    bed_report_sort = out + "/" + "liftover_report.sort.bed"
+    command = "bedtools sort -i " + bed_report_tmp
+    with open(bed_report_sort, "w") as output:
+        subprocess.call(command, shell=True, stdout=output)
+
+    ## step three: merge entries with same coordinates
+    bed_report_merge = out + "/" + "liftover_report.merge.bed"
+    with open(bed_report_merge, "w") as output:
+        command = (
+            'bedtools merge -d 0 -o collapse -c 2,3,4,5,6,7,8 -delim "," -i '
+            + bed_report_sort
+        )
+        subprocess.call(command, shell=True, stdout=output)
+
+    ## step four: find overlapped entries and pick ones to filter out
+    remove_ids = set()
+    with open(bed_report_merge, "r") as input:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            chrom = entry[0]
+            if "," in entry[3]:
+                len_list = entry[7].split(",")
+                idx = len_list.index(max(len_list))
+                remove_ids.add(entry[8].split(",")[idx])
+
+    ## step five: write final report
+    data_new = []
+    for entry in data:
+        te_id = entry["ID"]
+        if te_id not in remove_ids:
+            data_new.append(entry)
+    
+    ## step six: clean up
+    os.remove(bed_report_tmp)
+    os.remove(bed_report_sort)
+    os.remove(bed_report_merge)
+    os.remove(json_report_tmp)
+
+    json_report = out + "/" + "liftover_report.json"
+    with open(json_report, "w") as output:
+        json.dump(data_new, output, indent=4, sort_keys=False)
+
     # write non-reference lifted annotations in BED format
     bed_report = out + "/" + "liftover_nonref.bed"
     with open(bed_report, "w") as output:
-        for item in data:
+        for item in data_new:
             if item["num_hits"] == 1:
                 info = item["report"]
                 chrom = info["chrom"]
@@ -1097,7 +1172,7 @@ def liftover(
     nonref_comments = dict()
     ref_comments = dict()
     unlift_comments = dict()
-    for item in data:
+    for item in data_new:
         info = item["report"]
         if info["type"] == "non-reference":
             nonref_total = nonref_total + 1
