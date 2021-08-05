@@ -229,6 +229,11 @@ def annotate_contig(
             )
             output.write(out_line + "\n")
 
+    contig_te_annotation_sorted = out + "/" + sample_name + ".te2contig_filter_sort.bed"
+    command = "bedtools sort -i " + contig_te_annotation
+    with open(contig_te_annotation_sorted, "w") as output:
+        subprocess.call(command, shell=True, stdout=output)
+
     # seq_mm2_overlap_merge_loci = create_loci_set(contig_te_annotation)
 
     # remove tmp files
@@ -238,6 +243,7 @@ def annotate_contig(
     os.remove(te2contig_filter_raw)
     os.remove(te2contig_filter_tmp_bed)
     os.remove(te2contig_filter_tmp_sort_bed)
+    os.remove(contig_te_annotation)
 
     # extract sequence and RM
     if "+" in sample_name:
@@ -253,7 +259,7 @@ def annotate_contig(
                 "-fi",
                 contigs,
                 "-bed",
-                contig_te_annotation,
+                contig_te_annotation_sorted,
             ],
             stdout=output,
         )
@@ -319,7 +325,7 @@ def annotate_contig(
         # os.remove(te2contig_rm)
 
         # replace contig_te_annotation family with ones from RM
-        contig_te_annotation_new = contig_te_annotation.replace(
+        contig_te_annotation_new = contig_te_annotation_sorted.replace(
             "bed", "family_reannotated.bed"
         )
         contig_rm_family_dict = dict()
@@ -331,7 +337,7 @@ def annotate_contig(
                 contig_rm_family_dict[contig_name] = family
 
         with open(contig_te_annotation_new, "w") as output, open(
-            contig_te_annotation, "r"
+            contig_te_annotation_sorted, "r"
         ) as input:
             for line in input:
                 entry = line.replace("\n", "").split("\t")
@@ -353,7 +359,7 @@ def annotate_contig(
                     )
                     output.write(out_line + "\n")
 
-        contig_te_annotation = contig_te_annotation_new
+        contig_te_annotation_sorted = contig_te_annotation_new
 
     # build frequency dict
     te_freq = dict()
@@ -364,7 +370,7 @@ def annotate_contig(
             freq = entry[5]
             te_freq[contig_name] = freq
 
-    return contig_te_annotation, te_fa
+    return contig_te_annotation_sorted, te_fa
 
 
 def seq2contig(seq, contig, out):
