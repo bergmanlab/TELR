@@ -1,5 +1,6 @@
 # Installation
-## Install Miniconda (optional)
+## Install and configure conda package manager
+### Install Miniconda (optional)
 We recommened using conda to install TELR and its software dependencies. If your system doesn't have conda installed, please use the following steps to install Miniconda (Python 3.X).
 ```
 wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O $HOME//miniconda.sh
@@ -10,18 +11,25 @@ source $HOME/.bashrc
 conda init # this step requires you to close and open a new terminal before it take effect
 conda update conda # update conda
 ```
-## Set up conda channels (optional)
+### Set up conda channels (optional)
 TELR is hosted under bioconda channel (https://anaconda.org/bioconda/telr). After installing conda you will need to add the bioconda channel as well as the other channels bioconda depends on. You can skip this step if you already have conda installed and bioconda channel configured.
 ```
 conda config --add channels defaults
 conda config --add channels bioconda
 conda config --add channels conda-forge
 ```
+### Install mamba (optional)
+Mamba is a reimplementation of the conda package manager in C++. We saw significant speed improvement on TELR conda package installation using mamba versus conda. Please use following command to install mamba into the base conda environment. You can skip this step if you already have mamba installed.
+```
+conda install mamba -n base -c conda-forge
+```
+For more on mamba: see [Mamba's documentation](https://mamba.readthedocs.io/en/latest/).
 ## Install TELR
-TELR and all its software dependencies can be installed using conda. We recommend installing TELR in a new conda environment.
+TELR and all its software dependencies can be installed using mamba. We recommend installing TELR in a new conda environment.
 ```
-conda create -n TELR --channel bioconda telr
+mamba create -n TELR --channel bioconda telr
 ```
+Note: you can also install TELR and its software dependencies using conda by `conda create -n TELR --channel bioconda telr`. However the installation process can be significantly longer compared to using mamba.
 ## Activate TELR Conda Environment
 The TELR conda environment must always be activated prior to running TELR. This step adds TELR and its dependencies installed in the TELR conda environment to the environment PATH so that they can be used by TELR.
 ```
