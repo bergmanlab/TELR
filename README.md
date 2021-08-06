@@ -21,6 +21,8 @@ The TELR pipeline consists of four main stages: (1) general SV detection and fil
 
 The current version of TELR shows good performance on real Drosophila melanogaster data sets, including datasets with heterozygous TE insertions.
 
+TELR is written in python3 and is designed to run on linux operating system.
+
 ## Documentation
 The following sections will provide you installation instructions, usage guide, and descriptions of output files.
   - [Installation](docs/01_Installation.md)

@@ -1,8 +1,7 @@
 # Usage
-
 ## Command line help page
 ```
-usage: telr.py [-h] -i READS -r REFERENCE -l LIBRARY [--aligner ALIGNER]
+usage: telr [-h] -i READS -r REFERENCE -l LIBRARY [--aligner ALIGNER]
                [--assembler ASSEMBLER] [--polisher POLISHER] [-x PRESETS]
                [-p POLISH_ITERATIONS] [-o OUT] [-t THREAD] [-g GAP]
                [-v OVERLAP] [--flank_len FLANK_LEN]
@@ -76,13 +75,13 @@ optional arguments:
 ## Required arguments
 TELR requires long reads in FASTA/FASTQ format or read alignments in BAM format from BWA-MEM (use `-M` and `-x` parameter), Minimap2 (with Cigar & MD string) or NGMLR, a reference genome assembly in FASTA format (which must be the same as the one used to align the reads, if read alignments are provided), and TE consensus sequence in FASTA format. Here is a template with the names of the required and optional parameters.
 ```
-python3 telr.py -i (--reads) <reads in fasta/fastq format or read alignments in bam format> \
+telr -i (--reads) <reads in fasta/fastq format or read alignments in bam format> \
                 -r (--reference) <reference genome in fasta format> \
                 -l (--library) <TE consensus sequences in fasta format>
 ```
 
 ## Optional arguments
-In addition to the required program options listed above, there are some optional arguments. The full list of program options with descriptions can also be obtained by running `telr.py -h`.
+In addition to the required program options listed above, there are some optional arguments. The full list of program options with descriptions can also be obtained by running `telr -h`.
 - `-x/--presets <str>` Preset for different sequencing technologies, please provide 'pacbio' or 'ont' (default = 'pacbio').
 - `--aligner <str>` Method for read alignment, please provide 'nglmr' or or 'minimap2' (default = 'nglmr').
 - `--assembler <str>` Method for for local contig assembly step, please provide 'wtdbg2' or or 'flye' (default = 'wtdbg2').
