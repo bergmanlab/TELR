@@ -18,7 +18,7 @@ conda config --add channels bioconda
 conda config --add channels conda-forge
 ```
 ## Install TELR
-TELR and all its software dependencies can be installed using conda. We recommended installing TELR in a new conda environment.
+TELR and all its software dependencies can be installed using conda. We recommend installing TELR in a new conda environment.
 ```
 conda create -n TELR --channel bioconda telr
 ```
@@ -27,18 +27,19 @@ The TELR conda environment must always be activated prior to running TELR. This 
 ```
 conda activate TELR
 ```
-NOTE: Sometimes activating conda environments does not work via conda activate myenv when run through a script submitted to a queueing system, this can be fixed by activating the environment in the script as shown below.
+NOTE: Sometimes activating conda environments does not work via conda activate env when run through a script submitted to a queueing system, this can be fixed by activating the environment in the script as shown below.
 ```
 CONDA_BASE=$(conda info --base)
 source ${CONDA_BASE}/etc/profile.d/conda.sh
-conda activate TELR_env
+conda activate TELR
 ```
 For more on Conda: see the [Conda User Guide](https://docs.conda.io/projects/conda/en/latest/index.html).
 
 ## Run TELR on test dataset
-A test dataset is provided in the `test/` directory, you can test whether your TELR installation is successful by running TELR on this dataset, which should take less than one minute to finish on a single thread machine.
+A test dataset is provided in the `test/` directory, you can test whether your TELR installation is successful by cloning TELR repository and running TELR on the test dataset within local TELR repository. The test run should generally take less than one minute to finish.
 ```
+git clone git@github.com:bergmanlab/TELR.git
+cd TELR/test
 conda activate TELR
-cd test
 telr -o test_output -i reads.fasta -r ref_38kb.fasta -l library.fasta
 ```
