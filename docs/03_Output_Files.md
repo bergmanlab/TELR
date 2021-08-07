@@ -102,16 +102,3 @@ For each non-reference TE insertion, TELR reports assembled contig sequences in 
 ## Log file output by TELR
 For each TELR run, a log file called `<sample>.log` is generated that records all the major steps in the program and error messages.
 `<sample>.log`: log file of TELR run.
-
-## Debugging info output by TELR
-For each TELR run, a tabular file `<sample>.loci_eval.tsv` is generated that report why each potential insertion locus from SV detection is filtered out in TELR pipeline. The messages are very self-explanatory as listed below.
-- VCF sequence not repeatmasked
-- Contig assembly failed
-- Sniffles VCF sequence not mapped to assembled contig
-- VCF sequence doesn't overlap contig annotation
-- No flanks mapped to reference
-- No flanks mapped to correct chromosome
-- No flanks have unique hit
-- Two flanks mapped to different chromosomes or strands
-- contigs without RM annotation
-- Overlap/gap between contigs flanks exceeds threshold
