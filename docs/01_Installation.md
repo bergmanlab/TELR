@@ -27,7 +27,7 @@ For more on mamba: see [Mamba's documentation](https://mamba.readthedocs.io/en/l
 ## Install TELR
 We recommend using mamba to install TELR and all its software dependencies in a new conda environment.
 ```
-mamba create -n TELR --channel https://164584-42372094-gh.circle-artifacts.com/0/tmp/artifacts/packages telr
+mamba create -n TELR --channel bioconda telr
 ```
 Alternatively, TELR and all its software dependencies can be installed directly using the TELR git repository.
 ```
