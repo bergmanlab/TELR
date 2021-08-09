@@ -88,4 +88,3 @@ dependencies:
   - wtdbg=2.5=h2e03b76_1
   - xz=5.2.5=h516909a_1
   - zlib=1.2.11=h516909a_1010
-prefix: /home/sh60271/miniconda/envs/TELR
