@@ -188,15 +188,13 @@ def check_exist(file):
         return False
 
 
-def extract_genome_seqs(
-    ref, ref_size_dict, chrom, start, end, prefix, out_dir, offset=50
-):
+def extract_genome_seqs(ref, ref_size_dict, chrom, start, end, prefix, out_dir):
     """
     Extract subsequence from fasta based on coordinates
     """
     ref_size = ref_size_dict[chrom]
 
-    if end <= offset or start >= ref_size - offset:
+    if end > ref_size or start < 0:
         return None
     else:
         prefix_bed = "_".join([chrom, str(start), str(end)])
@@ -1137,7 +1135,7 @@ def liftover(
         te_id = entry["ID"]
         if te_id not in remove_ids:
             data_new.append(entry)
-    
+
     ## step six: clean up
     os.remove(bed_report_tmp)
     os.remove(bed_report_sort)
