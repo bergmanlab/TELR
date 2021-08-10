@@ -1125,9 +1125,13 @@ def liftover(
             entry = line.replace("\n", "").split("\t")
             chrom = entry[0]
             if "," in entry[3]:
-                len_list = entry[7].split(",")
-                idx = len_list.index(max(len_list))
-                remove_ids.add(entry[8].split(",")[idx])
+                len_list = entry[8].split(",")
+                keep_idx = len_list.index(max(len_list))
+                ids = entry[9].split(",")
+                final_id = ids[keep_idx]
+                for index in ids:
+                    if index != final_id:
+                        remove_ids.add(index)
 
     ## step five: write final report
     data_new = []
@@ -1137,10 +1141,10 @@ def liftover(
             data_new.append(entry)
 
     ## step six: clean up
-    os.remove(bed_report_tmp)
-    os.remove(bed_report_sort)
-    os.remove(bed_report_merge)
-    os.remove(json_report_tmp)
+    # os.remove(bed_report_tmp)
+    # os.remove(bed_report_sort)
+    # os.remove(bed_report_merge)
+    # os.remove(json_report_tmp)
 
     json_report = out + "/" + "liftover_report.json"
     with open(json_report, "w") as output:
