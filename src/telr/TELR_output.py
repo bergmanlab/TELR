@@ -192,10 +192,6 @@ def generate_output(
             ]
             insertion_report_expanded["contig_length"] = contig_length_dict[contig_id]
             insertion_report_expanded["gap_between_flank"] = report_info["gap"]
-            if report_info["gap"] is not None:
-                insertion_report["support"] = "single_side"
-            else:
-                insertion_report["support"] = "both_sides"
 
             insertion_report_expanded["te_length"] = item["te_length"]
 
@@ -244,11 +240,19 @@ def generate_output(
                 "3p_flank_sequence_identity"
             ]
 
+            if insertion_report_expanded["5p_flank_align_coord"] is not None and insertion_report_expanded["3p_flank_align_coord"] is not None:
+                insertion_report["support"] = "both_sides"
+            else:
+                insertion_report["support"] = "single_side"
+
+            # if report_info["gap"] is None:
+            #     insertion_report["support"] = "single_side"
+            # else:
+            #     insertion_report["support"] = "both_sides"
+
             final_report.append(insertion_report)
-            # print(final_report)
             insertion_report_expanded.update(insertion_report)
             final_report_expanded.append(insertion_report_expanded)
-            # print(final_report)
 
     # write in JSON format
     insertion_report_path = out + "/" + sample_name + ".telr.json"
