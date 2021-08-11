@@ -188,15 +188,13 @@ def check_exist(file):
         return False
 
 
-def extract_genome_seqs(
-    ref, ref_size_dict, chrom, start, end, prefix, out_dir, offset=50
-):
+def extract_genome_seqs(ref, ref_size_dict, chrom, start, end, prefix, out_dir):
     """
     Extract subsequence from fasta based on coordinates
     """
     ref_size = ref_size_dict[chrom]
 
-    if end <= offset or start >= ref_size - offset:
+    if end > ref_size or start < 0:
         return None
     else:
         prefix_bed = "_".join([chrom, str(start), str(end)])
@@ -1127,9 +1125,13 @@ def liftover(
             entry = line.replace("\n", "").split("\t")
             chrom = entry[0]
             if "," in entry[3]:
-                len_list = entry[7].split(",")
-                idx = len_list.index(max(len_list))
-                remove_ids.add(entry[8].split(",")[idx])
+                len_list = entry[8].split(",")
+                keep_idx = len_list.index(max(len_list))
+                ids = entry[9].split(",")
+                final_id = ids[keep_idx]
+                for index in ids:
+                    if index != final_id:
+                        remove_ids.add(index)
 
     ## step five: write final report
     data_new = []
@@ -1137,12 +1139,12 @@ def liftover(
         te_id = entry["ID"]
         if te_id not in remove_ids:
             data_new.append(entry)
-    
+
     ## step six: clean up
-    os.remove(bed_report_tmp)
-    os.remove(bed_report_sort)
-    os.remove(bed_report_merge)
-    os.remove(json_report_tmp)
+    # os.remove(bed_report_tmp)
+    # os.remove(bed_report_sort)
+    # os.remove(bed_report_merge)
+    # os.remove(json_report_tmp)
 
     json_report = out + "/" + "liftover_report.json"
     with open(json_report, "w") as output:

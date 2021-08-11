@@ -11,11 +11,11 @@ from telr.TELR_sv import detect_sv, vcf_parse_filter
 from telr.TELR_assembly import get_local_contigs
 from telr.TELR_te import annotate_contig, find_te, get_af, repeatmask, gff3tobed
 from telr.TELR_output import generate_output
-from telr.TELR_utility import format_time, mkdir
+from telr.TELR_utility import format_time, mkdir, export_env
 
 """
 Author: Shunhua Han <hanshunhua0829@gmail.com>
-Concept: Casey Bergman <cbergman.uga.edu>, Guilherme Dias <guilherme.dias@uga.edu>
+Contributors: Casey Bergman <cbergman.uga.edu>, Guilherme Dias <guilhermebdias@live.com>
 """
 
 
@@ -178,6 +178,11 @@ def main():
     # clean tmp files
     if not args.keep_files:
         shutil.rmtree(tmp_dir)
+    os.remove(loci_eval)
+
+    # export conda environment
+    env_file = os.path.join(args.out, "conda_env.yml")
+    export_env(env_file)
 
     proc_time = time.time() - start_time
     print("TELR finished!")

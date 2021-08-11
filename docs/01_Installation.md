@@ -25,11 +25,11 @@ conda install mamba -n base -c conda-forge
 ```
 For more on mamba: see [Mamba's documentation](https://mamba.readthedocs.io/en/latest/).
 ## Install TELR
-We recommend using mamba to install TELR and all its software dependencies in a new conda environment.
+We recommend using mamba to install TELR and all its software dependencies in a new conda environment. Note: installation using this way can lead to variable dependency versions.
 ```
 mamba create -n TELR --channel bioconda telr
 ```
-Alternatively, TELR and all its software dependencies can be installed directly using the TELR git repository.
+Alternatively, TELR and all its software dependencies can be installed directly using the TELR git repository. Note: installation using this approach ensures fixed dependency versions.
 ```
 git clone git@github.com:bergmanlab/TELR.git
 cd TELR

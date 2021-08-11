@@ -71,3 +71,19 @@ def get_rev_comp_sequence(fasta_in, fasta_out):
             output.write(
                 ">" + record.id + "\n" + str(record.seq.reverse_complement()) + "\n"
             )
+
+
+def export_env(file):
+    """export conda environment"""
+    file_tmp = file + ".tmp"
+    cmd_list = ["conda", "env", "export", "--name", "TELR", "--file", file_tmp]
+    subprocess.call(cmd_list)
+    with open(file, "w") as output, open(file_tmp, "r") as input:
+        for line in input:
+            if (
+                not line.startswith("prefix:")
+                and "- pip:" not in line
+                and "- telr==" not in line
+            ):
+                output.write(line)
+    os.remove(file_tmp)

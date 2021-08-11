@@ -26,8 +26,8 @@ def alignment(bam, read, reference, out, sample_name, thread, method, presets):
             sys.exit(1)
 
         try:
-            bam_tmp = out + "/" + sample_name + ".tmp.bam"
-            with open(bam_tmp, "w") as output:
+            align_sam = out + "/" + sample_name + ".tmp.sam"
+            with open(align_sam, "w") as output:
                 subprocess.call(
                     [
                         "ngmlr",
@@ -64,8 +64,8 @@ def alignment(bam, read, reference, out, sample_name, thread, method, presets):
             )
             sys.exit(1)
         try:
-            sam = out + "/" + sample_name + ".sam"
-            with open(sam, "w") as output:
+            align_sam = out + "/" + sample_name + ".sam"
+            with open(align_sam, "w") as output:
                 subprocess.call(
                     [
                         "minimap2",
@@ -80,10 +80,6 @@ def alignment(bam, read, reference, out, sample_name, thread, method, presets):
                     ],
                     stdout=output,
                 )
-            bam_tmp = out + "/" + sample_name + ".tmp.bam"
-            with open(bam_tmp, "w") as output:
-                subprocess.call(["samtools", "view", "-bS", sam], stdout=output)
-                os.remove(sam)
         except Exception as e:
             print(e)
             print("Read alignment failed, check input reads, exiting...")
@@ -94,11 +90,11 @@ def alignment(bam, read, reference, out, sample_name, thread, method, presets):
         )
         sys.exit(1)
 
-    sort_index_bam(bam_tmp, bam, thread)
+    sort_index_bam(align_sam, bam, thread)
     if os.path.isfile(bam) is False:
         sys.stderr.write("Sorted and indexed BAM file does not exist, exiting...\n")
         sys.exit(1)
-    os.remove(bam_tmp)
+    os.remove(align_sam)
 
     proc_time = time.time() - start_time
     logging.info("First alignment finished in " + format_time(proc_time))
