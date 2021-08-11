@@ -15,7 +15,7 @@ from telr.TELR_utility import format_time, mkdir, export_env
 
 """
 Author: Shunhua Han <hanshunhua0829@gmail.com>
-Concept: Casey Bergman <cbergman.uga.edu>, Guilherme Dias <guilherme.dias@uga.edu>
+Contributors: Casey Bergman <cbergman.uga.edu>, Guilherme Dias <guilhermebdias@live.com>
 """
 
 
@@ -178,6 +178,7 @@ def main():
     # clean tmp files
     if not args.keep_files:
         shutil.rmtree(tmp_dir)
+    os.remove(loci_eval)
 
     # export conda environment
     env_file = os.path.join(args.out, "conda_env.yml")
