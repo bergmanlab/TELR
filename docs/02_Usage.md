@@ -56,10 +56,10 @@ optional arguments:
                         allele frequency estimation (default = '200')
   --af_te_interval AF_TE_INTERVAL
                         5' and 3' te sequence interval size used for allele
-                        frequency estimation (default: whole te locus)
+                        frequency estimation (default: '50')
   --af_te_offset AF_TE_OFFSET
                         5' and 3' te sequence offset size used for allele
-                        frequency estimation (default: '0')
+                        frequency estimation (default: '50')
   --different_contig_name
                         If provided then TELR does not require the contig name
                         to match before and after annotation liftover
@@ -94,8 +94,8 @@ In addition to the required program options listed above, there are some optiona
 - `--flank_len <int>` flanking sequence length in the TELR assembled contigs (default= '500').
 - `--af_flank_interval <int>` 5' and 3' flanking sequence interval size used for allele frequency estimation (default= '100').
 - `--af_flank_offset <int>` 5' and 3' flanking sequence offset size used for allele frequency estimation (default= '200').
-- `--af_te_interval <int>` 5' and 3' TE interval size used for allele frequency estimation (default: whole te locus).
-- `--af_te_offset <int>` 5' and 3' TE offset size used for allele frequency estimation (default= '0').
+- `--af_te_interval <int>` 5' and 3' TE interval size used for allele frequency estimation (default: '50').
+- `--af_te_offset <int>` 5' and 3' TE offset size used for allele frequency estimation (default= '50').
 - `--different_contig_name` If provided then TELR does not require the contig name to match before and after annotation liftover (default: require contig name to be the same before and after liftover).
 - `--minimap2_family` If provided then minimap2 will be used to annotate TE families in the assembled contigs (default: use repeatmasker for contig TE annotation).
 - `-k/--keep_files` If provided then all intermediate files will be kept (default: remove intermediate files).

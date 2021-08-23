@@ -119,13 +119,13 @@ def get_args():
     optional.add_argument(
         "--af_te_interval",
         type=int,
-        help="5' and 3' te sequence interval size used for allele frequency estimation (default: whole te locus)",
+        help="5' and 3' te sequence interval size used for allele frequency estimation (default: '50')",
         required=False,
     )
     optional.add_argument(
         "--af_te_offset",
         type=int,
-        help="5' and 3' te sequence offset size used for allele frequency estimation (default: '0')",
+        help="5' and 3' te sequence offset size used for allele frequency estimation (default: '50')",
         required=False,
     )
     optional.add_argument(
