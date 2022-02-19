@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="TELR",
-    version="0.2",
+    version="1.0",
     author="Shunhua Han",
     author_email="hanshunhua0829@gmail.com",
     description="A fast non-reference transposable element detector from long read sequencing data",
