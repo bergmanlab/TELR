@@ -39,9 +39,21 @@ def get_args():
 
     # optional
     optional.add_argument(
+        "--sv_only",
+        action="store_true",
+        help="If provided then TELR would exit after the SV calling step is finished",
+        required=False,
+    )
+    optional.add_argument(
         "--assemble_all_ins",
         action="store_true",
         help="If provided then all insertions loci predicted by SV caller will be locally assembled",
+        required=False,
+    )
+    optional.add_argument(
+        "--assembly_only",
+        action="store_true",
+        help="If provided then TELR would exit after the local assembly step is finished",
         required=False,
     )
     optional.add_argument(
