@@ -44,7 +44,7 @@ def main():
         args.reads, args.reference, args.library, sample_name, tmp_dir
     )
 
-    # # Alignment
+    # Alignment
     bam = os.path.join(tmp_dir, sample_name + "_sort.bam")
     if not skip_alignment:
         alignment(
@@ -76,6 +76,7 @@ def main():
         vcf_parsed,
         bam,
         library,
+        args.assemble_all_ins,
         tmp_dir,
         sample_name,
         args.thread,

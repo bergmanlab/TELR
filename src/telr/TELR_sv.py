@@ -62,7 +62,7 @@ def detect_sv(
 
 
 def vcf_parse_filter(
-    vcf_in, vcf_out, bam, te_library, out, sample_name, thread, loci_eval
+    vcf_in, vcf_out, bam, te_library, assemble_all_ins, out, sample_name, thread, loci_eval
 ):
     """Parse and filter for insertions from VCF file"""
     logging.info("Parse structural variant VCF...")
@@ -70,10 +70,13 @@ def vcf_parse_filter(
     vcf_parsed = vcf_in + ".parsed.tmp.tsv"
     parse_vcf(vcf_in, vcf_parsed, bam)
 
-    vcf_filtered = vcf_in + ".filtered.tmp.tsv"
-    filter_vcf(
-        vcf_parsed, vcf_filtered, te_library, out, sample_name, thread, loci_eval
-    )
+    if not assemble_all_ins:
+        vcf_filtered = vcf_in + ".filtered.tmp.tsv" # compared to vcf_parsed, this file includes ins TE coverage ratio
+        filter_vcf(
+            vcf_parsed, vcf_filtered, te_library, out, sample_name, thread, loci_eval
+        )
+    else:
+        vcf_filtered = vcf_parsed
 
     # merge entries
     vcf_merged = vcf_in + ".merged.tmp.tsv"
@@ -248,7 +251,7 @@ def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eva
             for record in records:
                 contig_len[record.id] = len(record.seq)
 
-    # run RM on the inserted seqeunce
+    # run RM on the inserted sequence
     repeatmasker_dir = os.path.join(out, "vcf_ins_repeatmask")
     mkdir(repeatmasker_dir)
     try:

@@ -39,6 +39,12 @@ def get_args():
 
     # optional
     optional.add_argument(
+        "--assemble_all_ins",
+        action="store_true",
+        help="If provided then all insertions loci predicted by SV caller will be locally assembled",
+        required=False,
+    )
+    optional.add_argument(
         "--aligner",
         type=str,
         help="choose method for read alignment, please provide 'nglmr' or 'minimap2' (default = 'nglmr')",
