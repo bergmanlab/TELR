@@ -89,9 +89,9 @@ telr -i (--reads) <reads in fasta/fastq format or read alignments in bam format>
 ## Optional arguments
 In addition to the required program options listed above, there are some optional arguments. The full list of program options with descriptions can also be obtained by running `telr -h`. Note that `--sv_only`, `--assembly_only` and `--assemble_all_ins` are experimental features, it is recommended that `--assemble_all_ins` option is used together with `--assembly_only` option.
 - `-x/--presets <str>` Preset for different sequencing technologies, please provide 'pacbio' or 'ont' (default = 'pacbio').
-- `--sv_only <str>` If provided then TELR would exit after the SV calling step is finished.
-- `--assembly_only <str>` If provided then TELR would exit after the local assembly step is finished.
-- `--assemble_all_ins <str>` If provided then all insertion loci predicted by SV caller will be locally assembled.
+- `--sv_only` If provided then TELR would exit after the SV calling step is finished.
+- `--assembly_only` If provided then TELR would exit after the local assembly step is finished.
+- `--assemble_all_ins` If provided then all insertion loci predicted by SV caller will be locally assembled.
 - `--aligner <str>` Method for read alignment, please provide 'nglmr' or or 'minimap2' (default = 'nglmr').
 - `--assembler <str>` Method for for local contig assembly step, please provide 'wtdbg2' or or 'flye' (default = 'wtdbg2').
 - `--polisher <str>` Method for for local contig polishing step, please provide 'wtdbg2' or or 'flye' (default = 'wtdbg2').
