@@ -1,14 +1,14 @@
 # Usage
 ## Command line help page
 ```
-usage: telr [-h] -i READS -r REFERENCE -l LIBRARY [--aligner ALIGNER]
-               [--assembler ASSEMBLER] [--polisher POLISHER] [-x PRESETS]
-               [-p POLISH_ITERATIONS] [-o OUT] [-t THREAD] [-g GAP]
-               [-v OVERLAP] [--flank_len FLANK_LEN]
-               [--af_flank_interval AF_FLANK_INTERVAL]
-               [--af_flank_offset AF_FLANK_OFFSET]
-               [--af_te_interval AF_TE_INTERVAL] [--af_te_offset AF_TE_OFFSET]
-               [--different_contig_name] [--minimap2_family] [-k]
+usage: telr [-h] -i READS -r REFERENCE -l LIBRARY [--sv_only]
+            [--assemble_all_ins] [--assembly_only] [--aligner ALIGNER]
+            [--assembler ASSEMBLER] [--polisher POLISHER] [-x PRESETS]
+            [-p POLISH_ITERATIONS] [-o OUT] [-t THREAD] [-g GAP] [-v OVERLAP]
+            [--flank_len FLANK_LEN] [--af_flank_interval AF_FLANK_INTERVAL]
+            [--af_flank_offset AF_FLANK_OFFSET]
+            [--af_te_interval AF_TE_INTERVAL] [--af_te_offset AF_TE_OFFSET]
+            [--different_contig_name] [--minimap2_family] [-k]
 
 Program for detecting non-reference TEs in long read data
 
@@ -23,6 +23,12 @@ required arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
+  --sv_only             If provided then TELR would exit after the SV calling
+                        step is finished
+  --assemble_all_ins    If provided then all insertions loci predicted by SV
+                        caller will be locally assembled
+  --assembly_only       If provided then TELR would exit after the local
+                        assembly step is finished
   --aligner ALIGNER     choose method for read alignment, please provide
                         'nglmr' or 'minimap2' (default = 'nglmr')
   --assembler ASSEMBLER
@@ -81,8 +87,11 @@ telr -i (--reads) <reads in fasta/fastq format or read alignments in bam format>
 ```
 
 ## Optional arguments
-In addition to the required program options listed above, there are some optional arguments. The full list of program options with descriptions can also be obtained by running `telr -h`.
+In addition to the required program options listed above, there are some optional arguments. The full list of program options with descriptions can also be obtained by running `telr -h`. Note that `--sv_only`, `--assembly_only` and `--assemble_all_ins` are experimental features, it is recommended that `--assemble_all_ins` option is used together with `--assembly_only` option.
 - `-x/--presets <str>` Preset for different sequencing technologies, please provide 'pacbio' or 'ont' (default = 'pacbio').
+- `--sv_only` If provided then TELR would exit after the SV calling step is finished.
+- `--assembly_only` If provided then TELR would exit after the local assembly step is finished.
+- `--assemble_all_ins` If provided then all insertion loci predicted by SV caller will be locally assembled.
 - `--aligner <str>` Method for read alignment, please provide 'nglmr' or or 'minimap2' (default = 'nglmr').
 - `--assembler <str>` Method for for local contig assembly step, please provide 'wtdbg2' or or 'flye' (default = 'wtdbg2').
 - `--polisher <str>` Method for for local contig polishing step, please provide 'wtdbg2' or or 'flye' (default = 'wtdbg2').

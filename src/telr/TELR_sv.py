@@ -61,6 +61,15 @@ def detect_sv(
         logging.info("SV detection finished in " + format_time(proc_time))
 
 
+def reformat_parsed_vcf(vcf_in, vcf_out):
+    """this function add a column with 1.0 in parsed VCF"""
+    with open(vcf_in, "r") as input, open(vcf_out, "w") as output:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            entry.append("1.0")
+            out_line = "\t".join(entry)
+            output.write(out_line + "\n")
+
 def vcf_parse_filter(
     vcf_in, vcf_out, bam, te_library, assemble_all_ins, out, sample_name, thread, loci_eval
 ):
@@ -70,13 +79,13 @@ def vcf_parse_filter(
     vcf_parsed = vcf_in + ".parsed.tmp.tsv"
     parse_vcf(vcf_in, vcf_parsed, bam)
 
+    vcf_filtered = vcf_in + ".filtered.tmp.tsv" # compared to vcf_parsed, this file includes ins TE coverage ratio
     if not assemble_all_ins:
-        vcf_filtered = vcf_in + ".filtered.tmp.tsv" # compared to vcf_parsed, this file includes ins TE coverage ratio
         filter_vcf(
             vcf_parsed, vcf_filtered, te_library, out, sample_name, thread, loci_eval
         )
     else:
-        vcf_filtered = vcf_parsed
+        reformat_parsed_vcf(vcf_parsed, vcf_filtered)
 
     # merge entries
     vcf_merged = vcf_in + ".merged.tmp.tsv"

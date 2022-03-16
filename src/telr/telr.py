@@ -40,6 +40,9 @@ def main():
 
     # Parse input
     sample_name = os.path.splitext(os.path.basename(args.reads))[0]
+    # reference = os.path.join(tmp_dir, os.path.basename(args.reads))
+    # library = os.path.join(tmp_dir, os.path.basename(args.library))
+    # fasta = os.path.join(tmp_dir, os.path.basename(args.reads))
     reads, reference, library, fasta, skip_alignment = parse_input(
         args.reads, args.reference, args.library, sample_name, tmp_dir
     )
@@ -68,6 +71,13 @@ def main():
     # Detect and parse SV
     vcf = os.path.join(tmp_dir, sample_name + ".vcf")
     detect_sv(vcf, bam, reference, tmp_dir, sample_name, args.thread)
+    if args.sv_only:
+        vcf_copy = os.path.join(args.out, sample_name + ".vcf")
+        shutil.copyfile(vcf, vcf_copy)
+        proc_time = time.time() - start_time
+        print("TELR finished!")
+        logging.info("TELR finished in " + format_time(proc_time))
+        sys.exit(0)
 
     # Parse SV and filter for TE candidate locus
     vcf_parsed = os.path.join(tmp_dir, sample_name + ".vcf_filtered.tsv")
@@ -98,6 +108,13 @@ def main():
         presets=args.presets,
         polish_iterations=args.polish_iterations,
     )
+    if args.assembly_only:
+        merged_contigs_copy = os.path.join(args.out, sample_name + ".contig.fa")
+        shutil.copyfile(merged_contigs, merged_contigs_copy)
+        proc_time = time.time() - start_time
+        print("TELR finished!")
+        logging.info("TELR finished in " + format_time(proc_time))
+        sys.exit(0)
 
     # Annotate contig for TE region
     contig_te_annotation, te_fa = annotate_contig(
