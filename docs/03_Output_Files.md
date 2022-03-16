@@ -7,6 +7,8 @@ TELR outputs non-referece TE insertion predictions in multiple format.
 - `<sample>.telr.fasta`: TE insertion sequences assembled by TELR.
 - `<sample>.telr.contig.fasta`: Local contig sequences assembled by TELR that include new TE insertions.
 
+Note: If two or more TE families are reported for a given insertion (separated by '\|' in the TE prediction output file), this could indicate a complex nested insertion event.
+
 ## VCF file output by TELR
 TELR generates a standard VCF file `<sample>.telr.vcf` in [v4.1 format](https://samtools.github.io/hts-specs/VCFv4.1.pdf) that has detailed information for each non-reference TE insertion.
 
