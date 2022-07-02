@@ -443,8 +443,8 @@ def run_liftover_single_annotation(input_json):
         out_dir,
     )
     # extract 3 prime flank
-    start_3p_flank = int(end) + 1
-    end_3p_flank = int(end) + 1 + flank_len
+    start_3p_flank = int(end)
+    end_3p_flank = int(end) + flank_len
     prefix_3p = prefix + "_3p"
     fa_3p = extract_genome_seqs(
         fasta1,
