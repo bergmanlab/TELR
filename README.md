@@ -31,3 +31,7 @@ The following sections will provide you installation instructions, usage guide, 
 
 ## Getting Help
 Please use the [Github Issue page](https://github.com/bergmanlab/TELR/issues) if you have questions.
+
+## Citation
+To cite TELR in publications, please use:
+  Shunhua Han, Guilherme B Dias, Preston J Basting, Raghuvir Viswanatha, Norbert Perrimon, Casey M Bergman, Local assembly of long reads enables phylogenomics of transposable elements in a polyploid cell line, Nucleic Acids Research, 2022;, gkac794, https://doi.org/10.1093/nar/gkac794
