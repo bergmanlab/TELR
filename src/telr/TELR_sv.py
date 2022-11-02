@@ -280,12 +280,19 @@ def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eva
         print("Repeatmasking VCF insertion sequences failed, exiting...")
         sys.exit(1)
 
+    # sort RM gff
+    ins_rm_sort = os.path.join(
+        repeatmasker_dir, os.path.basename(ins_seqs) + ".out.sort.gff"
+    )
+    with open(ins_rm_sort, "w") as output:
+        subprocess.call(["bedtools", "sort", "-i", ins_repeatmasked], stdout=output)
+
     # merge RM gff
     ins_rm_merge = os.path.join(
         repeatmasker_dir, os.path.basename(ins_seqs) + ".out.merge.bed"
     )
     with open(ins_rm_merge, "w") as output:
-        subprocess.call(["bedtools", "merge", "-i", ins_repeatmasked], stdout=output)
+        subprocess.call(["bedtools", "merge", "-i", ins_rm_sort], stdout=output)
 
     # extract VCF sequences that contain TEs
     ins_te_loci = dict()

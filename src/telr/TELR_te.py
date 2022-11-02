@@ -297,9 +297,17 @@ def annotate_contig(
             print("Repeatmasking contig TE sequences failed, exiting...")
             sys.exit(1)
 
+        # sort RM gff
+        contig_te_repeatmasked_sort = os.path.join(
+            repeatmasker_dir, os.path.basename(te_fa) + ".out.sort.gff"
+        )
+        with open(contig_te_repeatmasked_sort, "w") as output:
+            subprocess.call(["bedtools", "sort", "-i", contig_te_repeatmasked], stdout=output)
+
+
         ## parse and merge
         te2contig_rm = out + "/" + sample_name + ".te2contig_rm.bed"
-        with open(contig_te_repeatmasked, "r") as input, open(
+        with open(contig_te_repeatmasked_sort, "r") as input, open(
             te2contig_rm, "w"
         ) as output:
             for line in input:
