@@ -399,6 +399,8 @@ def prep_assembly_inputs(
                 ins_chr = entry[0]
                 ins_breakpoint = round((int(entry[1]) + int(entry[2])) / 2)
                 start = ins_breakpoint - window
+                if start < 0:
+                    start = 0
                 end = ins_breakpoint + window
                 reads = set()
                 # coverage = 0
