@@ -23,3 +23,6 @@ MANIFEST
 # custom folder
 .vscode/
 .DS_Store
+
+# test output
+test
