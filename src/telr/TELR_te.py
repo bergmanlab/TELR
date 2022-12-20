@@ -447,7 +447,8 @@ def gff3tobed(gff, bed):
                     )
                     sys.exit(1)
                 break
-    with open(bed, "w") as output, open(gff, "r") as input:
+    bed_tmp = bed + ".tmp"
+    with open(bed_tmp, "w") as output, open(gff, "r") as input:
         for line in input:
             if "#" not in line:
                 entry = line.replace("\n", "").split("\t")
@@ -459,6 +460,12 @@ def gff3tobed(gff, bed):
                     [entry[0], str(int(entry[3]) - 1), entry[4], family, ".", entry[6]]
                 )
                 output.write(out_line + "\n")
+    
+    # sort BED file
+    command = "bedtools sort -i " + bed_tmp
+    with open(bed, "w") as output:
+        subprocess.call(command, shell=True, stdout=output)
+    os.remove(bed_tmp)
 
 
 def parse_rm_out(rm_gff, gff3):
