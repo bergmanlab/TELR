@@ -417,7 +417,7 @@ def run_liftover_single_annotation(input_json):
     different_contig_name = input_values["different_contig_name"]
     telr_mode = input_values["telr_mode"]
 
-    prefix = "_".join([chrom, str(start), str(end), family])
+    prefix = "_".join([chrom, str(start), str(end)])
     prefix = prefix.replace("|", "_")
     lift_entries["ID"] = prefix
     genome1_coord = chrom + ":" + str(start) + "-" + str(end)
