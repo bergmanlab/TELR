@@ -1,0 +1,42 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: "Han"
+    given-names: "Shunhua"
+    orcid: "https://orcid.org/0000-0002-8605-7547"  
+  - family-names: "Bergman"
+    given-names: "Casey M."
+    orcid: "https://orcid.org/0000-0002-5462-9854"  
+title: "TELR: a fast non-reference transposable element detector from long read sequencing data"
+version: 2
+date-released: 2020-12-01
+url: "https://github.com/bergmanlab/telr"
+preferred-citation:
+  type: article
+  authors:
+  - family-names: "Han"
+    given-names: "Shunhua"
+    orcid: "https://orcid.org/0000-0002-8605-7547"
+  - family-names: "Dias"
+    given-names: "Guilherme B."
+    orcid: "https://orcid.org/0000-0002-1459-3148"  
+  - family-names: "Basting"
+    given-names: "Preston J."
+    orcid: "https://orcid.org/0000-0001-9290-8339"
+  - family-names: "Viswanatha"
+    given-names: "Raghuvir"
+    orcid: "https://orcid.org/0000-0002-9457-6953"
+  - family-names: "Perrimon"
+    given-names: "Norbert"
+    orcid: "https://orcid.org/0000-0001-7542-472X"        
+  - family-names: "Bergman"
+    given-names: "Casey M."
+    orcid: "https://orcid.org/0000-0002-5462-9854"                
+  doi: "10.1093/nar/gkac794" 
+  journal: "Nucleic Acids Research"
+  volume: 50
+  issue: 21
+  start: e124
+  month: 11
+  title: "Local assembly of long reads enables phylogenomics of transposable elements in a polyploid cell line"
+  year: 2022
