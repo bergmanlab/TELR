@@ -1019,7 +1019,7 @@ def liftover(
             family = entry[3]
             strand = entry[5]
 
-            prefix = "_".join([chrom, str(start), str(end), family])
+            prefix = "_".join([chrom, str(start), str(end)])
             liftover_entry = {
                 "chrom": chrom,
                 "start": start,
