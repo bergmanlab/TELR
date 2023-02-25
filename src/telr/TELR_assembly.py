@@ -453,7 +453,14 @@ def prep_assembly_inputs(
         command = (
             "csplit -s -f " + csplit_prefix + " -n 1 " + subset_fa_reorder + " " + index
         )
-        subprocess.call(command, shell=True)
+        print(command)
+        try:
+            retcode = subprocess.call(command, shell=True)
+            if retcode != 0:
+                raise subprocess.CalledProcessError(retcode, command)
+        except subprocess.CalledProcessError as e:
+            print("csplit failed with return code", e.returncode, ", exiting...")
+            sys.exit(1)
 
     # remove tmp files
     os.remove(read_ids)
