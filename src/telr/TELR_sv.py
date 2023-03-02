@@ -15,45 +15,27 @@ def detect_sv(
     out,
     sample_name,
     thread,
-    svim=False,
+    sv_detector = "Sniffles", #used to be svim = False, need to make sure this doesn't break anything
 ):
     """
     Detect structural variants from BAM file using Sniffles or SVIM
     """
     logging.info("Detecting SVs from BAM file...")
-    start_time = time.time()
-    if svim:
-        try:
-            subprocess.call(
-                [
-                    "svim",
-                    "alignment",
-                    "--insertion_sequences",
-                    "--read_names",
-                    "--sample",
-                    sample_name,
-                    "--interspersed_duplications_as_insertions",
-                    out,
-                    bam,
-                    reference,
-                ]
-            )
-        except Exception as e:
-            print(e)
-            logging.exception("Detecting SVs using SVIM failed, exiting...")
-            sys.exit(1)
+    start_time = time.perf_counter()
+    process_args = {
+        "SVIM":["svim","alignment","--insertion_sequences","--read_names","--sample",sample_name,"--interspersed_duplications_as_insertions",out,bam,reference],
+        "Sniffles":["sniffles", "-n", "-1", "--threads", str(thread), "-m", bam, "-v", vcf]
+    }[sv_detector]
+    try:
+        subprocess.call(process_args)
+    except Exception as e:
+        print(e)
+        logging.exception(f"Detecting SVs using {sv_detector} failed, exiting...")
+        sys.exit(1)
+    if(sv_detector == "SVIM"):
         vcf_tmp = os.path.join(out, "variants.vcf")
         os.rename(vcf_tmp, vcf)
-    else:
-        try:
-            subprocess.call(
-                ["sniffles", "-n", "-1", "--threads", str(thread), "-m", bam, "-v", vcf]
-            )
-        except Exception as e:
-            print(e)
-            logging.exception("Detecting SVs using Sniffles failed, exiting...")
-            sys.exit(1)
-    proc_time = time.time() - start_time
+    proc_time = time.perf_counter() - start_time
     if os.path.isfile(vcf) is False:
         sys.stderr.write("SV detection output not found, exiting...\n")
         sys.exit(1)
