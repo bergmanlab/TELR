@@ -201,6 +201,7 @@ def get_args():
         args.polish_iterations = 1
     elif args.polish_iterations < 1:
         print("Please provide a valid number of iterations for polishing, exiting...")
+        sys.exit(1)
 
     # sets up out dir variable
     if args.out is None:
@@ -208,6 +209,7 @@ def get_args():
     args.out = os.path.abspath(args.out)
     mkdir(args.out)
 
+    #set default values for the following parameters:
     if args.thread is None:
         args.thread = 1
 
@@ -230,6 +232,7 @@ def get_args():
             print(
                 "Please provide a valid flanking sequence offset size (positive integer) for allele frequency estimation, exiting..."
             )
+            sys.exit(1)
 
     if args.af_te_interval is None:
         args.af_te_interval = 50
@@ -238,6 +241,7 @@ def get_args():
             print(
                 "Please provide a valid TE interval size (positive integer) for allele frequency estimation, exiting..."
             )
+            sys.exit(1)
 
     if args.af_te_offset is None:
         args.af_te_offset = 50
@@ -246,6 +250,7 @@ def get_args():
             print(
                 "Please provide a valid TE offset size (positive integer) for allele frequency estimation, exiting..."
             )
+            sys.exit(1)
 
     if args.gap is None:
         args.gap = 20
