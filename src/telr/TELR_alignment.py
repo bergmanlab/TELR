@@ -11,83 +11,59 @@ def alignment(bam, read, reference, out, sample_name, thread, method, presets):
     This function takes raw reads and performs read alignment using ngmlr or minimap2.
     """
     logging.info("Start alignment...")
-    start_time = time.time()
-    if method == "nglmr":
-        if presets == "ont":
-            presets = "ont"
-            label = "ont"
-        elif presets == "pacbio":
-            presets = "pacbio"
-            label = "pb"
-        else:
-            print(
-                "Read presets not recognized, please provide ont or pacbio, exiting..."
-            )
-            sys.exit(1)
-
-        try:
-            align_sam = out + "/" + sample_name + ".tmp.sam"
-            with open(align_sam, "w") as output:
-                subprocess.call(
-                    [
-                        "ngmlr",
-                        "-r",
-                        reference,
-                        "-q",
-                        read,
-                        "-x",
-                        presets,
-                        "-t",
-                        str(thread),
-                        "--rg-id",
-                        sample_name,
-                        "--rg-sm",
-                        sample_name,
-                        "--rg-lb",
-                        label,
-                        "--no-progress",
-                    ],
-                    stdout=output,
-                )
-        except Exception as e:
-            print(e)
-            print("Read alignment failed, check input reads, exiting...")
-            sys.exit(1)
-    elif method == "minimap2":
-        if presets == "ont":
-            presets = "map-ont"
-        elif presets == "pacbio":
-            presets = "map-pb"
-        else:
-            print(
-                "Read presets not recognized, please provide ont or pacbio, exiting..."
-            )
-            sys.exit(1)
-        try:
-            align_sam = out + "/" + sample_name + ".sam"
-            with open(align_sam, "w") as output:
-                subprocess.call(
-                    [
-                        "minimap2",
-                        "--cs",
-                        "--MD",
-                        "-Y",
-                        "-L",
-                        "-ax",
-                        presets,
-                        reference,
-                        read,
-                    ],
-                    stdout=output,
-                )
-        except Exception as e:
-            print(e)
-            print("Read alignment failed, check input reads, exiting...")
-            sys.exit(1)
-    else:
+    start_time = time.perf_counter()
+    label_presets = {"pacbio":{"nglmr":"pb","minimap2":"map-pb"},"ont":{"ngmlr":"ont","minimap2":"map-ont"}}
+    if(not presets in label_presets):
+        print(
+            "Read presets not recognized, please provide ont or pacbio, exiting..."
+        )
+        sys.exit(1)
+    method_array = {
+            "nglmr":{
+                "file_extension":".tmp.sam",
+                "run_array":[
+                    "ngmlr",
+                    "-r", reference,
+                    "-q", read,
+                    "-x", presets,
+                    "-t", str(thread),
+                    "--rg-id", sample_name,
+                    "--rg-sm", sample_name,
+                    "--rg-lb", label_presets["nglmr"][presets],
+                    "no-progress",
+                    ]
+                },
+            "minimap2":{
+                "file_extension":".sam",
+                "run_array":[
+                    "minimap2",
+                    "--cs",
+                    "--MD",
+                    "-Y",
+                    "-L",
+                    "-ax",
+                    label_presets["minimap2"][presets],
+                    reference,
+                    read,
+                    ]
+                }
+            }
+    if(not method in method_array):
         print(
             "Alignment method not recognized, please provide ont or pacbio, exiting..."
         )
+        sys.exit(1)
+    else: method_array = method_array[method]
+    try:
+        align_sam = out + "/" + sample_name + method_array["file_extension"]
+        with open(align_sam, "w") as output:
+            subprocess.call(
+                method_array["run_array"],
+                stdout=output,
+            )        
+    except Exception as e:
+        print(e)
+        print("Read alignment failed, check input reads, exiting...")
         sys.exit(1)
 
     sort_index_bam(align_sam, bam, thread)
@@ -96,7 +72,7 @@ def alignment(bam, read, reference, out, sample_name, thread, method, presets):
         sys.exit(1)
     os.remove(align_sam)
 
-    proc_time = time.time() - start_time
+    proc_time = time.perf_counter() - start_time
     logging.info("First alignment finished in " + format_time(proc_time))
 
 
