@@ -19,11 +19,18 @@ def detect_sv(
 ):
     """
     Detect structural variants from BAM file using Sniffles or SVIM
+
+    Notes: this function used to have SVIM=False as an input parameter instead of sv_detector = "Sniffles":
+    - Sniffles version in telr.yml is 1.0.12; current version is 2.0.7
+    - As far as I can tell, SVIM is not implemented at all; it is not present in the conda environment; it is not possible to call it using telr commands.
+
     """
     logging.info("Detecting SVs from BAM file...")
     start_time = time.perf_counter()
     process_args = {
+        #SVIM: Not implemented
         "SVIM":["svim","alignment","--insertion_sequences","--read_names","--sample",sample_name,"--interspersed_duplications_as_insertions",out,bam,reference],
+        #Sniffles: Version 1.0.12 | current 2.0.7
         "Sniffles":["sniffles", "-n", "-1", "--threads", str(thread), "-m", bam, "-v", vcf]
     }[sv_detector]
     try:
@@ -142,6 +149,7 @@ def parse_vcf(vcf_in, vcf_out, bam):
     vcf_tmp = f"{vcf_in}.tmp"
     query_str = '"%CHROM\\t%POS\\t%END\\t%SVLEN\\t%RE\\t%AF\\t%ID\\t%ALT\\t%RNAMES\\t%FILTER\\t[ %GT]\\t[ %DR]\\t[ %DV]\n"'
     command = (f'bcftools query -i \'SVTYPE="INS" & ALT!="<INS>"\' -f {query_str} {vcf_in}')
+    #bcftools version 1.9 | current 1.16
     with open(vcf_tmp, "w") as output:
         subprocess.call(command, stdout=output, shell=True)
 

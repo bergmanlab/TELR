@@ -338,6 +338,8 @@ def bam2fasta(bam, fasta):
     fasta_tmp = fasta + ".tmp"
     try:
         with open(fasta_tmp, "w") as output:
+            #samtools version 1.9 | current 1.16.1
+            #q: where is this import coming from? Couldn't find specific version on ananconda.org
             subprocess.call(["samtools", "fasta", bam], stdout=output)
     except Exception as e:
         print(e)

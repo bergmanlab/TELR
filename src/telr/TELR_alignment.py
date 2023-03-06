@@ -12,14 +12,15 @@ def alignment(bam, read, reference, out, sample_name, thread, method, presets):
     """
     logging.info("Start alignment...")
     start_time = time.perf_counter()
-    label_presets = {"pacbio":{"nglmr":"pb","minimap2":"map-pb"},"ont":{"ngmlr":"ont","minimap2":"map-ont"}}
+    label_presets = {"pacbio":{"ngmlr":"pb","minimap2":"map-pb"},"ont":{"ngmlr":"ont","minimap2":"map-ont"}}
     if(not presets in label_presets):
         print(
             "Read presets not recognized, please provide ont or pacbio, exiting..."
         )
         sys.exit(1)
     method_array = {
-            "nglmr":{
+            #ngmlr version 0.2.7 | current 0.2.7
+            "ngmlr":{
                 "file_extension":".tmp.sam",
                 "run_array":[
                     "ngmlr",
@@ -29,10 +30,11 @@ def alignment(bam, read, reference, out, sample_name, thread, method, presets):
                     "-t", str(thread),
                     "--rg-id", sample_name,
                     "--rg-sm", sample_name,
-                    "--rg-lb", label_presets["nglmr"][presets],
+                    "--rg-lb", label_presets["ngmlr"][presets],
                     "no-progress",
                     ]
                 },
+            #minimap2 verion 2.22 | current 2.24
             "minimap2":{
                 "file_extension":".sam",
                 "run_array":[
