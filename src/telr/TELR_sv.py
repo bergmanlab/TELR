@@ -49,10 +49,10 @@ def vcf_parse_filter(
     """Parse and filter for insertions from VCF file"""
     logging.info("Parse structural variant VCF...")
 
-    vcf_parsed = vcf_in + ".parsed.tmp.tsv"
+    vcf_parsed = f"{vcf_in}.parsed.tmp.tsv"
     parse_vcf(vcf_in, vcf_parsed, bam)
 
-    vcf_filtered = vcf_in + ".filtered.tmp.tsv"
+    vcf_filtered = f"{vcf_in}.filtered.tmp.tsv"
     filter_vcf(
         vcf_parsed, vcf_filtered, te_library, out, sample_name, thread, loci_eval
     )
@@ -139,19 +139,14 @@ def average(lst):
 
 
 def parse_vcf(vcf_in, vcf_out, bam):
-    vcf_tmp = vcf_in + ".tmp"
+    vcf_tmp = f"{vcf_in}.tmp"
     query_str = '"%CHROM\\t%POS\\t%END\\t%SVLEN\\t%RE\\t%AF\\t%ID\\t%ALT\\t%RNAMES\\t%FILTER\\t[ %GT]\\t[ %DR]\\t[ %DV]\n"'
-    command = (
-        'bcftools query -i \'SVTYPE="INS" & ALT!="<INS>"\' -f '
-        + query_str
-        + " "
-        + vcf_in
-    )
+    command = (f'bcftools query -i \'SVTYPE="INS" & ALT!="<INS>"\' -f {query_str} {vcf_in}')
     with open(vcf_tmp, "w") as output:
         subprocess.call(command, stdout=output, shell=True)
 
     # check start and end, swap if needed
-    vcf_swap = vcf_in + ".swap"
+    vcf_swap = f"{vcf_in}.swap"
     swap_coordinate(vcf_tmp, vcf_swap)
 
     # sort bed file
