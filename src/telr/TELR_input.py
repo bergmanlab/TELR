@@ -41,7 +41,7 @@ def get_args():
     optional.add_argument(
         "--aligner",
         type=str,
-        help="choose method for read alignment, please provide 'nglmr' or 'minimap2' (default = 'nglmr')",
+        help="choose method for read alignment, please provide 'ngmlr' or 'minimap2' (default = 'ngmlr')",
         required=False,
     )
     optional.add_argument(
@@ -174,9 +174,9 @@ def get_args():
 
     # check if optional arguments are valid
     if args.aligner is None:
-        args.aligner = "nglmr"
-    elif args.aligner not in ["nglmr", "minimap2"]:
-        print("Please provide a valid alignment method (nglmr/minimap2), exiting...")
+        args.aligner = "ngmlr"
+    elif args.aligner not in ["ngmlr", "minimap2"]:
+        print("Please provide a valid alignment method (ngmlr/minimap2), exiting...")
         sys.exit(1)
 
     if args.assembler is None:
