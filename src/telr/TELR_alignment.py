@@ -12,10 +12,7 @@ def alignment(bam, read, reference, out, sample_name, thread, method, presets):
     """
     logging.info("Start alignment...")
     start_time = time.perf_counter()
-    print(presets)
     label_presets = {"pacbio":{"ngmlr":"pb","minimap2":"map-pb"},"ont":{"ngmlr":"ont","minimap2":"map-ont"}}
-    print(label_presets)
-    print(presets in label_presets)
     if(not presets in label_presets):
         print(
             "Read presets not recognized, please provide ont or pacbio, exiting..."
@@ -53,7 +50,6 @@ def alignment(bam, read, reference, out, sample_name, thread, method, presets):
                     ]
                 }
             }
-    print(method)
     if(not method in method_array):
         print(
             "Alignment method not recognized, please provide ont or pacbio, exiting..."
@@ -62,7 +58,6 @@ def alignment(bam, read, reference, out, sample_name, thread, method, presets):
     else: method_array = method_array[method]
     try:
         align_sam = out + "/" + sample_name + method_array["file_extension"]
-        print(method_array["run_array"])
         with open(align_sam, "w") as output:
             subprocess.call(
                 method_array["run_array"],
