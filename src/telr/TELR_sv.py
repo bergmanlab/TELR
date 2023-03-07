@@ -146,26 +146,27 @@ def average(lst):
 
 
 def parse_vcf(vcf_in, vcf_out, bam):
-    vcf_tmp = f"{vcf_in}.tmp"
+    '''Parse vcf file using bcftools'''
     query_str = '"%CHROM\\t%POS\\t%END\\t%SVLEN\\t%RE\\t%AF\\t%ID\\t%ALT\\t%RNAMES\\t%FILTER\\t[ %GT]\\t[ %DR]\\t[ %DV]\n"'
     command = (f'bcftools query -i \'SVTYPE="INS" & ALT!="<INS>"\' -f {query_str} {vcf_in}')
     #bcftools version 1.9 | current 1.16
-    with open(vcf_tmp, "w") as output:
+    with open(f"{vcf_in}.tmp", "w") as output:
         subprocess.call(command, stdout=output, shell=True)
 
     # check start and end, swap if needed
-    vcf_swap = f"{vcf_in}.swap"
-    swap_coordinate(vcf_tmp, vcf_swap)
+    swap_coordinate(f"{vcf_in}.tmp", f"{vcf_in}.swap")
 
     # sort bed file
 
     # TODO check whether vcf file contains insertions, quit if 0
-    rm_vcf_redundancy(vcf_swap, vcf_out)  # remove redundancy in parsed vcf
-    os.remove(vcf_swap)
-    os.remove(vcf_tmp)
+    rm_vcf_redundancy(f"{vcf_in}.swap", vcf_out)  # remove redundancy in parsed vcf
+    os.remove(f"{vcf_in}.swap")
+    os.remove(f"{vcf_in}.tmp")
 
 
 def swap_coordinate(vcf_in, vcf_out):
+    '''checks if column 2 (0 index) of the vcf file > column 1; if so, swaps columns 1 and 2.'''
+    #Note: isn't column 2 in a vcf file usually the id? Is sniffles output making it another position index?
     with open(vcf_in, "r") as input, open(vcf_out, "w") as output:
         for line in input:
             entry = line.replace("\n", "").split("\t")
