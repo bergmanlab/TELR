@@ -337,6 +337,7 @@ def get_unique_list(list1):
 
 
 def af_sum(nums):
+    '''Returns sum of allele frequencies (max 1)'''
     sum_nums = sum(nums)
     if sum_nums > 1:
         sum_nums = 1
