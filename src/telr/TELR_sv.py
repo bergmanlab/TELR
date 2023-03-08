@@ -165,8 +165,7 @@ def parse_vcf(vcf_in, vcf_out, bam):
 
 
 def swap_coordinate(vcf_in, vcf_out):
-    '''checks if column 2 (0 index) of the vcf file > column 1; if so, swaps columns 1 and 2.'''
-    #Note: isn't column 2 in a vcf file usually the id? Is sniffles output making it another position index?
+    '''checks if column 2 (0 index) of the parsed vcf file > column 1; if so, swaps columns 1 and 2 (start and end pos).'''
     with open(vcf_in, "r") as input, open(vcf_out, "w") as output:
         for line in input:
             entry = line.replace("\n", "").split("\t")
@@ -177,20 +176,23 @@ def swap_coordinate(vcf_in, vcf_out):
 
 
 def rm_vcf_redundancy(vcf_in, vcf_out):
+    '''Takes the output of parse_vcf, uses pandas dataframe to intelligently 
+    remove redundancy without removing additional information (eg counts), and 
+    returns a non-redundant vcf file containing the relevant information.'''
     header = [
         "chr",
         "start",
         "end",
         "length",
-        "coverage",
-        "AF",
+        "coverage", #from sniffles, RE = read support
+        "AF", #allele frequency
         "ID",
         "seq",
-        "reads",
+        "reads", #ids of all mapped reads
         "filter",
         "genotype",
-        "ref_count",
-        "alt_count",
+        "ref_count", # of high quality reference reads
+        "alt_count", # of high quality variant reads
     ]
     df = pd.read_csv(vcf_in, delimiter="\t", names=header)
     df2 = (
