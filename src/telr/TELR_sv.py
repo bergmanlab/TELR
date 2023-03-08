@@ -323,17 +323,9 @@ def write_ins_seqs(vcf, out):
 
 def id_merge(strings):
     string_merged = ",".join(strings)
-    ids = string_merged.split(",")
-    id_string = ",".join(get_unique_list(ids))
+    ids = set(string_merged.split(","))
+    id_string = ",".join(ids)
     return id_string
-
-
-def get_unique_list(list1):
-    # insert the list to the set
-    list_set = set(list1)
-    # convert the set to the list
-    unique_list = list(list_set)
-    return unique_list
 
 
 def af_sum(nums):
