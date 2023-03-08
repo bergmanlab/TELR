@@ -322,6 +322,7 @@ def write_ins_seqs(vcf, out):
 
 
 def id_merge(strings):
+    '''returns comma separated list of unique read IDs.'''
     string_merged = ",".join(strings)
     ids = set(string_merged.split(","))
     id_string = ",".join(ids)
