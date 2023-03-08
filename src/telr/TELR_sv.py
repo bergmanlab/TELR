@@ -218,14 +218,10 @@ def rm_vcf_redundancy(vcf_in, vcf_out):
 
 def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eval):
     """
-    Filter insertion sequences from Sniffles VCF by repeatmasking with TE concensus
+    Filter insertion sequences from Sniffles VCF by repeatmasking with TE consensus
     """
-    # constrct fasta from parsed vcf file
-    if "+" in sample_name:
-        sample_name_replace = sample_name.replace("+", "plus")
-    else:
-        sample_name_replace = sample_name
-    ins_seqs = os.path.join(out, sample_name_replace + ".vcf_ins.fasta")
+    # construct fasta from parsed vcf file
+    ins_seqs = os.path.join(out, sample_name.replace("+","plus") + ".vcf_ins.fasta")
     write_ins_seqs(ins, ins_seqs)
 
     # get the length of the insertion sequence TODO: this can be generalized
@@ -313,12 +309,12 @@ def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eva
 
 
 def write_ins_seqs(vcf, out):
+    '''Takes file in intermediate '''
     with open(vcf, "r") as input, open(out, "w") as output:
         for line in input:
             entry = line.replace("\n", "").split("\t")
             coord = "_".join([entry[0], entry[1], entry[2]])
-            output.write(">" + coord + "\n")
-            output.write(entry[7] + "\n")
+            output.write(f">{coord}\n{entry[7]}\n")
 
 
 def id_merge(strings):
