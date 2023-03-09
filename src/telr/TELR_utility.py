@@ -42,6 +42,7 @@ def format_time(time):
 
 
 def create_loci_set(vcf_parsed):
+    #create set off all loci in vcf_parsed file as chr_start_end
     all_loci = set()
     with open(vcf_parsed, "r") as input:
         for line in input:
