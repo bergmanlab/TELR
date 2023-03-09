@@ -65,22 +65,23 @@ def vcf_parse_filter(
     )
 
     # merge entries
-    vcf_merged = vcf_in + ".merged.tmp.tsv"
+    vcf_merged = f"{vcf_in}.merged.tmp.tsv"
     merge_vcf(vcf_filtered, vcf_merged)
     os.rename(vcf_merged, vcf_out)
 
 
 def merge_vcf(vcf_in, vcf_out, window=20):
-    vcf_tmp = vcf_in + ".tmp"
+    vcf_tmp = f"{vcf_in}.tmp"
     with open(vcf_tmp, "w") as output:
-        command = (
-            'bedtools merge -o collapse -c 2,3,4,5,6,7,8,9,10,11,12,13,14 -delim ";"'
-            + " -d "
-            + str(window)
-            + " -i "
-            + vcf_in
-        )
-        subprocess.call(command, shell=True, stdout=output)
+        command = [
+            "bedtools", "merge",
+            "-o", "collapse",
+            "-c", "2,3,4,5,6,7,8,9,10,11,12,13,14",
+            "-d", str(window),
+            "-delim",'";"',
+            "-i", vcf_in
+        ]
+        subprocess.call(command, stdout=output)
 
     with open(vcf_tmp, "r") as input, open(vcf_out, "w") as output:
         for line in input:
@@ -90,19 +91,19 @@ def merge_vcf(vcf_in, vcf_out, window=20):
                 start = average(entry[3])
                 end = average(entry[4])
                 len_list = entry[5].split(";")
-                idx = len_list.index(max(len_list))
-                length = len_list[idx]
-                coverage = sum(string2int(entry[6].split(";"), integer=False))
-                af = af_sum(string2int(entry[7].split(";"), integer=False))
-                sv_id = entry[8].split(";")[idx]
-                ins_seq = entry[9].split(";")[idx]
+                longest_insertion = len_list.index(max(len_list))
+                length = len_list[longest_insertion]
+                coverage = sum(string2int(entry[6], integer=False))
+                af = af_sum(string2int(entry[7], integer=False))
+                sv_id = entry[8].split(";")[longest_insertion]
+                ins_seq = entry[9].split(";")[longest_insertion]
                 ids = entry[10].replace(";", ",").split(",")
                 reads = ",".join(set(ids)) #changed from get_unique_list to set()
-                sv_filter = entry[11].split(";")[idx]
-                gt = entry[12].split(";")[idx]
-                ref_count = entry[13].split(";")[idx]
+                sv_filter = entry[11].split(";")[longest_insertion]
+                gt = entry[12].split(";")[longest_insertion]
+                ref_count = entry[13].split(";")[longest_insertion]
                 alt_count = len(reads.split(","))
-                ins_te_prop = entry[15].split(";")[idx]
+                ins_te_prop = entry[15].split(";")[longest_insertion]
                 out_line = "\t".join(
                     [
                         chr,
@@ -129,19 +130,19 @@ def merge_vcf(vcf_in, vcf_out, window=20):
     os.remove(vcf_tmp)
 
 
-def string2int(lst, integer=True):
+def string2int(string, integer=True, delimiter=";"):
+    lst = string.split(delimiter)
     if integer:
-        for i in range(0, len(lst)):
+        for i in range(len(lst)):
             lst[i] = int(lst[i])
     else:
-        for i in range(0, len(lst)):
+        for i in range(len(lst)):
             lst[i] = float(lst[i])
     return lst
 
 
 def average(lst):
-    num_list = lst.split(";")
-    num_list = string2int(num_list)
+    num_list = string2int(lst)
     return round(sum(num_list) / len(num_list))
 
 
@@ -252,7 +253,7 @@ def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eva
                 te_library,
                 "-pa",
                 str(thread),
-                ins_seqs,
+                ins_seqs
             ]
         )
         ins_repeatmasked = os.path.join(
@@ -297,8 +298,7 @@ def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eva
             contig_name = "_".join([entry[0], entry[1], entry[2]])
             # TODO: maybe add filter for insertion sequences covered by TE?
             if contig_name in ins_te_loci:
-                out_line = line.replace("\n", "") + "\t" + str(ins_te_loci[contig_name])
-                output.write(out_line + "\n")
+                output.write(f"{line.strip()}\t{ins_te_loci[contig_name]}\n")
     # os.remove(ins_seqs)
 
     # report removed loci
