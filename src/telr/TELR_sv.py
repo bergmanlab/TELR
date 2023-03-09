@@ -71,6 +71,8 @@ def vcf_parse_filter(
 
 
 def merge_vcf(vcf_in, vcf_out, window=20):
+    '''merges insertions within 20 bp of each other using bedtools + post-processing in TELR'''
+    #as far as okg can tell, this merge loses quite a bit of information about all but the longest read being merged.
     vcf_tmp = f"{vcf_in}.tmp"
     with open(vcf_tmp, "w") as output:
         command = [
@@ -131,6 +133,7 @@ def merge_vcf(vcf_in, vcf_out, window=20):
 
 
 def string2int(string, integer=True, delimiter=";"):
+    '''takes a ; (by default) delimited string and returns as a list of either ints or floats'''
     lst = string.split(delimiter)
     if integer:
         for i in range(len(lst)):
@@ -142,6 +145,7 @@ def string2int(string, integer=True, delimiter=";"):
 
 
 def average(lst):
+    '''returns the average of a ; delimited string with a list of ints'''
     num_list = string2int(lst)
     return round(sum(num_list) / len(num_list))
 
