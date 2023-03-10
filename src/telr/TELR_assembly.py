@@ -374,7 +374,7 @@ def prep_assembly_inputs(
 
     if read_type == "sv":  # TODO: figure out what this does
         # extract read IDs
-        read_ids = os.path.join(out, sample_name + ".id")
+        read_ids = os.path.join(out, f"{sample_name}.id")
         with open(vcf_parsed, "r") as input, open(read_ids, "w") as output:
             for line in input:
                 entry = line.replace("\n", "").split("\t")
@@ -415,24 +415,24 @@ def prep_assembly_inputs(
                 vcf_parsed = vcf_parsed_new
 
     # generate unique ID list
-    read_ids_unique = read_ids + ".unique"
-    command = "cat " + read_ids + " | sort | uniq"
+    read_ids_unique = f"{read_ids}.unique"
+    command = f"cat {read_ids} | sort | uniq"
     with open(read_ids_unique, "w") as output:
         subprocess.call(command, stdout=output, shell=True)
 
     # filter raw reads using read list
-    subset_fa = os.path.join(out, sample_name + ".subset.fa")
-    command = "seqtk subseq " + raw_reads + " " + read_ids_unique + " | seqtk seq -a"
+    subset_fa = os.path.join(out, f"{sample_name}.subset.fa")
+    command = f"seqtk subseq {raw_reads} {read_ids_unique} | seqtk seq -a"
     with open(subset_fa, "w") as output:
         subprocess.call(command, stdout=output, shell=True)
 
     # reorder reads
-    subset_fa_reorder = out + "/" + sample_name + ".subset.reorder.fa"
+    subset_fa_reorder = f"{out}/{sample_name}.subset.reorder.fa"
     extract_reads(subset_fa, read_ids, subset_fa_reorder)
 
     # separate reads into multiple files, using csplit
     mkdir(reads_dir)
-    csplit_prefix = reads_dir + "/contig"
+    csplit_prefix = f"{reads_dir}/contig"
     m = []
     k = 1
     with open(vcf_parsed, "r") as input:
@@ -450,9 +450,7 @@ def prep_assembly_inputs(
     else:
         m = m[:-1]
         index = " ".join(str(i) for i in m)
-        command = (
-            "csplit -s -f " + csplit_prefix + " -n 1 " + subset_fa_reorder + " " + index
-        )
+        command = f"csplit -s -f {csplit_prefix} -n 1 {subset_fa_reorder} {index}"
         subprocess.call(command, shell=True)
 
     # remove tmp files
