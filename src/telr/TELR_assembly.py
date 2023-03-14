@@ -439,12 +439,12 @@ def prep_assembly_inputs(
         for line in input:
             entry = line.replace("\n", "").split("\t")
             if read_type == "sv":
-                k = k + 2 * (len(entry[8].split(",")))
+                k += 2 * (len(entry[8].split(",")))
             else:
-                k = k + 2 * int(entry[14])
+                k += 2 * int(entry[14])
             m.append(k)
     if len(m) == 1:
-        subprocess.call(["cp", subset_fa_reorder, reads_dir + "/contig0"])
+        subprocess.call(["cp", subset_fa_reorder, f"{reads_dir}/contig0"])
     elif len(m) == 0:
         print("No insertion detected, exiting...")
     else:
@@ -462,7 +462,7 @@ def prep_assembly_inputs(
 
 def extract_reads(reads, list, out):
     """Extract reads from fasta using read ID list"""
-    record_dict = SeqIO.index(reads, "fasta")
+    record_dict = SeqIO.index(reads, "fasta") #SeqIO.index() pulls reads in a memory efficient way/without opening the whole file.
     with open(out, "wb") as output_handle, open(list, "r") as ID:
         for entry in ID:
             entry = entry.replace("\n", "")

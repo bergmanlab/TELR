@@ -45,7 +45,7 @@ def main():
     )
 
     # # Alignment
-    bam = os.path.join(tmp_dir, sample_name + "_sort.bam")
+    bam = os.path.join(tmp_dir, f"{sample_name}_sort.bam")
     if not skip_alignment:
         alignment(
             bam,
@@ -61,7 +61,7 @@ def main():
         sort_index_bam(reads, bam, args.thread)
 
     # initialize loci eveluation file
-    loci_eval = os.path.join(args.out, sample_name + ".loci_eval.tsv")
+    loci_eval = os.path.join(args.out, f"{sample_name}.loci_eval.tsv")
     if os.path.isfile(loci_eval):
         os.remove(loci_eval)
 
@@ -70,7 +70,7 @@ def main():
     detect_sv(vcf, bam, reference, tmp_dir, sample_name, args.thread)
 
     # Parse SV and filter for TE candidate locus
-    vcf_parsed = os.path.join(tmp_dir, sample_name + ".vcf_filtered.tsv")
+    vcf_parsed = os.path.join(tmp_dir, f"{sample_name}.vcf_filtered.tsv")
     vcf_parse_filter(
         vcf,
         vcf_parsed,
@@ -137,7 +137,7 @@ def main():
         outdir=repeatmask_ref_dir,
         thread=args.thread,
     )
-    ref_te_bed = os.path.join(tmp_dir, os.path.basename(reference) + ".te.bed")
+    ref_te_bed = os.path.join(tmp_dir, f"{os.path.basename(reference)}.te.bed")
     if te_gff is not None:
         gff3tobed(te_gff, ref_te_bed)
     else:
