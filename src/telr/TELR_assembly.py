@@ -46,8 +46,8 @@ def get_local_contigs(
             entry = line.replace("\n", "").split("\t")
             contig_name = "_".join([entry[0], entry[1], entry[2]])
             # rename variant reads
-            sv_reads = sv_reads_dir + "/contig" + str(k)
-            sv_reads_rename = sv_reads_dir + "/" + contig_name + ".reads.fa"
+            sv_reads = f"{sv_reads_dir}/contig{k}"
+            sv_reads_rename = f"{sv_reads_dir}/{contig_name}.reads.fa"
             os.rename(sv_reads, sv_reads_rename)
             thread_asm = 1
             asm_pa = [
@@ -432,8 +432,7 @@ def prep_assembly_inputs(
 
     # separate reads into multiple files, using csplit
     mkdir(reads_dir)
-    csplit_prefix = f"{reads_dir}/contig"
-    m = []
+    csplit_indices = []
     k = 1
     with open(vcf_parsed, "r") as input:
         for line in input:
@@ -442,15 +441,14 @@ def prep_assembly_inputs(
                 k += 2 * (len(entry[8].split(",")))
             else:
                 k += 2 * int(entry[14])
-            m.append(k)
-    if len(m) == 1:
+            csplit_indices.append(k)
+    if len(csplit_indices) == 1:
         subprocess.call(["cp", subset_fa_reorder, f"{reads_dir}/contig0"])
-    elif len(m) == 0:
+    elif len(csplit_indices) == 0:
         print("No insertion detected, exiting...")
     else:
-        m = m[:-1]
-        index = " ".join(str(i) for i in m)
-        command = f"csplit -s -f {csplit_prefix} -n 1 {subset_fa_reorder} {index}"
+        index = " ".join(str(i) for i in csplit_indices[:-1])
+        command = f"csplit -s -f {reads_dir}/contig -n 1 {subset_fa_reorder} {index}"
         subprocess.call(command, shell=True)
 
     # remove tmp files
