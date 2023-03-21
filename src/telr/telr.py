@@ -60,20 +60,19 @@ def main():
     else:
         sort_index_bam(reads, bam, args.thread)
 
-    # initialize loci eveluation file
-    loci_eval = os.path.join(args.out, f"{sample_name}.loci_eval.tsv")
-    if os.path.isfile(loci_eval):
-        os.remove(loci_eval)
-
     # Detect and parse SV
-    vcf = os.path.join(tmp_dir, sample_name + ".vcf")
-    detect_sv(vcf, bam, reference, tmp_dir, sample_name, args.thread)
+    sv_file = detect_sv(tmp_dir, bam, reference, tmp_dir, sample_name, args.thread)
+
+    # initialize loci eveluation file
+    sv_file.add("loci_eval","out",".loci_eval.tsv",new_dir={"out":args.out})
+    if sv_file.loci_eval.exists():
+        os.remove(sv_file.loci_eval.path)
 
     # Parse SV and filter for TE candidate locus
+    sv_file.add(key="vcf_parsed",directory="tmp",format="vcf",extension=".vcf_filtered.tsv")
     vcf_parsed = os.path.join(tmp_dir, f"{sample_name}.vcf_filtered.tsv")
     vcf_parse_filter(
-        vcf,
-        vcf_parsed,
+        sv_file,
         bam,
         library,
         tmp_dir,
