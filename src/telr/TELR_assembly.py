@@ -46,12 +46,11 @@ def get_local_contigs(
             entry = line.replace("\n", "").split("\t")
             contig_name = "_".join([entry[0], entry[1], entry[2]])
             # rename variant reads
-            sv_reads = f"{sv_reads_dir}/contig{k}"
-            sv_reads_rename = f"{sv_reads_dir}/{contig_name}.reads.fa"
-            os.rename(sv_reads, sv_reads_rename)
+            sv_reads = f"{sv_reads_dir}/{contig_name}.reads.fa"
+            os.rename(f"{sv_reads_dir}/contig{k}", sv_reads)
             thread_asm = 1
             asm_pa = [
-                sv_reads_rename,
+                sv_reads,
                 contig_dir,
                 contig_name,
                 thread_asm,
@@ -61,10 +60,10 @@ def get_local_contigs(
                 polish_iterations,
             ]
             asm_pa_list.append(asm_pa)
-            k = k + 1
+            k += 1
     # run assembly in parallel
     logging.info("Perform local assembly of non-reference TE loci...")
-    start_time = time.time()
+    start_time = time.perf_counter()
 
     try:
         pool = Pool(processes=thread)
@@ -76,7 +75,7 @@ def get_local_contigs(
         print("Local assembly failed, exiting...")
         sys.exit(1)
 
-    proc_time = time.time() - start_time
+    proc_time = time.perf_counter() - start_time
 
     # merge all contigs
     assembly_passed_loci = set()
@@ -102,20 +101,20 @@ def get_local_contigs(
 
 
 def run_assembly_polishing(args):
+    '''Function called from multiprocessing function for threaded assembly. 
+    Makes decisions about other functions within TELR_assembly.py to call 
+    on the data based on input parameters, and calls them.'''
     reads = args[0]
     asm_dir = args[1]
     contig_name = args[2]
     thread = args[3]
     presets = args[4]
-    assembler = args[5]
-    polisher = args[6]
+    assembler = {"wtdbg2":run_wtdbg2_assembly,"flye":run_flye_assembly}[args[5]] #potential to throw error if invalid input
+    polisher = {"wtdbg2":run_wtdbg2_polishing,"flye":run_flye_polishing}[args[6]]
     polish_iterations = args[7]
 
     # run assembly
-    if assembler == "wtdbg2":
-        asm_cns = run_wtdbg2_assembly(reads, asm_dir, contig_name, thread, presets)
-    else:
-        asm_cns = run_flye_assembly(reads, asm_dir, contig_name, thread, presets)
+    asm_cns = assembler(reads, asm_dir, contig_name, thread, presets)
 
     if not check_exist(asm_cns):
         print("assembly failed")
@@ -123,14 +122,7 @@ def run_assembly_polishing(args):
 
     # run polishing
     if polish_iterations > 0:
-        if polisher == "wtdbg2":
-            asm_cns = run_wtdbg2_polishing(
-                asm_cns, reads, thread, polish_iterations, presets
-            )
-        else:
-            asm_cns = run_flye_polishing(
-                asm_cns, reads, asm_dir, contig_name, thread, polish_iterations, presets
-            )
+        asm_cns = polisher(asm_cns, reads, asm_dir, contig_name, thread, polish_iterations, presets)
 
     if check_exist(asm_cns):
         return asm_cns
@@ -138,9 +130,7 @@ def run_assembly_polishing(args):
         return None
 
 
-def run_flye_polishing(
-    asm_cns, reads, asm_dir, contig_name, thread, polish_iterations, presets
-):
+def run_flye_polishing(asm_cns, reads, asm_dir, contig_name, thread, polish_iterations, presets):
     """Run Flye polishing"""
     if presets == "pacbio":
         presets_flye = "--pacbio-raw"
@@ -182,7 +172,7 @@ def run_flye_polishing(
         return None
 
 
-def run_wtdbg2_polishing(asm_cns, reads, threads, polish_iterations, presets):
+def run_wtdbg2_polishing(asm_cns, reads, asm_dir, contig_name, threads, polish_iterations, presets):
     """Run wtdbg2 polishing"""
     if presets == "pacbio":
         presets_minimap2 = "map-pb"
@@ -302,6 +292,7 @@ def run_flye_assembly(sv_reads, asm_dir, contig_name, thread, presets):
 
 def run_wtdbg2_assembly(sv_reads, asm_dir, contig_name, thread, presets):
     """Run wtdbg2 assembly"""
+    presets_wtdbg2 = {"pacbio":"rs","ont":"ont"}
     if presets == "pacbio":
         presets_wtdbg2 = "rs"
     else:
