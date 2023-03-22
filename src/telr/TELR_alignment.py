@@ -6,7 +6,7 @@ import time
 from telr.TELR_utility import format_time
 
 
-def alignment(bam, read, reference, out, sample_name, thread, method, presets):
+def alignment(files, read, reference, out, sample_name, thread, method, presets):
     """
     This function takes raw reads and performs read alignment using ngmlr or minimap2.
     """
@@ -57,8 +57,8 @@ def alignment(bam, read, reference, out, sample_name, thread, method, presets):
         sys.exit(1)
     else: method_array = method_array[method]
     try:
-        align_sam = out + "/" + sample_name + method_array["file_extension"]
-        with open(align_sam, "w") as output:
+        files.add("align_sam", out, method_array["file_extension"])
+        with files.align_sam.open("w") as output:
             subprocess.call(
                 method_array["run_array"],
                 stdout=output,
@@ -68,11 +68,11 @@ def alignment(bam, read, reference, out, sample_name, thread, method, presets):
         print("Read alignment failed, check input reads, exiting...")
         sys.exit(1)
 
-    sort_index_bam(align_sam, bam, thread)
-    if os.path.isfile(bam) is False:
+    sort_index_bam(files.align_sam.path, files.bam.path, thread)
+    if files.bam.exists() is False:
         sys.stderr.write("Sorted and indexed BAM file does not exist, exiting...\n")
         sys.exit(1)
-    os.remove(align_sam)
+    files.align_sam.remove()
 
     proc_time = time.perf_counter() - start_time
     logging.info("First alignment finished in " + format_time(proc_time))

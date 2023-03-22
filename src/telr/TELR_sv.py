@@ -7,63 +7,8 @@ import time
 from Bio import SeqIO
 from telr.TELR_utility import mkdir, format_time, create_loci_set
 
-class file_container:
-    def __init__(self, sample_name, directory_dict):
-        self.sample_name = sample_name
-        self.directories = directory_dict
-
-    def add(self, key, directory, extension, **kwargs):
-        file_name = self.sample_name
-        if "new_dir" in kwargs:
-            self.directories.update(kwargs.pop("new_dir"))
-        if("file_name" in kwargs): file_name = kwargs["file_name"]
-        self.__dict__[key] = file(
-            self, directory,
-            name=f"{file_name}{extension}",
-            **kwargs
-        )
-    
-    def add_dir(self, directory_dict):
-        self.directories.update(directory_dict)
-    
-    def extend(self, file, key, extension, **kwargs):
-        file_name = file.name
-        if "file_name" in kwargs: file_name = kwargs["file_name"]
-        directory = file.directory
-        if "new_dir" in kwargs:
-            directory = kwargs.pop("new_dir")
-            if type(directory) is dict:
-                self.directories.update(directory)
-                directory = directory[next(iter(directory))]
-        self.add(key, directory, extension, file_name, **kwargs)
-        return self.__dict__[key]
-
-    
-
-class file:
-    def __init__(self, container, directory, name, **kwargs):
-        self.container = container
-        self.directory = directory
-        self.name = name
-        self.path = os.path.join(self.container.directories[directory], self.name)
-        self.file_format = self.name[self.name.rindex(".")+1:]
-        self.__dict__.update(kwargs)
-    
-    def add(self, **kwargs):
-        self.__dict__.update(kwargs)
-    
-    def extend(self, key, extension, **kwargs):
-        return self.container.extend(self, key, extension, **kwargs)
-    
-    def exists(self):
-        return os.path.isfile(self.path)
-    
-    def open(self, options="r"):
-        return open(self.path, options)
-
 def detect_sv(
-    tmp_dir,
-    bam,
+    sv_files,
     reference,
     out,
     sample_name,
@@ -79,14 +24,13 @@ def detect_sv(
 
     """
     logging.info("Detecting SVs from BAM file...")
-    sv_files = file_container(sample_name,{"tmp":tmp_dir})
     sv_files.add(key="sv_raw", directory="tmp", extension=".vcf", file_format="vcf", note=f"raw output from {sv_detector}")
     start_time = time.perf_counter()
     process_args = {
         #SVIM: Not implemented
-        "SVIM":["svim","alignment","--insertion_sequences","--read_names","--sample",sample_name,"--interspersed_duplications_as_insertions",out,bam,reference],
+        "SVIM":["svim","alignment","--insertion_sequences","--read_names","--sample",sample_name,"--interspersed_duplications_as_insertions",out,sv_files.bam.path,reference],
         #Sniffles: Version 1.0.12 | current 2.0.7
-        "Sniffles":["sniffles", "-n", "-1", "--threads", str(thread), "-m", bam, "-v", sv_files.sv_raw]
+        "Sniffles":["sniffles", "-n", "-1", "--threads", str(thread), "-m", sv_files.bam.path, "-v", sv_files.sv_raw.path]
     }[sv_detector]
     try:
         subprocess.call(process_args)
@@ -107,42 +51,39 @@ def detect_sv(
 
 
 def vcf_parse_filter(
-    sv_files, bam, te_library, out, sample_name, thread, loci_eval
+    sv_files, te_library, out, sample_name, thread
 ):
     """Parse and filter for insertions from VCF file"""
     logging.info("Parse structural variant VCF...")
 
-    sv_files.add(key="parsed",directory="tmp",extension=".parsed.tmp.tsv",file_format="tsv")
+    sv_files.add(key="parsed",directory=out,extension=".parsed.tmp.tsv")
     parse_vcf(sv_files.sv_raw, sv_files.parsed)
     
-    sv_files.add(key="parsed",directory="tmp",extension=".filtered.tmp.tsv",file_format="tsv")
-    sv_files.add_dir()
-    filter_vcf(
-        sv_files, te_library, sample_name, thread, loci_eval
-    )
+    sv_files.add(key="filtered",directory=out,extension=".filtered.tmp.tsv")
+    filter_vcf(sv_files, te_library, sample_name, thread)
 
     # merge entries
-    vcf_merged = f"{vcf_in}.merged.tmp.tsv"
-    merge_vcf(vcf_filtered, vcf_merged)
-    os.rename(vcf_merged, vcf_out)
+    sv_files.add(key="merged",directory=out,extension=".merged.tmp.tsv")
+    merge_vcf(sv_files.filtered, sv_files.merged)
+    sv_files.merged.rename("vcf_parsed")
 
 
 def merge_vcf(vcf_in, vcf_out, window=20):
     '''merges insertions within 20 bp of each other using bedtools + post-processing in TELR'''
     #as far as okg can tell, this merge loses quite a bit of information about all but the longest read being merged.
-    vcf_tmp = f"{vcf_in}.tmp"
-    with open(vcf_tmp, "w") as output:
+    merge_raw = vcf_in.extend("bedtools_merge_raw", ".tmp")
+    with merge_raw.open("w") as output:
         command = [
             "bedtools", "merge",
             "-o", "collapse",
             "-c", "2,3,4,5,6,7,8,9,10,11,12,13,14",
             "-d", str(window),
             "-delim",'";"',
-            "-i", vcf_in
+            "-i", vcf_in.path
         ]
         subprocess.call(command, stdout=output)
 
-    with open(vcf_tmp, "r") as input, open(vcf_out, "w") as output:
+    with merge_raw.open() as input, vcf_out.open("w") as output:
         for line in input:
             entry = line.replace("\n", "").split("\t")
             if ";" in entry[3]:
@@ -186,7 +127,7 @@ def merge_vcf(vcf_in, vcf_out, window=20):
                 out_line = "\t".join(entry)
             output.write(out_line + "\n")
 
-    os.remove(vcf_tmp)
+    merge_raw.remove()
 
 
 def string2int(string, integer=True, delimiter=";"):
@@ -280,7 +221,7 @@ def rm_vcf_redundancy(vcf_in, vcf_out):
     df2.to_csv(vcf_out, sep="\t", header=False, index=False)
 
 
-def filter_vcf(sv_files, te_library, sample_name, thread, loci_eval):
+def filter_vcf(sv_files, te_library, sample_name, thread):
     """
     Filter insertion sequences from Sniffles VCF by repeatmasking with TE consensus
     """
@@ -359,8 +300,8 @@ def filter_vcf(sv_files, te_library, sample_name, thread, loci_eval):
     # os.remove(ins_seqs)
 
     # report removed loci
-    with open(loci_eval, "a") as output:
-        for locus in create_loci_set(ins):
+    with sv_files.loci_eval.open("a") as output:
+        for locus in create_loci_set(sv_files.parsed):
             if locus not in ins_te_loci:
                 output.write("\t".join([locus, "VCF sequence not repeatmasked"]) + "\n")
 

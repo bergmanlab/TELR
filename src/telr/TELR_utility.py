@@ -3,6 +3,87 @@ from datetime import datetime, timedelta
 import subprocess
 from Bio import SeqIO
 
+class file_container:
+    def __init__(self, sample_name, directory_dict):
+        self.sample_name = sample_name
+        self.directories = directory_dict
+
+    def add(self, key, directory, extension, **kwargs):
+        file_name = self.sample_name
+        if "new_dir" in kwargs:
+            self.directories.update(kwargs.pop("new_dir"))
+        if("file_name" in kwargs): file_name = kwargs["file_name"]
+        self.__dict__[key] = file(
+            self, directory,
+            name=f"{file_name}{extension}",
+            **kwargs
+        )
+    
+    def add_dir(self, directory_dict):
+        self.directories.update(directory_dict)
+    
+    def extend(self, file, key, extension, **kwargs):
+        filename = file.name
+        if "file_name" in kwargs: filename = kwargs["file_name"]
+        directory = file.directory
+        if "new_dir" in kwargs:
+            directory = kwargs.pop("new_dir")
+            if type(directory) is dict:
+                self.directories.update(directory)
+                directory = directory[next(iter(directory))]
+        self.add(key, directory, extension, file_name = filename, **kwargs)
+        return self.__dict__[key]
+
+    def input_file(self, key, path, **kwargs):
+        filename = os.path.basename(path)
+        directory = path[:path.rindex("/")]
+        if "input" in self.directories:
+            if self.directories["input"] == directory:
+                directory = "input"
+            else:
+                self.directories[f"input_{key}"] = directory
+                directory = f"input_{key}"
+        else: 
+            self.directories["input"] = directory
+            directory = "input"
+        self.add(key, directory, "", file_name = filename, **kwargs)
+    
+    def mkdir(self, directory):
+        if type(directory) is dict:
+            self.directories.update(directory)
+            directory = directory[next(iter(directory))]
+        mkdir(self.directories[directory])
+        
+
+class file:
+    def __init__(self, container, directory, name, **kwargs):
+        self.container = container
+        self.directory = directory
+        self.name = name
+        self.path = os.path.join(self.container.directories[directory], self.name)
+        self.file_format = self.name[self.name.rindex(".")+1:]
+        self.__dict__.update(kwargs)
+    
+    def add(self, **kwargs):
+        self.__dict__.update(kwargs)
+    
+    def extend(self, key, extension, **kwargs):
+        return self.container.extend(self, key, extension, **kwargs)
+    
+    def exists(self):
+        return os.path.isfile(self.path)
+    
+    def open(self, options="r"):
+        return open(self.path, options)
+    
+    def remove(self):
+        os.remove(self.path)
+    
+    def rename(self, new_file):
+        if type(new_file) is str:
+            new_file = self.container.__dict__[new_file]
+        os.rename(self.path, new_file.path)
+        self.file_format = f"empty, renamed to {new_file.name}"
 
 def rm_file(file):
     if os.path.exists(file):
@@ -44,7 +125,7 @@ def format_time(time):
 def create_loci_set(vcf_parsed):
     #create set off all loci in vcf_parsed file as chr_start_end
     all_loci = set()
-    with open(vcf_parsed, "r") as input:
+    with vcf_parsed.open() as input:
         for line in input:
             entry = line.replace("\n", "").split("\t")
             all_loci.add("_".join(entry[0:3]))

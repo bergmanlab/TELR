@@ -11,7 +11,7 @@ from telr.TELR_sv import detect_sv, vcf_parse_filter
 from telr.TELR_assembly import get_local_contigs
 from telr.TELR_te import annotate_contig, find_te, get_af, repeatmask, gff3tobed
 from telr.TELR_output import generate_output
-from telr.TELR_utility import format_time, mkdir, export_env
+from telr.TELR_utility import format_time, export_env, file_container
 
 """
 Author: Shunhua Han <hanshunhua0829@gmail.com>
@@ -34,51 +34,50 @@ def main():
     logging.info("CMD: " + " ".join(sys.argv))
     start_time = time.time()
 
-    # create directory for intermediate files
-    tmp_dir = os.path.join(args.out, "intermediate_files")
-    mkdir(tmp_dir)
-
     # Parse input
+    tmp_dir = os.path.join(args.out, "intermediate_files")
     sample_name = os.path.splitext(os.path.basename(args.reads))[0]
     reads, reference, library, fasta, skip_alignment = parse_input(
         args.reads, args.reference, args.library, sample_name, tmp_dir
     )
 
+    # Create file container
+    files = file_container(sample_name,{"out":args.out})
+    files.input_file("reads",reads)
+    files.mkdir({"tmp":tmp_dir})
+
     # # Alignment
-    bam = os.path.join(tmp_dir, f"{sample_name}_sort.bam")
+    files.add("bam", "tmp", "_sort.bam")
     if not skip_alignment:
         alignment(
-            bam,
+            files,
             fasta,
             reference,
-            tmp_dir,
+            "tmp",
             sample_name,
             args.thread,
             args.aligner,
             args.presets,
         )
     else:
-        sort_index_bam(reads, bam, args.thread)
+        sort_index_bam(files.reads.path, files.bam.path, args.thread)
 
     # Detect and parse SV
-    sv_file = detect_sv(tmp_dir, bam, reference, tmp_dir, sample_name, args.thread)
+    files = detect_sv(files, reference, tmp_dir, sample_name, args.thread)
 
     # initialize loci eveluation file
-    sv_file.add("loci_eval","out",".loci_eval.tsv",new_dir={"out":args.out})
-    if sv_file.loci_eval.exists():
-        os.remove(sv_file.loci_eval.path)
+    files.add("loci_eval","out",".loci_eval.tsv",new_dir={"out":args.out})
+    if files.loci_eval.exists():
+        os.remove(files.loci_eval.path)
 
     # Parse SV and filter for TE candidate locus
-    sv_file.add(key="vcf_parsed",directory="tmp",format="vcf",extension=".vcf_filtered.tsv")
-    vcf_parsed = os.path.join(tmp_dir, f"{sample_name}.vcf_filtered.tsv")
+    files.add(key="vcf_parsed",directory="tmp",format="vcf",extension=".vcf_filtered.tsv")
     vcf_parse_filter(
-        sv_file,
-        bam,
+        files,
         library,
-        tmp_dir,
+        "tmp",
         sample_name,
-        args.thread,
-        loci_eval,
+        args.thread
     )
 
     # Local assembly
