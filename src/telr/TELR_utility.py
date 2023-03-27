@@ -4,9 +4,8 @@ import subprocess
 from Bio import SeqIO
 
 class file_container:
-    def __init__(self, sample_name, directory_dict):
+    def __init__(self, sample_name):
         self.sample_name = sample_name
-        self.directories = directory_dict
 
     def add(self, key, directory, extension, **kwargs):
         file_name = self.sample_name
@@ -19,8 +18,8 @@ class file_container:
             **kwargs
         )
     
-    def add_dir(self, directory_dict):
-        self.directories.update(directory_dict)
+    def dir(self, key, path):
+        self.__dict__[key] = directory(self, path)
     
     def extend(self, file, key, extension, **kwargs):
         filename = file.name
@@ -28,17 +27,14 @@ class file_container:
         directory = file.directory
         if "new_dir" in kwargs:
             directory = kwargs.pop("new_dir")
-            if type(directory) is dict:
-                self.directories.update(directory)
-                directory = directory[next(iter(directory))]
         self.add(key, directory, extension, file_name = filename, **kwargs)
         return self.__dict__[key]
 
     def input_file(self, key, path, **kwargs):
         filename = os.path.basename(path)
         directory = path[:path.rindex("/")]
-        if "input" in self.directories:
-            if self.directories["input"] == directory:
+        if "input" in self.__dict__:
+            if self.input == directory:
                 directory = "input"
             else:
                 self.directories[f"input_{key}"] = directory
@@ -53,14 +49,24 @@ class file_container:
             self.directories.update(directory)
             directory = directory[next(iter(directory))]
         mkdir(self.directories[directory])
-        
+
+class directory:
+    def __init__(self, container, path):
+        self.container = container
+        self.path = path
+    
+    def make(self):
+        mkdir(self.path)
+    
+    def dir(self, key, name):
+        self.container.__dict__[key] = os.path.join(self.path, name)
 
 class file:
     def __init__(self, container, directory, name, **kwargs):
         self.container = container
         self.directory = directory
         self.name = name
-        self.path = os.path.join(self.container.directories[directory], self.name)
+        self.path = os.path.join(self.container.__dict__[directory].path, self.name)
         self.file_format = self.name[self.name.rindex(".")+1:]
         self.__dict__.update(kwargs)
     
@@ -77,7 +83,8 @@ class file:
         return open(self.path, options)
     
     def remove(self):
-        os.remove(self.path)
+        if self.exists():
+            os.remove(self.path)
     
     def rename(self, new_file):
         if type(new_file) is str:

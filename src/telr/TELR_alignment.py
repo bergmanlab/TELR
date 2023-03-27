@@ -6,7 +6,7 @@ import time
 from telr.TELR_utility import format_time
 
 
-def alignment(files, read, reference, out, sample_name, thread, method, presets):
+def alignment(files, out, thread, method, presets):
     """
     This function takes raw reads and performs read alignment using ngmlr or minimap2.
     """
@@ -24,12 +24,12 @@ def alignment(files, read, reference, out, sample_name, thread, method, presets)
                 "file_extension":".tmp.sam",
                 "run_array":[
                     "ngmlr",
-                    "-r", reference,
-                    "-q", read,
+                    "-r", files.reference.path,
+                    "-q", files.reads.path,
                     "-x", presets,
                     "-t", str(thread),
-                    "--rg-id", sample_name,
-                    "--rg-sm", sample_name,
+                    "--rg-id", files.sample_name,
+                    "--rg-sm", files.sample_name,
                     "--rg-lb", label_presets[presets]["ngmlr"],
                     "--no-progress"
                     ]
@@ -45,8 +45,8 @@ def alignment(files, read, reference, out, sample_name, thread, method, presets)
                     "-L",
                     "-ax",
                     label_presets[presets]["minimap2"],
-                    reference,
-                    read,
+                    files.reference.path,
+                    files.reads.path,
                     ]
                 }
             }

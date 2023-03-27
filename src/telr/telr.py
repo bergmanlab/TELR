@@ -32,29 +32,24 @@ def main():
         datefmt=datestr,
     )
     logging.info("CMD: " + " ".join(sys.argv))
-    start_time = time.time()
-
-    # Parse input
-    tmp_dir = os.path.join(args.out, "intermediate_files")
-    sample_name = os.path.splitext(os.path.basename(args.reads))[0]
-    reads, reference, library, fasta, skip_alignment = parse_input(
-        args.reads, args.reference, args.library, sample_name, tmp_dir
-    )
+    start_time = time.perf_counter()
 
     # Create file container
-    files = file_container(sample_name,{"out":args.out})
-    files.input_file("reads",reads)
-    files.mkdir({"tmp":tmp_dir})
+    files = file_container(
+        sample_name = os.path.splitext(os.path.basename(args.reads))[0]
+        )
+    files.dir("out",args.out)
+    files.out.dir("tmp","intermediate_files")
+    
+    # Parse Input
+    skip_alignment = parse_input(args.reads, args.reference, args.library, files)
 
     # # Alignment
     files.add("bam", "tmp", "_sort.bam")
     if not skip_alignment:
         alignment(
             files,
-            fasta,
-            reference,
             "tmp",
-            sample_name,
             args.thread,
             args.aligner,
             args.presets,
@@ -63,34 +58,27 @@ def main():
         sort_index_bam(files.reads.path, files.bam.path, args.thread)
 
     # Detect and parse SV
-    files = detect_sv(files, reference, tmp_dir, sample_name, args.thread)
+    detect_sv(files, "tmp", args.thread)
 
     # initialize loci eveluation file
-    files.add("loci_eval","out",".loci_eval.tsv",new_dir={"out":args.out})
-    if files.loci_eval.exists():
-        os.remove(files.loci_eval.path)
+    files.add("loci_eval","out",".loci_eval.tsv")
+    files.loci_eval.remove()
 
     # Parse SV and filter for TE candidate locus
     files.add(key="vcf_parsed",directory="tmp",format="vcf",extension=".vcf_filtered.tsv")
     vcf_parse_filter(
         files,
-        library,
         "tmp",
-        sample_name,
         args.thread
     )
 
     # Local assembly
-    contig_dir = os.path.join(tmp_dir, "contig_assembly")
-    merged_contigs, assembly_passed_loci = get_local_contigs(
+    files.tmp.dir("contig","contig_assembly")
+    assembly_passed_loci = get_local_contigs(
+        files,
         assembler=args.assembler,
         polisher=args.polisher,
-        contig_dir=contig_dir,
-        vcf_parsed=vcf_parsed,
-        out=tmp_dir,
-        sample_name=sample_name,
-        bam=bam,
-        raw_reads=fasta,
+        out="tmp",
         thread=args.thread,
         presets=args.presets,
         polish_iterations=args.polish_iterations,
@@ -182,7 +170,7 @@ def main():
     env_file = os.path.join(args.out, "conda_env.yml")
     export_env(env_file)
 
-    proc_time = time.time() - start_time
+    proc_time = time.perf_counter() - start_time
     print("TELR finished!")
     logging.info("TELR finished in " + format_time(proc_time))
 

@@ -261,53 +261,53 @@ def get_args():
     return args
 
 
-def parse_input(input_reads, input_reference, input_library, sample_name, out_dir):
+def parse_input(input_reads, input_reference, input_library, files):
     """
     Parse input files. If bam file is provided, convert to fasta format.
     """
     logging.info("Parsing input files...")
     # create symbolic link for the input file
-    input_reads_copy = os.path.join(out_dir, os.path.basename(input_reads))
+    files.add("reads","out","",file_name = os.path.basename(input_reads))
     if not os.path.isabs(input_reads):
         input_reads = os.path.abspath(input_reads)
-    if os.path.islink(input_reads_copy):
-        os.remove(input_reads_copy)
+    if os.path.islink(files.reads.path):
+        os.remove(files.reads.path)
     try:
-        os.symlink(input_reads, input_reads_copy)
+        os.symlink(input_reads, files.reads.path)
     except Exception as e:
         print(e)
-        logging.exception("Create symbolic link for " + input_reads + " failed")
+        logging.exception(f"Create symbolic link for {input_reads} failed")
         sys.exit(1)
 
-    input_reference_copy = os.path.join(out_dir, os.path.basename(input_reference))
+    files.input_file("reference",os.path.join(files.out.path, os.path.basename(input_reference)))
     if not os.path.isabs(input_reference):
         input_reference = os.path.abspath(input_reference)
-    if os.path.islink(input_reference_copy):
-        os.remove(input_reference_copy)
+    if os.path.islink(files.reference.path):
+        os.remove(files.reference.path)
     try:
-        os.symlink(input_reference, input_reference_copy)
+        os.symlink(input_reference, files.reference.path)
     except Exception:
-        logging.exception("Create symbolic link for " + input_reference + " failed")
+        logging.exception(f"Create symbolic link for {input_reference} failed")
         sys.exit(1)
 
-    input_library_copy = os.path.join(out_dir, os.path.basename(input_library))
+    files.input_file("library",os.path.join(files.out.path, os.path.basename(input_library)))
     if not os.path.isabs(input_library):
         input_library = os.path.abspath(input_library)
-    if os.path.islink(input_library_copy):
-        os.remove(input_library_copy)
+    if os.path.islink(files.library.path):
+        os.remove(files.library.path)
     try:
-        os.symlink(input_library, input_library_copy)
+        os.symlink(input_library, files.library.path)
     except Exception:
-        logging.exception("Create symbolic link for " + input_library + " failed")
+        logging.exception(f"Create symbolic link for {input_library} failed")
         sys.exit(1)
 
-    reads_filename, reads_extension = os.path.splitext(input_reads_copy)
+    reads_filename, reads_extension = os.path.splitext(files.reads.path)
     if reads_extension == ".bam":
         logging.info("BAM file is provided, skip alignment step")
         skip_alignment = True
-        fasta = os.path.join(out_dir, sample_name + ".telr.fasta")
+        files.add("fasta","out",".telr.fasta")
         logging.info("Converting input BAM file to fasta...")
-        bam2fasta(input_reads_copy, fasta)
+        bam2fasta(files.reads, files.fasta)
     elif (
         reads_extension == ".fasta"
         or reads_extension == ".fastq"
@@ -316,31 +316,25 @@ def parse_input(input_reads, input_reference, input_library, sample_name, out_di
     ):
         logging.info("Raw reads are provided")
         skip_alignment = False
-        fasta = input_reads_copy
+        files.input_file("fasta",files.reads.path)
     else:
         print("Input reads/alignments format not recognized, exiting...")
         logging.error("Input format not recognized")
         sys.exit(1)
 
-    return (
-        input_reads_copy,
-        input_reference_copy,
-        input_library_copy,
-        fasta,
-        skip_alignment,
-    )
+    return (skip_alignment)
 
 
 def bam2fasta(bam, fasta):
     """
     Convert bam to fasta.
     """
-    fasta_tmp = fasta + ".tmp"
+    fasta_tmp = fasta.extend("fasta_tmp",".tmp")
     try:
-        with open(fasta_tmp, "w") as output:
+        with fasta_tmp.open("w") as output:
             #samtools version 1.9 | current 1.16.1
             #q: where is this import coming from? Couldn't find specific version on ananconda.org
-            subprocess.call(["samtools", "fasta", bam], stdout=output)
+            subprocess.call(["samtools", "fasta", bam.path], stdout=output)
     except Exception as e:
         print(e)
         print("BAM to Fasta conversion failed, check input bam file, exiting...")
@@ -352,7 +346,7 @@ def bam2fasta(bam, fasta):
         print(e)
         logging.exception("Remove redundancy in fasta file failed")
         sys.exit(1)
-    os.remove(fasta_tmp)
+    fasta_tmp.remove()
 
 
 def rm_fasta_redundancy(fasta, new_fasta):
@@ -361,8 +355,8 @@ def rm_fasta_redundancy(fasta, new_fasta):
     If there are multiple IDs, keep the first one.
     """
     records = set()
-    with open(new_fasta, "w") as output_handle:
-        for record in SeqIO.parse(fasta, "fasta"):
+    with new_fasta.open("w") as output_handle:
+        for record in SeqIO.parse(fasta.path, "fasta"):
             if record.id not in records:
                 records.add(record.id)
                 SeqIO.write(record, output_handle, "fasta")

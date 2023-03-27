@@ -5,13 +5,11 @@ import pandas as pd
 import logging
 import time
 from Bio import SeqIO
-from telr.TELR_utility import mkdir, format_time, create_loci_set
+from telr.TELR_utility import format_time, create_loci_set
 
 def detect_sv(
     sv_files,
-    reference,
     out,
-    sample_name,
     thread,
     sv_detector = "Sniffles", #used to be svim = False, need to make sure this doesn't break anything
 ):
@@ -28,7 +26,7 @@ def detect_sv(
     start_time = time.perf_counter()
     process_args = {
         #SVIM: Not implemented
-        "SVIM":["svim","alignment","--insertion_sequences","--read_names","--sample",sample_name,"--interspersed_duplications_as_insertions",out,sv_files.bam.path,reference],
+        "SVIM":["svim","alignment","--insertion_sequences","--read_names","--sample",sv_files.sample_name,"--interspersed_duplications_as_insertions",sv_files.__dict__[out].path,sv_files.bam.path,sv_files.reference.path],
         #Sniffles: Version 1.0.12 | current 2.0.7
         "Sniffles":["sniffles", "-n", "-1", "--threads", str(thread), "-m", sv_files.bam.path, "-v", sv_files.sv_raw.path]
     }[sv_detector]
@@ -39,7 +37,7 @@ def detect_sv(
         logging.exception(f"Detecting SVs using {sv_detector} failed, exiting...")
         sys.exit(1)
     if(sv_detector == "SVIM"):
-        vcf_tmp = os.path.join(out, "variants.vcf")
+        vcf_tmp = os.path.join(sv_files.__dict__[out].path, "variants.vcf")
         os.rename(vcf_tmp, sv_files.sv_raw)
     proc_time = time.perf_counter() - start_time
     if os.path.isfile(sv_files.sv_raw) is False:
@@ -47,11 +45,10 @@ def detect_sv(
         sys.exit(1)
     else:
         logging.info("SV detection finished in " + format_time(proc_time))
-        return sv_files
 
 
 def vcf_parse_filter(
-    sv_files, te_library, out, sample_name, thread
+    sv_files, out, thread
 ):
     """Parse and filter for insertions from VCF file"""
     logging.info("Parse structural variant VCF...")
@@ -60,7 +57,7 @@ def vcf_parse_filter(
     parse_vcf(sv_files.sv_raw, sv_files.parsed)
     
     sv_files.add(key="filtered",directory=out,extension=".filtered.tmp.tsv")
-    filter_vcf(sv_files, te_library, sample_name, thread)
+    filter_vcf(sv_files, thread)
 
     # merge entries
     sv_files.add(key="merged",directory=out,extension=".merged.tmp.tsv")
@@ -165,8 +162,8 @@ def parse_vcf(vcf_in, vcf_out):
 
     # TODO check whether vcf file contains insertions, quit if 0
     rm_vcf_redundancy(bcftools_swapped_output.path, vcf_out.path)  # remove redundancy in parsed vcf
-    os.remove(bcftools_swapped_output.path)
-    os.remove(bcftools_raw_output.path)
+    bcftools_swapped_output.remove()
+    bcftools_raw_output.remove()
 
 
 def swap_coordinate(vcf_in, vcf_out):
@@ -221,12 +218,12 @@ def rm_vcf_redundancy(vcf_in, vcf_out):
     df2.to_csv(vcf_out, sep="\t", header=False, index=False)
 
 
-def filter_vcf(sv_files, te_library, sample_name, thread):
+def filter_vcf(sv_files, thread):
     """
     Filter insertion sequences from Sniffles VCF by repeatmasking with TE consensus
     """
     # construct fasta from parsed vcf file
-    sv_files.add("ins_seqs",directory="tmp",extension=".vcf_ins.fasta", file_name = sample_name.replace("+","plus"), file_format = "fasta")
+    sv_files.add("ins_seqs",directory="tmp",extension=".vcf_ins.fasta", file_name = sv_files.sample_name.replace("+","plus"))
     write_ins_seqs(sv_files.parsed.path, sv_files.ins_seqs.path)
 
     # get the length of the insertion sequence TODO: this can be generalized
@@ -238,14 +235,14 @@ def filter_vcf(sv_files, te_library, sample_name, thread):
                 contig_len[record.id] = len(record.seq)
 
     # run RM on the inserted seqeunce
-    sv_files.add_dir({"rpmask":os.path.join(sv_files.directories["tmp"],"vcf_ins_repeatmask")})
-    mkdir(sv_files.directories["rpmask"])
+    sv_files.tmp.dir("rpmask","vcf_ins_repeatmask")
+    sv_files.rpmask.make()
     try:
         subprocess.call(
             [
                 "RepeatMasker",
                 "-dir",
-                sv_files.directories["rpmask"],
+                sv_files.rpmask.path,
                 "-gff",
                 "-s",
                 "-nolow",
@@ -254,7 +251,7 @@ def filter_vcf(sv_files, te_library, sample_name, thread):
                 "-e",
                 "ncbi",
                 "-lib",
-                te_library,
+                sv_files.library.path,
                 "-pa",
                 str(thread),
                 sv_files.ins_seqs.path
