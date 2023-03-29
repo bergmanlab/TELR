@@ -11,7 +11,7 @@ class file_container:
         file_name = self.sample_name
         if "new_dir" in kwargs:
             self.directories.update(kwargs.pop("new_dir"))
-        if("file_name" in kwargs): file_name = kwargs["file_name"]
+        if("file_name" in kwargs): file_name = kwargs.pop("file_name")
         self.__dict__[key] = file(
             self, directory,
             name=f"{file_name}{extension}",
@@ -49,6 +49,15 @@ class file_container:
             self.directories.update(directory)
             directory = directory[next(iter(directory))]
         mkdir(self.directories[directory])
+    
+    def set(self, name):
+        self.__dict__[name] = {}
+    
+    def set_file(self, set_id, directory, name, extension, **kwargs):
+        new_file = file(self, directory, f"{name}{extension}", **kwargs)
+        self.__dict__[set_id][name] = new_file
+        self.__dict__[f"{set_id}_{name}"] = new_file
+        return new_file
 
 class directory:
     def __init__(self, container, path):
@@ -176,3 +185,7 @@ def export_env(file):
             ):
                 output.write(line)
     os.remove(file_tmp)
+
+def contig_name(line):
+    line = line.replace("\n", "").split("\t")
+    return "_".join([line[0], line[1], line[2]])

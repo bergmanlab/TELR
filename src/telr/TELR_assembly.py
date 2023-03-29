@@ -14,7 +14,7 @@ def get_local_contigs(
     files,
     assembler,
     polisher,
-    outg,
+    out,
     thread,
     presets,
     polish_iterations,
@@ -22,10 +22,10 @@ def get_local_contigs(
     """Perform local assembly using reads from parsed VCF file in parallel"""
 
     # Prepare reads used for local assembly and polishing
-    files.__dict__[outg].dir("sv_reads_dir", "sv_reads")
+    files.__dict__[out].dir("sv_reads_dir", "sv_reads")
 
     try:
-        prep_assembly_inputs(files, outg)
+        prep_assembly_inputs(files, out)
     except Exception as e:
         print(e)
         print("Prepare local assembly input data failed, exiting...")
@@ -72,26 +72,26 @@ def get_local_contigs(
     proc_time = time.perf_counter() - start_time
 
     # merge all contigs
-    assembly_passed_loci = set()
-    files.add("merged_contigs",outg, ".contigs.fa")
+    files.set("assembly_passed_loci")
+    files.set("assembly_passed_loci_merged")
+    files.add("merged_contigs",out, ".contigs.fa")
     with files.merged_contigs.open("w") as merged_output_handle:
         for contig in contig_list:
             if check_exist(contig):
                 contig_name = os.path.basename(contig).replace(".cns.fa", "")
-                assembly_passed_loci.add(contig_name)
-                parsed_contig = os.path.join(files.contig.path, contig_name + ".cns.ctg1.fa")
-                with open(contig, "r") as input:
+                files.set_file("assembly_parsed_loci","sv_reads_dir",contig_name,".cns.fa")
+                parsed_contig = files.set_file("assembly_parsed_loci_merged","contig",contig_name,".cns.ctg1.fa")
+                with open(contig, "r") as input: #contig == output from assembly/polishing process
                     records = SeqIO.parse(input, "fasta")
                     for record in records:
                         if record.id == "ctg1" or record.id == "contig_1":
                             record.id = contig_name
-                            record.description = "len=" + str(len(record.seq))
+                            record.description = f"len={len(record.seq)}"
                             SeqIO.write(record, merged_output_handle, "fasta")
-                            with open(parsed_contig, "w") as parsed_output_handle:
+                            with parsed_contig.open("w") as parsed_output_handle:
                                 SeqIO.write(record, parsed_output_handle, "fasta")
 
-    logging.info("Local assembly finished in " + format_time(proc_time))
-    return assembly_passed_loci
+    logging.info(f"Local assembly finished in {format_time(proc_time)}")
 
 
 def run_assembly_polishing(args):
@@ -126,11 +126,7 @@ def run_assembly_polishing(args):
 
 def run_flye_polishing(asm_cns, reads, asm_dir, contig_name, thread, polish_iterations, presets):
     """Run Flye polishing"""
-    if presets == "pacbio":
-        presets_flye = "--pacbio-raw"
-    else:
-        presets_flye = "--nano-raw"
-
+    presets_flye = {"pacbio":"--pacbio-raw","ont":"--nano-raw"}[presets]
     
     tmp_out_dir = os.path.join(asm_dir, contig_name)
     mkdir(tmp_out_dir)
@@ -147,7 +143,7 @@ def run_flye_polishing(asm_cns, reads, asm_dir, contig_name, thread, polish_iter
                 "--thread",
                 str(thread),
                 "--iterations",
-                str(polish_iterations),
+                str(polish_iterations)
             ]
         )
     except Exception as e:
@@ -156,9 +152,7 @@ def run_flye_polishing(asm_cns, reads, asm_dir, contig_name, thread, polish_iter
         return None
 
     # rename contig file
-    polished_contig = os.path.join(
-        tmp_out_dir, "polished_" + str(polish_iterations) + ".fasta"
-    )
+    polished_contig = os.path.join(tmp_out_dir, f"polished_{polish_iterations}.fasta")
     if check_exist(polished_contig):
         os.rename(polished_contig, asm_cns)
         shutil.rmtree(tmp_out_dir)

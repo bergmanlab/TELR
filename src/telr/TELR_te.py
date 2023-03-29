@@ -13,57 +13,46 @@ from telr.TELR_utility import (
     format_time,
     get_cmd_output,
     get_rev_comp_sequence,
+    contig_name
 )
 from telr.TELR_liftover import liftover
 from telr.TELR_assembly import prep_assembly_inputs
 
 
 def annotate_contig(
-    contigs,
-    assembly_passed_loci,
-    te_library,
-    vcf_parsed,
-    out,
-    sample_name,
+    files,
+    outg,
     thread,
     presets,
-    minimap2_family,
-    loci_eval,
+    minimap2_family
 ):
     logging.info("Annotate contigs...")
-    if presets == "pacbio":
-        minimap2_presets = "map-pb"
-    else:
-        minimap2_presets = "map-ont"
+    minimap2_presets = {"pacbio":"map-pb","ont":"map-ont"}[presets]
 
     # map sequence to contigs
-    vcf_seq2contig_out = os.path.join(out, "seq2contig.paf")
-    # if os.path.isfile(vcf_seq2contig_out):
-    #     os.remove(vcf_seq2contig_out)
+    files.add("vcf_seq2contig_out", outg, ".paf", file_name = "seq2contig")
 
     # TODO: consider that some contigs might not exist
     seq2contig_passed_loci = set()
-    vcf_seq2contig_dir = os.path.join(out, "vcf_seq2contig")
-    mkdir(vcf_seq2contig_dir)
-    with open(vcf_parsed, "r") as input, open(vcf_seq2contig_out, "w") as output:
+    files.__dict__[outg].dir("vcf_seq2contig_dir","vcf_seq2contig")
+    files.vcf_seq2contig_dir.make()
+    files.set("annotate_contig_queries")
+    files.set("annotate_contig_subjects")
+    with files.vcf_parsed.open() as input, files.vcf_seq2contig_out.open("w") as output:
         for line in input:
-            entry = line.replace("\n", "").split("\t")
-            contig_name = "_".join([entry[0], entry[1], entry[2]])
-            if contig_name in assembly_passed_loci:
-                vcf_seq = entry[7]
-                query = os.path.join(vcf_seq2contig_dir, contig_name + ".seq.fa")
-                create_fa(contig_name, vcf_seq, query)
-                subject = os.path.join(
-                    vcf_seq2contig_dir, contig_name + ".contig.fa"
-                )  ## TODO: this can be replaced
-                with open(subject, "w") as subject_output_handle:
+            contig_name = contig_name(line)
+            if contig_name in files.assembly_passed_loci:
+                query = files.set_file("annotate_contig_queries","vcf_seq2contig_dir",contig_name,".seq.fa")
+                create_fa(contig_name, seq = entry[7], out = query)
+                subject = files.set_file("annotate_contig_subjects","vcf_seq2contig_dir",contig_name,".contig.fa")  ## TODO: this can be replaced
+                with subject.open("w") as subject_output_handle:
                     try:
                         subprocess.call(
-                            ["samtools", "faidx", contigs, contig_name],
+                            ["samtools", "faidx", files.merged_contigs.path, contig_name],
                             stdout=subject_output_handle,
                         )
                     except subprocess.CalledProcessError:
-                        print(contig_name + ":contig assembly doesn't exist")
+                        print(f"{contig_name}:contig assembly doesn't exist")
                         continue
                 cmd = [
                     "minimap2",
@@ -928,6 +917,6 @@ def find_te(
 
 
 def create_fa(header, seq, out):
-    with open(out, "w") as output:
+    with out.open("w") as output:
         output.write(">" + header + "\n")
         output.write(seq)
