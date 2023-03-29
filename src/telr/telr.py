@@ -74,7 +74,7 @@ def main():
 
     # Local assembly
     files.tmp.dir("contig","contig_assembly")
-    assembly_passed_loci = get_local_contigs(
+    get_local_contigs(
         files,
         assembler=args.assembler,
         polisher=args.polisher,
@@ -86,16 +86,11 @@ def main():
 
     # Annotate contig for TE region
     contig_te_annotation, te_fa = annotate_contig(
-        merged_contigs,
-        assembly_passed_loci,
-        library,
-        vcf_parsed,
-        tmp_dir,
-        sample_name,
+        files,
+        "tmp",
         args.thread,
         args.presets,
-        args.minimap2_family,
-        loci_eval,
+        args.minimap2_family
     )
 
     # calculate AF
