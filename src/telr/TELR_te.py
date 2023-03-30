@@ -13,7 +13,7 @@ from telr.TELR_utility import (
     format_time,
     get_cmd_output,
     get_rev_comp_sequence,
-    contig_name
+    name_contig
 )
 from telr.TELR_liftover import liftover
 from telr.TELR_assembly import prep_assembly_inputs
@@ -40,7 +40,7 @@ def annotate_contig(
     files.set("annotate_contig_subjects")
     with files.vcf_parsed.open() as input, files.vcf_seq2contig_out.open("w") as output:
         for line in input:
-            contig_name = contig_name(line)
+            contig_name = name_contig(line)
             if contig_name in files.assembly_passed_loci:
                 query = files.set_file("annotate_contig_queries","vcf_seq2contig_dir",contig_name,".seq.fa")
                 create_fa(contig_name, seq = entry[7], out = query)
@@ -49,7 +49,7 @@ def annotate_contig(
                     try:
                         subprocess.call(
                             ["samtools", "faidx", files.merged_contigs.path, contig_name],
-                            stdout=subject_output_handle,
+                            stdout=subject_output_handle
                         )
                     except subprocess.CalledProcessError:
                         print(f"{contig_name}:contig assembly doesn't exist")
@@ -61,27 +61,28 @@ def annotate_contig(
                     "--secondary=no",
                     "-v",
                     "0",
-                    subject,
-                    query,
+                    subject.path,
+                    query.path
                 ]
                 vcf_seq2contig_output = get_cmd_output(cmd)
                 if vcf_seq2contig_output != "":
                     output.write(vcf_seq2contig_output)
                     seq2contig_passed_loci.add(contig_name)
                     # with open(vcf_seq2contig_out, "a") as output:
-                os.remove(query)
-                os.remove(subject)
-    os.rmdir(vcf_seq2contig_dir)
+                query.remove()
+                subject.remove()
+    files.vcf_seq2contig_dir.remove()
 
     # covert to bed format
-    seq2contig_bed = os.path.join(out, "seq2contig.bed")
-    with open(vcf_seq2contig_out, "r") as input, open(seq2contig_bed, "w") as output:
+    files.add("seq2contig_bed",outg,".bed",file_name="seq2contig")
+    with files.vcf_seq2contig_out.open() as input, files.seq2contig_bed.read("w") as output:
         for line in input:
             entry = line.replace("\n", "").split("\t")
             bed_line = "\t".join(
                 [entry[0], entry[7], entry[8], entry[5], entry[11], entry[4]]
             )
             output.write(bed_line + "\n")
+    # files.vcf_seq2contig_out.awk("seq2contig_bed",[0,7,8,5,11,4]) # as an alternative to the code in this section - okg
 
     # # report ins-contig failed loci
     # with open(loci_eval, "a") as output:
@@ -475,7 +476,7 @@ def parse_rm_out(rm_gff, gff3):
                         entry[5],
                         entry[6],
                         entry[7],
-                        "Target=" + family,
+                        f"Target={family}"
                     ]
                 )
                 output.write(out_line + "\n")

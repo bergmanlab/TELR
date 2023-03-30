@@ -69,6 +69,13 @@ class directory:
     
     def dir(self, key, name):
         self.container.__dict__[key] = os.path.join(self.path, name)
+    
+    def exists(self):
+        return os.path.isdir(self.path)
+
+    def remove(self):
+        if self.exists():
+            os.rmdir(self.path)
 
 class file:
     def __init__(self, container, directory, name, **kwargs):
@@ -94,12 +101,27 @@ class file:
     def remove(self):
         if self.exists():
             os.remove(self.path)
+
+    def file_path(self, new_file):
+        if new_file in self.container.__dict__:
+            new_file = self.container.__dict__[new_file]
+        if isinstance(new_file, file):
+            new_file = new_file.path
+        return new_file
     
     def rename(self, new_file):
-        if type(new_file) is str:
-            new_file = self.container.__dict__[new_file]
-        os.rename(self.path, new_file.path)
+        new_file = self.file_path(new_file)
+        os.rename(self.path, new_file)
         self.file_format = f"empty, renamed to {new_file.name}"
+    
+    def awk(self, new_file, column_array, ofs = "\t", index_correction = 1):
+        '''Not called (at the moment) but meant as a replacement for lines 77-84 of TELR_te.py'''
+        columns = "$" + ", $".join([str(column+index_correction) for column in column_array])
+        new_file = self.file_path(new_file)
+        command = f"awk -v OFS='{ofs}' '{{print {columns}}}' {self.path} > {new_file}"
+        subprocess.run(command, shell=True)
+
+
 
 def rm_file(file):
     if os.path.exists(file):
@@ -186,6 +208,6 @@ def export_env(file):
                 output.write(line)
     os.remove(file_tmp)
 
-def contig_name(line):
+def name_contig(line):
     line = line.replace("\n", "").split("\t")
     return "_".join([line[0], line[1], line[2]])
