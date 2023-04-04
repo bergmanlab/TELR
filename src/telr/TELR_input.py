@@ -265,6 +265,7 @@ def parse_input(input_reads, input_reference, input_library, files):
     """
     Parse input files. If bam file is provided, convert to fasta format.
     """
+    files.frame = "parse_input()"
     logging.info("Parsing input files...")
     # create symbolic link for the input file
     files.add("reads","out","",file_name = os.path.basename(input_reads))

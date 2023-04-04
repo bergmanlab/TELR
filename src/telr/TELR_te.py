@@ -26,6 +26,7 @@ def annotate_contig(
     presets,
     minimap2_family
 ):
+    files.frame = "annotate_contig()"
     logging.info("Annotate contigs...")
     minimap2_presets = {"pacbio":"map-pb","ont":"map-ont"}[presets]
 
@@ -97,22 +98,23 @@ def annotate_contig(
 
     # map TE library to contigs using minimap2
     # TE-contig alignment
-    te2contig_out = os.path.join(out, sample_name + ".te2contig.paf")
-    if os.path.isfile(te2contig_out):
-        os.remove(te2contig_out)
+    files.add("te2contig_out",outg,".te2contig.paf")
+    if files.te2contig_out.exists():
+        os.remove(files.te2contig_out.path)
+    files.set("seq2contig_passed_loci_contigs")
     for locus in seq2contig_passed_loci:
-        contig_fa = os.path.join(out, locus + ".fa")
-        with open(contig_fa, "w") as output:
-            subprocess.call(["samtools", "faidx", contigs, locus], stdout=output)
+        contig_fa = files.set_file("seq2contig_passed_loci_contigs", outg, locus, ".fa")
+        with contig_fa.open("w") as output:
+            subprocess.call(["samtools", "faidx", files.merged_contigs.path, locus], stdout=output)
         # map TE library to contig using minimap2
-        with open(te2contig_out, "a") as output:
+        with files.te2contig_out.open("a") as output:
             subprocess.call(
                 [
                     "minimap2",
                     "-cx",
                     minimap2_presets,
                     contig_fa,
-                    te_library,
+                    files.library.path,
                     "-v",
                     "0",
                     "-t",

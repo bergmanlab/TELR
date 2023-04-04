@@ -20,12 +20,14 @@ def get_local_contigs(
     polish_iterations,
 ):
     """Perform local assembly using reads from parsed VCF file in parallel"""
+    files.frame = "get_local_contigs()"
 
     # Prepare reads used for local assembly and polishing
     files.__dict__[out].dir("sv_reads_dir", "sv_reads")
 
     try:
         prep_assembly_inputs(files, out)
+        files.frame = "get_local_contigs()"
     except Exception as e:
         print(e)
         print("Prepare local assembly input data failed, exiting...")
@@ -313,6 +315,7 @@ def prep_assembly_inputs(
     files, out, read_type="sv"
 ):
     """Prepare reads for local assembly"""
+    files.frame = "prep_assembly_inputs()"
     # logging.info("Prepare reads for local assembly")
 
     if read_type == "sv":  # TODO: figure out what this does

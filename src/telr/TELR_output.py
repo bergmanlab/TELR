@@ -267,15 +267,7 @@ def generate_output(
     te_fa_path = out + "/" + sample_name + ".telr.te.fasta"
     with open(te_fa_path, "w") as output:
         for item in final_report:
-            record.id = (
-                item["chrom"]
-                + "_"
-                + str(item["start"])
-                + "_"
-                + str(item["end"])
-                + "#"
-                + item["family"]
-            )
+            record.id = f'{item["chrom"]}_{item["start"]}_{item["end"]}#{item["family"]}'
             output.write(">" + record.id + "\n" + item["te_sequence"] + "\n")
 
     # write contig sequences in fasta

@@ -45,7 +45,7 @@ def main():
     skip_alignment = parse_input(args.reads, args.reference, args.library, files)
 
     # # Alignment
-    files.add("bam", "tmp", "_sort.bam")
+    files.add("bam", "tmp", "_sort.bam", frame="main()")
     if not skip_alignment:
         alignment(
             files,
@@ -61,6 +61,7 @@ def main():
     detect_sv(files, "tmp", args.thread)
 
     # initialize loci eveluation file
+    files.frame = "main()"
     files.add("loci_eval","out",".loci_eval.tsv")
     files.loci_eval.remove()
 

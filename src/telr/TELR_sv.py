@@ -21,6 +21,7 @@ def detect_sv(
     - As far as I can tell, SVIM is not implemented at all; it is not present in the conda environment; it is not possible to call it using telr commands.
 
     """
+    sv_files.frame = "detect_sv()"
     logging.info("Detecting SVs from BAM file...")
     sv_files.add(key="sv_raw", directory="tmp", extension=".vcf", file_format="vcf", note=f"raw output from {sv_detector}")
     start_time = time.perf_counter()
@@ -51,13 +52,16 @@ def vcf_parse_filter(
     sv_files, out, thread
 ):
     """Parse and filter for insertions from VCF file"""
+    sv_files.frame = "vcf_parse_filter()"
     logging.info("Parse structural variant VCF...")
+    sv_files.frame = "vcf_parse_filter()"
 
     sv_files.add(key="parsed",directory=out,extension=".parsed.tmp.tsv")
     parse_vcf(sv_files.sv_raw, sv_files.parsed)
     
     sv_files.add(key="filtered",directory=out,extension=".filtered.tmp.tsv")
     filter_vcf(sv_files, thread)
+    sv_files.frame = "vcf_parse_filter()"
 
     # merge entries
     sv_files.add(key="merged",directory=out,extension=".merged.tmp.tsv")
@@ -67,8 +71,7 @@ def vcf_parse_filter(
 
 def merge_vcf(vcf_in, vcf_out, window=20):
     '''merges insertions within 20 bp of each other using bedtools + post-processing in TELR'''
-    #as far as okg can tell, this merge loses quite a bit of information about all but the longest read being merged.
-    merge_raw = vcf_in.extend("bedtools_merge_raw", ".tmp")
+    merge_raw = vcf_in.extend("bedtools_merge_raw", ".tmp", frame="merge_vcf()")
     with merge_raw.open("w") as output:
         command = [
             "bedtools", "merge",
@@ -149,13 +152,13 @@ def parse_vcf(vcf_in, vcf_out):
     '''Parse vcf file using bcftools'''
     query_str = '"%CHROM\\t%POS\\t%END\\t%SVLEN\\t%RE\\t%AF\\t%ID\\t%ALT\\t%RNAMES\\t%FILTER\\t[ %GT]\\t[ %DR]\\t[ %DV]\n"'
     command = (f'bcftools query -i \'SVTYPE="INS" & ALT!="<INS>"\' -f {query_str} {vcf_in.path}')
-    bcftools_raw_output = vcf_in.extend("bcftools_raw", ".tmp", file_format = "nonstandard")
+    bcftools_raw_output = vcf_in.extend("bcftools_raw", ".tmp", file_format = "nonstandard", frame="parse_vcf()")
     #bcftools version 1.9 | current 1.16
-    with open(bcftools_raw_output.path, "w") as output:
+    with bcftools_raw_output.open("w") as output:
         subprocess.call(command, stdout=output, shell=True)
 
     # check start and end, swap if needed
-    bcftools_swapped_output = vcf_in.extend("bcftools_swap", ".swap", file_format = "nonstandard")
+    bcftools_swapped_output = vcf_in.extend("bcftools_swap", ".swap", file_format = "nonstandard", frame="parse_vcf()")
     swap_coordinate(bcftools_raw_output.path, bcftools_swapped_output.path)
 
     # sort bed file
@@ -222,6 +225,7 @@ def filter_vcf(sv_files, thread):
     """
     Filter insertion sequences from Sniffles VCF by repeatmasking with TE consensus
     """
+    sv_files.frame = "filter_vcf()"
     # construct fasta from parsed vcf file
     sv_files.add("ins_seqs",directory="tmp",extension=".vcf_ins.fasta", file_name = sv_files.sample_name.replace("+","plus"))
     write_ins_seqs(sv_files.parsed.path, sv_files.ins_seqs.path)

@@ -4,19 +4,28 @@ import subprocess
 from Bio import SeqIO
 
 class file_container:
-    def __init__(self, sample_name):
+    def __init__(self, sample_name, logging=False):
         self.sample_name = sample_name
+        self.quiet = True
+        if(logging):
+            self.quiet = False
+            self.file_log = ""
+            self.frame = "main()"
 
     def add(self, key, directory, extension, **kwargs):
         file_name = self.sample_name
         if "new_dir" in kwargs:
             self.directories.update(kwargs.pop("new_dir"))
         if("file_name" in kwargs): file_name = kwargs.pop("file_name")
+        self.prev_frame = self.frame
+        if("frame" in kwargs): self.frame = kwargs.pop("frame")
         self.__dict__[key] = file(
-            self, directory,
-            name=f"{file_name}{extension}",
+            self, key, directory,
+            f"{file_name}{extension}",
+            self.quiet,
             **kwargs
         )
+        self.frame = self.prev_frame
     
     def dir(self, key, path):
         self.__dict__[key] = directory(self, path)
@@ -58,6 +67,16 @@ class file_container:
         self.__dict__[set_id][name] = new_file
         self.__dict__[f"{set_id}_{name}"] = new_file
         return new_file
+    
+    def log(self, file, action):
+        if not isinstance(self.file_log, file):
+            self.file_log = file(self, "out", "file_log.tsv", quiet=True)
+            with self.file_log.open("a") as output:
+                output.write("file key\tfile path\taction\tframe\n")
+        with self.file_log.open("a") as output:
+            output.write("\t".join([file.key,file.path,action,self.frame])+"\n")
+    
+
 
 class directory:
     def __init__(self, container, path):
@@ -78,16 +97,20 @@ class directory:
             os.rmdir(self.path)
 
 class file:
-    def __init__(self, container, directory, name, **kwargs):
+    def __init__(self, container, key, directory, name, quiet, **kwargs):
         self.container = container
+        self.key = key
         self.directory = directory
         self.name = name
+        self.quiet = quiet
         self.path = os.path.join(self.container.__dict__[directory].path, self.name)
         self.file_format = self.name[self.name.rindex(".")+1:]
         self.__dict__.update(kwargs)
+        if not self.quiet: self.log("initialized")
     
     def add(self, **kwargs):
         self.__dict__.update(kwargs)
+        if not self.quiet: self.log("metadata updated")
     
     def extend(self, key, extension, **kwargs):
         return self.container.extend(self, key, extension, **kwargs)
@@ -96,11 +119,13 @@ class file:
         return os.path.isfile(self.path)
     
     def open(self, options="r"):
+        if not self.quiet: self.log(f"opened {options}")
         return open(self.path, options)
     
     def remove(self):
         if self.exists():
             os.remove(self.path)
+            if not self.quiet: self.log("removed")
 
     def file_path(self, new_file):
         if new_file in self.container.__dict__:
@@ -112,7 +137,8 @@ class file:
     def rename(self, new_file):
         new_file = self.file_path(new_file)
         os.rename(self.path, new_file)
-        self.file_format = f"empty, renamed to {new_file.name}"
+        self.file_format = f"renamed to {new_file}"
+        if not self.quiet: self.log(self.file_format)
     
     def awk(self, new_file, column_array, ofs = "\t", index_correction = 1):
         '''Not called (at the moment) but meant as a replacement for lines 77-84 of TELR_te.py'''
@@ -120,6 +146,10 @@ class file:
         new_file = self.file_path(new_file)
         command = f"awk -v OFS='{ofs}' '{{print {columns}}}' {self.path} > {new_file}"
         subprocess.run(command, shell=True)
+        if not self.quiet: self.log(f"awk called, written to {new_file}")
+    
+    def log(self, action):
+        self.container.log(self, action)
 
 
 

@@ -10,6 +10,7 @@ def alignment(files, out, thread, method, presets):
     """
     This function takes raw reads and performs read alignment using ngmlr or minimap2.
     """
+    files.frame = "alignment()"
     logging.info("Start alignment...")
     start_time = time.perf_counter()
     label_presets = {"pacbio":{"ngmlr":"pb","minimap2":"map-pb"},"ont":{"ngmlr":"ont","minimap2":"map-ont"}}
