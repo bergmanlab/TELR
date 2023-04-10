@@ -6,6 +6,7 @@ import subprocess
 import logging
 import json
 from Bio import SeqIO
+from telr.TELR_input import symlink
 
 def main():
     if len(sys.argv) > 2:
@@ -13,11 +14,7 @@ def main():
         params["tmp_dir"] = os.path.join(params["out"], "intermediate_files")
         mkdir(params["tmp_dir"])
         params["sample_name"] = os.path.splitext(os.path.basename(params["reads"]))[0]
-        params.update(
-            parse_input(
-                params["reads"], params["reference"], params["library"], params["sample_name"], params["tmp_dir"]
-            )
-        )
+        parse_input(params["reads"],params["tmp_dir"])
         run_id = make_run_config(params)
     else: 
         run_id = sys.argv[1]
@@ -307,75 +304,24 @@ def get_args():
     return vars(args)
 
 
-def parse_input(input_reads, input_reference, input_library, sample_name, out_dir):
+def parse_input(in_reads, out_dir):
     """
     Parse input files. If bam file is provided, convert to fasta format.
     """
     logging.info("Parsing input files...")
     # create symbolic link for the input file
-    input_reads_copy = os.path.join(out_dir, os.path.basename(input_reads))
-    if not os.path.isabs(input_reads):
-        input_reads = os.path.abspath(input_reads)
-    if os.path.islink(input_reads_copy):
-        os.remove(input_reads_copy)
-    try:
-        os.symlink(input_reads, input_reads_copy)
-    except Exception as e:
-        print(e)
-        logging.exception("Create symbolic link for " + input_reads + " failed")
-        sys.exit(1)
-
-    input_reference_copy = os.path.join(out_dir, os.path.basename(input_reference))
-    if not os.path.isabs(input_reference):
-        input_reference = os.path.abspath(input_reference)
-    if os.path.islink(input_reference_copy):
-        os.remove(input_reference_copy)
-    try:
-        os.symlink(input_reference, input_reference_copy)
-    except Exception:
-        logging.exception("Create symbolic link for " + input_reference + " failed")
-        sys.exit(1)
-
-    input_library_copy = os.path.join(out_dir, os.path.basename(input_library))
-    if not os.path.isabs(input_library):
-        input_library = os.path.abspath(input_library)
-    if os.path.islink(input_library_copy):
-        os.remove(input_library_copy)
-    try:
-        os.symlink(input_library, input_library_copy)
-    except Exception:
-        logging.exception("Create symbolic link for " + input_library + " failed")
-        sys.exit(1)
-
-    reads_filename, reads_extension = os.path.splitext(input_reads_copy)
-    if reads_extension == ".bam":
-        logging.info("BAM file is provided, skip alignment step")
-        skip_alignment = True
-        fasta = os.path.join(out_dir, sample_name + ".telr.fasta")
-        logging.info("Converting input BAM file to fasta...")
-        bam2fasta(input_reads_copy, fasta)
-    elif (
-        reads_extension == ".fasta"
-        or reads_extension == ".fastq"
-        or reads_extension == ".fa"
-        or reads_extension == ".fq"
-    ):
+    reads_extension = in_reads[in_reads.rindex("."):]
+    if(reads_extension in [".fasta",".fastq",".fa",".fq"]):
         logging.info("Raw reads are provided")
-        skip_alignment = False
-        fasta = input_reads_copy
+        in_reads_copy = os.path.join(out_dir, "reads.fasta")
+    elif(reads_extension == ".bam"):
+        logging.info("BAM file is provided, skip alignment step")
+        in_reads_copy = os.path.join(out_dir, "reads.bam")
     else:
         print("Input reads/alignments format not recognized, exiting...")
         logging.error("Input format not recognized")
         sys.exit(1)
-
-    return {
-        "reads":input_reads_copy,
-        "reference":input_reference_copy,
-        "library":input_library_copy,
-        "fasta":fasta,
-        "skip_alignment":skip_alignment
-    }
-
+    symlink(in_reads, in_reads_copy)
 
 def bam2fasta(bam, fasta):
     """

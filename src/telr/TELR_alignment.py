@@ -26,7 +26,7 @@ def alignment(bam, read, reference, out, sample_name, thread, method, presets):
             sys.exit(1)
 
         try:
-            align_sam = out + "/" + sample_name + ".tmp.sam"
+            align_sam = f"{out}/{sample_name}.tmp.sam"
             with open(align_sam, "w") as output:
                 subprocess.call(
                     [
@@ -112,3 +112,13 @@ def sort_index_bam(bam, sorted_bam, thread):
         print(e)
         print("Sort and index BAM file failed, exiting...")
         sys.exit(1)
+
+def main():
+    function = {
+        "alignment":alignment,
+        "sort_index_bam":sort_index_bam
+    }[sys.argv[1]]
+    function(sys.argv[2:])
+
+if __name__ == "__main__":
+    main()
