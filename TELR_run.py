@@ -5,8 +5,6 @@ import argparse
 import subprocess
 import logging
 import json
-from Bio import SeqIO
-from telr.TELR_input import symlink
 
 def main():
     if len(sys.argv) > 2:
@@ -18,7 +16,7 @@ def main():
         run_id = make_run_config(params)
     else: 
         run_id = sys.argv[1]
-    run_workflow(run_id)
+    run_workflow(params, run_id)
 
 def make_run_config(params):
 
@@ -43,6 +41,7 @@ def run_workflow(params, run_id):
         "--cores", str(params["thread"]),
         "--quiet"
     ]
+    subprocess.call(command)
 
 def mkdir(dir):
     if os.path.isdir(dir):
@@ -356,3 +355,15 @@ def rm_fasta_redundancy(fasta, new_fasta):
             if record.id not in records:
                 records.add(record.id)
                 SeqIO.write(record, output_handle, "fasta")
+
+def symlink(input, output):
+    if os.path.islink(output):
+        os.remove(output)
+    try:
+        os.symlink(input, output)
+    except Exception:
+        logging.exception(f"Create symbolic link for {input} failed")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

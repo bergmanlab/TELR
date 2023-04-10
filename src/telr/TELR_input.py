@@ -41,13 +41,5 @@ def symlink(input, output):
         logging.exception(f"Create symbolic link for {input} failed")
         sys.exit(1)
 
-def main():
-    function = {
-        "input_reads":input_reads,
-        "input_library":input_library,
-        "input_reference":input_reference
-    }[sys.argv[1]]
-    function(sys.argv[2:])
-
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    globals()[sys.argv[1]](sys.argv[2])
