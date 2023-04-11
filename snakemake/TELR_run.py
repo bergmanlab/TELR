@@ -10,21 +10,23 @@ def main():
     if len(sys.argv) > 2:
         params = get_args()
         params["tmp_dir"] = os.path.join(params["out"], "intermediate_files")
-        mkdir(params["tmp_dir"])
+        params["verbose"] = False # add as option later
+        if_verbose = verbose(params["verbose"])
+        mkdir(if_verbose, params["tmp_dir"])
+        mkdir(if_verbose, os.path.join(params["out"], "input"))
         params["sample_name"] = os.path.splitext(os.path.basename(params["reads"]))[0]
-        parse_input(params["reads"],params["tmp_dir"])
-        run_id = make_run_config(params)
+        run_id = make_run_config(if_verbose, params)
     else: 
         run_id = sys.argv[1]
     run_workflow(params, run_id)
 
-def make_run_config(params):
+def make_run_config(if_verbose, params):
 
     params["conda"] = os.path.join(os.path.dirname(os.path.abspath(__file__)),"envs/telr.yaml")
 
     snake_dir = os.path.join(params["out"], "snakemake")
-    mkdir(snake_dir)
-    mkdir(f"{snake_dir}/config")
+    mkdir(if_verbose, snake_dir)
+    mkdir(if_verbose, f"{snake_dir}/config")
 
     run_id = random.randint(1000000,9999999)
     run_config = f"{snake_dir}/config/config_{run_id}.json"
@@ -36,23 +38,22 @@ def make_run_config(params):
 def run_workflow(params, run_id):
     telr_dir = os.path.dirname(os.path.abspath(__file__))
     command = [
-        "snakemake", "--use-conda","--conda-prefix",f"{telr_dir}/envs",
+        "snakemake", #"--use-conda",#"--conda-prefix",f"{telr_dir}/envs",
         "--configfile", f"{os.path.join(params['out'], 'snakemake')}/config/config_{run_id}.json",
-        "--cores", str(params["thread"]),
-        "--quiet"
+        "--cores", str(params["thread"])#, "--quiet"
     ]
     subprocess.call(command)
 
-def mkdir(dir):
+def mkdir(if_verbose, dir):
     if os.path.isdir(dir):
-        print("Directory %s exists" % dir)
+        if_verbose.print(f"Directory {dir} exists")
         return
     try:
         os.mkdir(dir)
     except OSError:
-        print("Creation of the directory %s failed" % dir)
+        print(f"Creation of the directory {dir} failed")
     else:
-        print("Successfully created the directory %s " % dir)
+        if_verbose.print(f"Successfully created the directory {dir}")
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -253,7 +254,7 @@ def get_args():
     if args.out is None:
         args.out = "."
     args.out = os.path.abspath(args.out)
-    mkdir(args.out)
+    mkdir(verbose(False), args.out)
 
     if args.thread is None:
         args.thread = 1
@@ -302,68 +303,13 @@ def get_args():
 
     return vars(args)
 
-
-def parse_input(in_reads, out_dir):
-    """
-    Parse input files. If bam file is provided, convert to fasta format.
-    """
-    logging.info("Parsing input files...")
-    # create symbolic link for the input file
-    reads_extension = in_reads[in_reads.rindex("."):]
-    if(reads_extension in [".fasta",".fastq",".fa",".fq"]):
-        logging.info("Raw reads are provided")
-        in_reads_copy = os.path.join(out_dir, "reads.fasta")
-    elif(reads_extension == ".bam"):
-        logging.info("BAM file is provided, skip alignment step")
-        in_reads_copy = os.path.join(out_dir, "reads.bam")
-    else:
-        print("Input reads/alignments format not recognized, exiting...")
-        logging.error("Input format not recognized")
-        sys.exit(1)
-    symlink(in_reads, in_reads_copy)
-
-def bam2fasta(bam, fasta):
-    """
-    Convert bam to fasta.
-    """
-    fasta_tmp = fasta + ".tmp"
-    try:
-        with open(fasta_tmp, "w") as output:
-            subprocess.call(["samtools", "fasta", bam], stdout=output)
-    except Exception as e:
-        print(e)
-        print("BAM to Fasta conversion failed, check input bam file, exiting...")
-        sys.exit(1)
-
-    try:
-        rm_fasta_redundancy(fasta_tmp, fasta)
-    except Exception as e:
-        print(e)
-        logging.exception("Remove redundancy in fasta file failed")
-        sys.exit(1)
-    os.remove(fasta_tmp)
-
-
-def rm_fasta_redundancy(fasta, new_fasta):
-    """
-    Remove redundancy in fasta file.
-    If there are multiple IDs, keep the first one.
-    """
-    records = set()
-    with open(new_fasta, "w") as output_handle:
-        for record in SeqIO.parse(fasta, "fasta"):
-            if record.id not in records:
-                records.add(record.id)
-                SeqIO.write(record, output_handle, "fasta")
-
-def symlink(input, output):
-    if os.path.islink(output):
-        os.remove(output)
-    try:
-        os.symlink(input, output)
-    except Exception:
-        logging.exception(f"Create symbolic link for {input} failed")
-        sys.exit(1)
+class verbose:
+    def __init__(self, verbose=False):
+        self.verbose = verbose
+    
+    def print(self, string):
+        if(self.verbose):
+            print(string)
 
 if __name__ == "__main__":
     main()
