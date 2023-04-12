@@ -1,12 +1,10 @@
 import os
 
-print(config)
-
 rule targets:
     input: 
-        'input/library.fasta',
-        'input/reference.fasta',
-        'input/reads.fasta'
+        'intermediate_files/input/library.fasta',
+        'intermediate_files/input/reference.fasta',
+        'intermediate_files/input/reads.fasta'
 
 # input rules
 rule input:
@@ -14,15 +12,8 @@ rule input:
         file_type = '{type}',
         in_file = lambda wildcards: os.path.abspath(config[wildcards.type])
     output:
-        'input/{type}.{extension}'
+        'intermediate_files/input/{type}.{extension}'
     shell: 
         'python3 TELR_input.py input {params.file_type} {params.in_file}'
 
-rule bam2fasta:
-    input:
-        "input/reads.bam"
-    output:
-        "input/reads.fasta"
-    shell:
-        "python3 TELR_input.py bam2fasta input/reads.bam input/reads.fasta"
-
+# alignment

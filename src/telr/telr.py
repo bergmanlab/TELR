@@ -6,9 +6,9 @@ import time
 import logging
 import shutil
 from telr.TELR_input import get_args, parse_input
-from telr.TELR_alignment import alignment, sort_index_bam
+from snakemake.TELR_alignment import alignment, sort_index_bam
 from telr.TELR_sv import detect_sv, vcf_parse_filter
-from telr.TELR_assembly import get_local_contigs
+from snakemake.TELR_assembly import get_local_contigs
 from telr.TELR_te import annotate_contig, find_te, get_af, repeatmask, gff3tobed
 from telr.TELR_output import generate_output
 from telr.TELR_utility import format_time, mkdir, export_env

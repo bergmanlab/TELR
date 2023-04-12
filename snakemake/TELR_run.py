@@ -13,30 +13,30 @@ def main():
         params["verbose"] = False # add as option later
         if_verbose = verbose(params["verbose"])
         mkdir(if_verbose, params["tmp_dir"])
-        mkdir(if_verbose, os.path.join(params["out"], "input"))
+        mkdir(if_verbose, os.path.join(params["tmp_dir"], "input"))
         params["sample_name"] = os.path.splitext(os.path.basename(params["reads"]))[0]
         run_id = make_run_config(if_verbose, params)
     else: 
-        run_id = sys.argv[1]
+        run_id = sys.argv[1] #untested
     run_workflow(params, run_id)
 
 def make_run_config(if_verbose, params):
 
-    params["conda"] = os.path.join(os.path.dirname(os.path.abspath(__file__)),"envs/telr.yaml")
+    # params["conda"] = os.path.join(os.path.dirname(os.path.abspath(__file__)),"envs/telr.yaml")
 
-    snake_dir = os.path.join(params["out"], "snakemake")
+    snake_dir = os.path.join(params["out"], "snakemake") #make directory for snakemake
     mkdir(if_verbose, snake_dir)
-    mkdir(if_verbose, f"{snake_dir}/config")
+    mkdir(if_verbose, f"{snake_dir}/config") #make directory for config file
 
-    run_id = random.randint(1000000,9999999)
-    run_config = f"{snake_dir}/config/config_{run_id}.json"
+    run_id = random.randint(1000000,9999999) # generate a random run ID
+    run_config = f"{snake_dir}/config/config_{run_id}.json" # path to config file
     with open(run_config, "w") as conf:
-        json.dump(params, conf, indent=4)
+        json.dump(params, conf, indent=4) #write config file as json
     
     return run_id
 
 def run_workflow(params, run_id):
-    telr_dir = os.path.dirname(os.path.abspath(__file__))
+    #telr_dir = os.path.dirname(os.path.abspath(__file__)) #remember to implement later!
     command = [
         "snakemake", #"--use-conda",#"--conda-prefix",f"{telr_dir}/envs",
         "--configfile", f"{os.path.join(params['out'], 'snakemake')}/config/config_{run_id}.json",
@@ -46,7 +46,7 @@ def run_workflow(params, run_id):
 
 def mkdir(if_verbose, dir):
     if os.path.isdir(dir):
-        if_verbose.print(f"Directory {dir} exists")
+        if_verbose.print(f"Directory {dir} exists") # verbose object print
         return
     try:
         os.mkdir(dir)
@@ -89,7 +89,7 @@ def get_args():
     optional.add_argument(
         "--aligner",
         type=str,
-        help="choose method for read alignment, please provide 'nglmr' or 'minimap2' (default = 'nglmr')",
+        help="choose method for read alignment, please provide 'ngmlr' or 'minimap2' (default = 'ngmlr')",
         required=False,
     )
     optional.add_argument(
@@ -222,9 +222,9 @@ def get_args():
 
     # check if optional arguments are valid
     if args.aligner is None:
-        args.aligner = "nglmr"
-    elif args.aligner not in ["nglmr", "minimap2"]:
-        print("Please provide a valid alignment method (nglmr/minimap2), exiting...")
+        args.aligner = "ngmlr"
+    elif args.aligner not in ["ngmlr", "minimap2"]:
+        print("Please provide a valid alignment method (ngmlr/minimap2), exiting...")
         sys.exit(1)
 
     if args.assembler is None:

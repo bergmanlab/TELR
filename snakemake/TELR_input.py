@@ -6,7 +6,7 @@ from Bio import SeqIO
 
 def input(file_type, in_file):
     extension = in_file[in_file.rindex("."):]
-    extension_matrix = {
+    extension_matrix = { #valid file extensions for each type of input
         "reads":{".fasta":"fasta",".fastq":"fasta",".fa":"fasta",".fq":"fasta",".bam":"bam"},
         "library":{".fasta":"fasta",".fastq":"fasta",".fa":"fasta",".fq":"fasta"},
         "reference":{".fasta":"fasta",".fastq":"fasta",".fa":"fasta",".fq":"fasta"}
@@ -16,9 +16,11 @@ def input(file_type, in_file):
         print(f"Input {file_type} format not recognized, exiting...")
         logging.error("Input format not recognized")
         sys.exit(1)
-    symlink(in_file, os.path.join("input",f"{file_type}.{extension}"))
+    symlink(in_file, f"intermediate_files/input/{file_type}.{extension}")
+    if extension == "bam":
+        bam2fasta("intermediate_files/input/reads.bam","intermediate_files/input/reads.fasta")
 
-def symlink(input, output):
+def symlink(input, output): #create a symbolic link at the output location referencing the input path.
     if os.path.islink(output):
         os.remove(output)
     try:

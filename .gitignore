@@ -26,3 +26,10 @@ MANIFEST
 
 # test output
 test
+
+#snakemake
+.snakemake/
+snakemake/snakemake/
+snakemake/input/
+snakemake/intermediate_files/
+snakemake/envs/

@@ -5,6 +5,12 @@ import logging
 import time
 from telr.TELR_utility import format_time
 
+def alignment2():
+    logging.info("Start alignment...")
+    start_time = time.perf_counter()
+    presets = {"ngmlr":{"presets":"ont","label":"ont"},"pacbio":{"presets":"pacbio","label":"pb"}}
+
+
 
 def alignment(bam, read, reference, out, sample_name, thread, method, presets):
     """
