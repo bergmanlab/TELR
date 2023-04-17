@@ -1,19 +1,39 @@
 import os
 
-rule targets:
+rule all:
     input: 
         'intermediate_files/input/library.fasta',
         'intermediate_files/input/reference.fasta',
-        'intermediate_files/input/reads.fasta'
+        'intermediate_files/input/reads.bam'
 
 # input rules
-rule input:
+checkpoint input:
     params:
         file_type = '{type}',
         in_file = lambda wildcards: os.path.abspath(config[wildcards.type])
     output:
-        'intermediate_files/input/{type}.{extension}'
+        'intermediate_files/input/{type}.fasta'
     shell: 
         'python3 TELR_input.py input {params.file_type} {params.in_file}'
 
 # alignment
+def fasta_input(wildcards):
+    checkpoints.input.get(type="reads")
+    if not os.path.exists('intermediate_files/input/reads.bam'):
+        return 'intermediate_files/input/reads.fasta'
+    else: return []
+rule alignment:
+    input:
+        fasta_input
+    output:
+        'intermediate_files/input/reads.bam'
+    params:
+        reads = "intermediate_files/inputs/reads.fasta"
+        reference = "intermediate_files/inputs/reference.fasta"
+        out = "intermediate_files"
+        sample_name = config["sample_name"]
+        thread = config["thread"]
+        method = config["aligner"]
+        presets = config["presets"]
+    shell:
+        "python3 TELR_alignment.py alignment {params.reads} {params.reference} {params.out} {params.sample_name} {params.thread} {params.method} {params.presets}"
