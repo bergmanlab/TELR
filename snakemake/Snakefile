@@ -8,11 +8,11 @@ rule all:
 
 # input rules
 checkpoint input:
+    output:
+        'intermediate_files/input/{type}.fasta'
     params:
         file_type = '{type}',
         in_file = lambda wildcards: os.path.abspath(config[wildcards.type])
-    output:
-        'intermediate_files/input/{type}.fasta'
     shell: 
         'python3 TELR_input.py input {params.file_type} {params.in_file}'
 
@@ -26,7 +26,7 @@ rule alignment:
     input:
         fasta_input
     output:
-        'intermediate_files/input/reads.bam'
+        "intermediate_files/{config[sample_name]}.sam"
     params:
         reads = "intermediate_files/inputs/reads.fasta"
         reference = "intermediate_files/inputs/reference.fasta"
@@ -37,3 +37,16 @@ rule alignment:
         presets = config["presets"]
     shell:
         "python3 TELR_alignment.py alignment {params.reads} {params.reference} {params.out} {params.sample_name} {params.thread} {params.method} {params.presets}"
+
+rule sort_index_bam:
+    input:
+        "intermediate_files/{sample_name}.sam" 
+    output:
+        "intermediate_files/{sample_name}_sort.bam"
+    params:
+        unsorted_bam = "intermediate_files/{config[sample_name]}.sam"
+        sorted_bam = "intermediate_files/{config[sample_name]}_sort.bam"
+        thread = config["thread"]
+    shell:
+        "python3 TELR_alignment.py sort_index_bam {params.unsorted_bam} {params.sorted_bam} {params.thread}"
+
