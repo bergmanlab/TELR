@@ -6,6 +6,9 @@ import time
 from telr.TELR_utility import format_time
 
 def alignment(read, reference, out, sample_name, thread, method, presets):
+    """
+    This function takes raw reads and performs read alignment using ngmlr or minimap2.
+    """
     logging.info("Start alignment...")
     start_time = time.perf_counter()
     method_array = {
@@ -45,21 +48,6 @@ def string_list(list1):
         return " or ".join(list1)
     else:
         return ", ".join(list1[:-1]) + ", or " + list1[-1] 
-
-
-def alignmenta(bam, read, reference, out, sample_name, thread, method, presets):
-    """
-    This function takes raw reads and performs read alignment using ngmlr or minimap2.
-    """
-
-    sort_index_bam(align_sam, bam, thread)
-    if os.path.isfile(bam) is False:
-        sys.stderr.write("Sorted and indexed BAM file does not exist, exiting...\n")
-        sys.exit(1)
-    os.remove(align_sam)
-
-    proc_time = time.time() - start_time
-    logging.info("First alignment finished in " + format_time(proc_time))
 
 
 def sort_index_bam(unsorted_bam, sorted_bam, thread):

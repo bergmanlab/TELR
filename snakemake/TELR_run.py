@@ -8,39 +8,39 @@ import json
 
 def main():
     if len(sys.argv) > 2:
-        params = get_args()
-        params["tmp_dir"] = os.path.join(params["out"], "intermediate_files")
-        params["verbose"] = False # add as option later
-        if_verbose = verbose(params["verbose"])
-        mkdir(if_verbose, params["tmp_dir"])
-        mkdir(if_verbose, os.path.join(params["tmp_dir"], "input"))
-        params["sample_name"] = os.path.splitext(os.path.basename(params["reads"]))[0]
-        run_id = make_run_config(if_verbose, params)
+        config = get_args()
+        config["tmp_dir"] = os.path.join(config["out"], "intermediate_files")
+        config["verbose"] = False # add as option later
+        if_verbose = verbose(config["verbose"])
+        mkdir(if_verbose, config["tmp_dir"])
+        mkdir(if_verbose, os.path.join(config["tmp_dir"], "input"))
+        config["sample_name"] = os.path.splitext(os.path.basename(config["reads"]))[0]
+        run_id = make_run_config(if_verbose, config)
     else: 
         run_id = sys.argv[1] #untested
-    run_workflow(params, run_id)
+    run_workflow(config, run_id)
 
-def make_run_config(if_verbose, params):
+def make_run_config(if_verbose, config):
 
-    # params["conda"] = os.path.join(os.path.dirname(os.path.abspath(__file__)),"envs/telr.yaml")
+    # config["conda"] = os.path.join(os.path.dirname(os.path.abspath(__file__)),"envs/telr.yaml")
 
-    snake_dir = os.path.join(params["out"], "snakemake") #make directory for snakemake
+    snake_dir = os.path.join(config["out"], "snakemake") #make directory for snakemake
     mkdir(if_verbose, snake_dir)
     mkdir(if_verbose, f"{snake_dir}/config") #make directory for config file
 
     run_id = random.randint(1000000,9999999) # generate a random run ID
     run_config = f"{snake_dir}/config/config_{run_id}.json" # path to config file
     with open(run_config, "w") as conf:
-        json.dump(params, conf, indent=4) #write config file as json
+        json.dump(config, conf, indent=4) #write config file as json
     
     return run_id
 
-def run_workflow(params, run_id):
+def run_workflow(config, run_id):
     #telr_dir = os.path.dirname(os.path.abspath(__file__)) #remember to implement later!
     command = [
         "snakemake", #"--use-conda",#"--conda-prefix",f"{telr_dir}/envs",
-        "--configfile", f"{os.path.join(params['out'], 'snakemake')}/config/config_{run_id}.json",
-        "--cores", str(params["thread"])#, "--quiet"
+        "--configfile", f"{os.path.join(config['out'], 'snakemake')}/config/config_{run_id}.json",
+        "--cores", str(config["thread"])#, "--quiet"
     ]
     subprocess.call(command)
 

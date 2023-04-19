@@ -4,23 +4,22 @@ import logging
 import subprocess
 #from Bio import SeqIO
 
-def input(file_type, in_file):
-    print(file_type+in_file)
+def input(file_type, sample_name, in_file):
+    print(f"---- {file_type} ----")
     extension = in_file[in_file.rindex("."):]
     extension_matrix = { #valid file extensions for each type of input
-        "reads":{".fasta":"fasta",".fastq":"fasta",".fa":"fasta",".fq":"fasta",".bam":"bam"},
-        "library":{".fasta":"fasta",".fastq":"fasta",".fa":"fasta",".fq":"fasta"},
-        "reference":{".fasta":"fasta",".fastq":"fasta",".fa":"fasta",".fq":"fasta"}
+        "reads":[".fasta",".fastq",".fa",".fq",".bam"],
+        "library":[".fasta",".fastq",".fa",".fq"],
+        "reference":[".fasta",".fastq",".fa",".fq"]
         }[file_type]
-    if extension in extension_matrix: extension = extension_matrix[extension]
-    else:
+    if extension not in extension_matrix: 
         print(f"Input {file_type} format not recognized, exiting...")
         logging.error("Input format not recognized")
         sys.exit(1)
-    print(f"intermediate_files/input/{file_type}.{extension}")
-    symlink(in_file, f"intermediate_files/input/{file_type}.{extension}")
-    if extension == "bam":
-        bam2fasta("intermediate_files/input/reads.bam","intermediate_files/input/reads.fasta")
+    print(f"intermediate_files/input/{file_type}-{sample_name}{extension}")
+    symlink(in_file, f"intermediate_files/input/{file_type}-{sample_name}{extension}")
+    if extension == ".bam":
+        bam2fasta(f"intermediate_files/input/reads-{sample_name}{extension}",f"intermediate_files/input/reads-{sample_name}.fasta")
 
 def symlink(input, output): #create a symbolic link at the output location referencing the input path.
     if os.path.islink(output):

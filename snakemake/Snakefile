@@ -2,25 +2,26 @@ import os
 
 rule all:
     input: 
-        'intermediate_files/input/library.fasta',
-        'intermediate_files/input/reference.fasta',
-        'intermediate_files/input/reads.bam'
+        'intermediate_files/input/reads-reads.fasta',
+        'intermediate_files/input/reference-reads.fasta',
+        'intermediate_files/input/library-reads.fasta'
 
 # input rules
 checkpoint input:
     output:
-        'intermediate_files/input/{type}.fasta'
+        'intermediate_files/input/{type}-{sample_name}.f{ext}'
     params:
         file_type = '{type}',
+        sample = config["sample_name"],
         in_file = lambda wildcards: os.path.abspath(config[wildcards.type])
     shell: 
-        'python3 TELR_input.py input {params.file_type} {params.in_file}'
+        'python3 TELR_input.py input {params.file_type} {params.sample} {params.in_file}'
 
 # alignment
 def fasta_input(wildcards):
     checkpoints.input.get(type="reads")
-    if not os.path.exists('intermediate_files/input/reads.bam'):
-        return 'intermediate_files/input/reads.fasta'
+    if not os.path.exists('intermediate_files/input/reads-{sample_name}.bam'):
+        return 'intermediate_files/input/reads-{sample_name}.f{ext}'
     else: return []
 rule alignment:
     input:
@@ -28,12 +29,12 @@ rule alignment:
     output:
         "intermediate_files/{config[sample_name]}.sam"
     params:
-        reads = "intermediate_files/inputs/reads.fasta"
-        reference = "intermediate_files/inputs/reference.fasta"
-        out = "intermediate_files"
-        sample_name = config["sample_name"]
-        thread = config["thread"]
-        method = config["aligner"]
+        reads = "intermediate_files/inputs/reads-{sample_name}.f{ext}",
+        reference = "intermediate_files/inputs/reference-{sample_name}.f{ext}",
+        out = "intermediate_files",
+        sample_name = config["sample_name"],
+        thread = config["thread"],
+        method = config["aligner"],
         presets = config["presets"]
     shell:
         "python3 TELR_alignment.py alignment {params.reads} {params.reference} {params.out} {params.sample_name} {params.thread} {params.method} {params.presets}"
@@ -44,9 +45,58 @@ rule sort_index_bam:
     output:
         "intermediate_files/{sample_name}_sort.bam"
     params:
-        unsorted_bam = "intermediate_files/{config[sample_name]}.sam"
-        sorted_bam = "intermediate_files/{config[sample_name]}_sort.bam"
+        unsorted_bam = "intermediate_files/{config[sample_name]}.sam",
+        sorted_bam = "intermediate_files/{config[sample_name]}_sort.bam",
         thread = config["thread"]
+    conda:
+        config["conda"]
     shell:
         "python3 TELR_alignment.py sort_index_bam {params.unsorted_bam} {params.sorted_bam} {params.thread}"
 
+#standard variant detection
+rule detect_sv:
+    input:
+        bam = "intermediate_files/{sample_name}_sort.bam",
+        reference = "intermediate_files/input/reference-{sample_name}.f{ext}"
+    output:
+        "intermediate_files/{sample_name}_{sv_detector}.vcf"
+    params:
+        out = "intermediate_files",
+        sample_name = config["sample_name"],
+        thread = config["thread"]
+    shell:
+        "python3 TELR_sv.py detect_sv {input.bam} {input.reference} {params.out} {params.sample_name} {params.thread}"
+
+rule parse_vcf:
+    input:
+        "intermediate_files/{sample_name}_{sv_detector}.vcf"
+    output:
+        "intermediate_files/{sample_name}.vcf_parsed.tsv.tmp"
+    conda:
+        config["conda"]
+    shell:
+        "python3 TELR_sv.py parse_vcf {input} {output}"
+
+rule swap_vcf_coordinate:
+    input:
+        "intermediate_files/{sample_name}.vcf_parsed.tsv.tmp"
+    output:
+        "intermediate_files/{sample_name}.vcf_parsed.tsv.swap"
+    shell:
+        "python3 TELR_sv.py swap_coordinate {input} {output}"
+
+rule rm_vcf_redundancy:
+    input:
+        "intermediate_files/{sample_name}.vcf_parsed.tsv.swap"
+    output:
+        "intermediate_files/{sample_name}.vcf_parsed.tsv"
+    conda:
+        config["conda"]
+    shell:
+        "python3 TELR_sv.py rm_vcf_redundancy {input} {output}"
+
+rule write_ins_seqs:
+    input:
+        "intermediate_files/{sample_name}.vcf_parsed.tsv"
+    output:
+        #the plus thing presents an interesting issue here 
