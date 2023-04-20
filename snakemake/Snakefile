@@ -21,7 +21,7 @@ checkpoint input:
 def fasta_input(wildcards):
     checkpoints.input.get(type="reads")
     if not os.path.exists('intermediate_files/input/reads-{sample_name}.bam'):
-        return 'intermediate_files/input/reads-{sample_name}.f{ext}'
+        return 'intermediate_files/input/reads-{sample_name}.f{extr}'
     else: return []
 rule alignment:
     input:
@@ -29,8 +29,8 @@ rule alignment:
     output:
         "intermediate_files/{config[sample_name]}.sam"
     params:
-        reads = "intermediate_files/inputs/reads-{sample_name}.f{ext}",
-        reference = "intermediate_files/inputs/reference-{sample_name}.f{ext}",
+        reads = "intermediate_files/inputs/reads-{sample_name}.f{extr}",
+        reference = "intermediate_files/inputs/reference-{sample_name}.f{extref}",
         out = "intermediate_files",
         sample_name = config["sample_name"],
         thread = config["thread"],
@@ -50,6 +50,7 @@ rule sort_index_bam:
         thread = config["thread"]
     conda:
         config["conda"]
+        #samtools
     shell:
         "python3 TELR_alignment.py sort_index_bam {params.unsorted_bam} {params.sorted_bam} {params.thread}"
 
@@ -57,7 +58,7 @@ rule sort_index_bam:
 rule detect_sv:
     input:
         bam = "intermediate_files/{sample_name}_sort.bam",
-        reference = "intermediate_files/input/reference-{sample_name}.f{ext}"
+        reference = "intermediate_files/input/reference-{sample_name}.f{extref}"
     output:
         "intermediate_files/{sample_name}_{sv_detector}.vcf"
     params:
@@ -72,10 +73,13 @@ rule parse_vcf:
         "intermediate_files/{sample_name}_{sv_detector}.vcf"
     output:
         "intermediate_files/{sample_name}.vcf_parsed.tsv.tmp"
+    params:
+        '"%CHROM\\t%POS\\t%END\\t%SVLEN\\t%RE\\t%AF\\t%ID\\t%ALT\\t%RNAMES\\t%FILTER\\t[ %GT]\\t[ %DR]\\t[ %DV]\n"'
     conda:
         config["conda"]
+        #bcftools
     shell:
-        "python3 TELR_sv.py parse_vcf {input} {output}"
+        'bcftools query -i \'SVTYPE="INS" & ALT!="<INS>"\' -f {params} {input} > {output}'
 
 rule swap_vcf_coordinate:
     input:
@@ -92,6 +96,7 @@ rule rm_vcf_redundancy:
         "intermediate_files/{sample_name}.vcf_parsed.tsv"
     conda:
         config["conda"]
+        #pandas
     shell:
         "python3 TELR_sv.py rm_vcf_redundancy {input} {output}"
 
@@ -99,4 +104,23 @@ rule write_ins_seqs:
     input:
         "intermediate_files/{sample_name}.vcf_parsed.tsv"
     output:
-        #the plus thing presents an interesting issue here 
+        "intermediate_files/{sample_name_plus}.vcf_ins.fasta"
+    params:
+        output_file = lambda config: f"intermediate_files/{config["sample_name"].replace("+","plus")}.vcf_ins.fasta"
+    shell:
+        "python3 TELR_sv.py write_ins_seqs {input} {params.output_file}"
+
+rule filter_vcf:
+    input:
+        parsed_vcf = "intermediate_files/{sample_name}.vcf_parsed.tsv"
+        ins_seqs = "intermediate_files/{sample_name_plus}.vcf_ins.fasta"
+        library = "intermediate_files/input/library-{sample_name}.f{extl}"
+    output:
+        "intermediate_files/{sample_name}.vcf.filtered.tmp.tsv"
+    params:
+        out = "intermediate_files"
+        repeatmasker_dir = "vcf_ins_repeatmask"
+        sample_name = config["sample_name"]
+        thread = config["thread"]
+    shell:
+        "python3 TELR_sv.py filter_vcf {input.parsed_vcf} {output} {input.ins_seqs} {input.library} {params.out} {params.repeatmasker_dir} {params.sample_name} {params.thread}"

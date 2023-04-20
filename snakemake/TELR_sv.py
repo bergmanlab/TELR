@@ -51,13 +51,13 @@ def vcf_parse_filter(
     """Parse and filter for insertions from VCF file"""
     logging.info("Parse structural variant VCF...")
 
-    vcf_filtered = vcf_in + ".filtered.tmp.tsv"
+    vcf_filtered = f"{vcf_in}.filtered.tmp.tsv"
     filter_vcf(
         vcf_parsed, vcf_filtered, te_library, out, sample_name, thread, loci_eval
     )
 
     # merge entries
-    vcf_merged = vcf_in + ".merged.tmp.tsv"
+    vcf_merged = f"{vcf_in}.merged.tmp.tsv"
     merge_vcf(vcf_filtered, vcf_merged)
     os.rename(vcf_merged, vcf_out)
 
@@ -184,7 +184,7 @@ def rm_vcf_redundancy(vcf_in, vcf_out):
     df2.to_csv(vcf_out, sep="\t", header=False, index=False)
 
 
-def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eval):
+def filter_vcf(ins, ins_filtered, ins_seqs, te_library, out, repeatmasker_dir, sample_name, thread, loci_eval):
     """
     Filter insertion sequences from Sniffles VCF by repeatmasking with TE concensus
     """
@@ -202,7 +202,6 @@ def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eva
                 contig_len[record.id] = len(record.seq)
 
     # run RM on the inserted seqeunce
-    repeatmasker_dir = os.path.join(out, "vcf_ins_repeatmask")
     mkdir(repeatmasker_dir)
     try:
         subprocess.call(
@@ -263,11 +262,10 @@ def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eva
     with open(ins, "r") as input, open(ins_filtered, "w") as output:
         for line in input:
             entry = line.replace("\n", "").split("\t")
-            contig_name = "_".join([entry[0], entry[1], entry[2]])
             # TODO: maybe add filter for insertion sequences covered by TE?
             if contig_name in ins_te_loci:
-                out_line = line.replace("\n", "") + "\t" + str(ins_te_loci[contig_name])
-                output.write(out_line + "\n")
+                out_line = f"{line.replace('\n', '')}\t{ins_te_loci[contig_name(entry)]}"
+                output.write(f"{out_line}\n")
     # os.remove(ins_seqs)
 
     # report removed loci
@@ -277,14 +275,15 @@ def filter_vcf(ins, ins_filtered, te_library, out, sample_name, thread, loci_eva
                 output.write("\t".join([locus, "VCF sequence not repeatmasked"]) + "\n")
 
 
-def write_ins_seqs(vcf, out):
-    with open(vcf, "r") as input, open(out, "w") as output:
+def write_ins_seqs(parsed_vcf, out):
+    with open(parsed_vcf, "r") as input, open(out, "w") as output:
         for line in input:
             entry = line.replace("\n", "").split("\t")
-            coord = "_".join([entry[0], entry[1], entry[2]])
-            output.write(">" + coord + "\n")
-            output.write(entry[7] + "\n")
+            output.write(f">{contig_name(entry)}\n")
+            output.write(f"{entry[7]}\n")
 
+def contig_name(tsv):
+    return "_".join([tsv[0], tsv[1], tsv[2]])
 
 def id_merge(strings):
     string_merged = ",".join(strings)
