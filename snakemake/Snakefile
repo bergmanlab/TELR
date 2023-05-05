@@ -188,4 +188,4 @@ rule process_merge:
     shell:
         "python3 TELR_sv.py merge_vcf {input} {output}"
 
-#assembly
+#assembly 
