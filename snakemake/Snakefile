@@ -2,12 +2,10 @@ import os
 
 rule all:
     input: 
-        'intermediate_files/input/reads-reads.fasta',
-        'intermediate_files/input/reference-reads.fasta',
-        'intermediate_files/input/library-reads.fasta'
+        config["output"]
         #"{sample_name}.loci_eval.tsv"
 
-# input rules
+# input rule, can be run multiple times
 checkpoint input:
     output:
         'intermediate_files/input/{type}-{sample_name}.f{ext}'
@@ -18,12 +16,13 @@ checkpoint input:
     shell: 
         'python3 TELR_input.py input {params.file_type} {params.sample} {params.in_file}'
 
-# alignment
+# alignment, only run if reads are supplied in fasta format
 def fasta_input(wildcards):
     checkpoints.input.get(type="reads")
     if not os.path.exists('intermediate_files/input/reads-{sample_name}.bam'):
         return 'intermediate_files/input/reads-{sample_name}.f{extr}'
     else: return []
+
 rule alignment:
     input:
         fasta_input

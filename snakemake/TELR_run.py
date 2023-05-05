@@ -43,6 +43,7 @@ def run_workflow(config, run_id):
         "--cores", str(config["thread"])#, "--quiet"
     ]
     subprocess.call(command)
+    
 
 def mkdir(if_verbose, dir):
     if os.path.isdir(dir):
