@@ -3,6 +3,7 @@ import os
 import subprocess
 import logging
 import time
+from Bio import SeqIO
 from telr.TELR_utility import format_time
 
 def alignment(read, reference, out, sample_name, thread, method, presets):
@@ -70,6 +71,40 @@ def sort_index_bam(unsorted_bam, sorted_bam, thread):
 
     proc_time = time.perf_counter() - start_time
     logging.info(f"Bam sorted and indexed in {format_time(proc_time)}")
+
+def bam2fasta(bam, fasta):
+    """
+    Convert bam to fasta.
+    """
+    fasta_tmp = f"{fasta}.tmp"
+    try:
+        with open(fasta_tmp, "w") as output:
+            subprocess.call(["samtools", "fasta", bam], stdout=output)
+    except Exception as e:
+        print(e)
+        print("BAM to Fasta conversion failed, check input bam file, exiting...")
+        sys.exit(1)
+
+    try:
+        rm_fasta_redundancy(fasta_tmp, fasta)
+    except Exception as e:
+        print(e)
+        logging.exception("Remove redundancy in fasta file failed")
+        sys.exit(1)
+    os.remove(fasta_tmp)
+
+
+def rm_fasta_redundancy(fasta, new_fasta):
+    """
+    Remove redundancy in fasta file.
+    If there are multiple IDs, keep the first one.
+    """
+    records = set()
+    with open(new_fasta, "w") as output_handle:
+        for record in SeqIO.parse(fasta, "fasta"):
+            if record.id not in records:
+                records.add(record.id)
+                SeqIO.write(record, output_handle, "fasta")
 
 if __name__ == '__main__':
     globals()[sys.argv[1]](*sys.argv[2:])

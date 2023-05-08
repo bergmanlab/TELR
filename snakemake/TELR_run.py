@@ -18,6 +18,12 @@ def main():
         run_id = make_run_config(if_verbose, config)
     else: 
         run_id = sys.argv[1] #untested
+    process_input_files(
+        {"reads":config["reads"],
+         "reference":config["reference"],
+         "library":config["library"]},
+         config["sample_name"]
+         )
     run_workflow(config, run_id)
 
 def make_run_config(if_verbose, config):
@@ -43,7 +49,36 @@ def run_workflow(config, run_id):
         "--cores", str(config["thread"])#, "--quiet"
     ]
     subprocess.call(command)
-    
+
+def process_input_files(input_file_paths, sample_name):
+    def file_extension_of(file):
+        return os.path.splittext(input_file_paths[file])[1]
+    accepted_formats_for = { #valid file extensions for each type of input
+        "reads":[".fasta",".fastq",".fa",".fq",".bam"],
+        "library":[".fasta",".fastq",".fa",".fq"],
+        "reference":[".fasta",".fastq",".fa",".fq"]
+        }
+    for file in ["reads","reference","library"]:
+        try: open(input_file_paths[file], "r")
+        except Exception as e:
+            print(e)
+            logging.exception(f"Cannot open input file: {input_file_paths[file]}")
+            sys.exit(1)
+        if not file_extension_of(file) in accepted_formats_for[file]:
+                print(f"Input {file} format not recognized, exiting...")
+                logging.error("Input format not recognized")
+                sys.exit(1)
+        else: 
+            symlink(input_file_paths[file], f"intermediate_files/input/{file}-{sample_name}{file_extension_of(file)}")
+
+def symlink(input, output): #create a symbolic link at the output location referencing the input path.
+    if os.path.islink(output):
+        os.remove(output)
+    try:
+        os.symlink(input, output)
+    except Exception:
+        logging.exception(f"Create symbolic link for {input} failed")
+        sys.exit(1)
 
 def mkdir(if_verbose, dir):
     if os.path.isdir(dir):
@@ -198,28 +233,6 @@ def get_args():
     )
     parser._action_groups.append(optional)
     args = parser.parse_args()
-
-    # checks if in files exist
-    try:
-        test = open(args.reads, "r")
-    except Exception as e:
-        print(e)
-        logging.exception("Can not open input file: " + args.reads)
-        sys.exit(1)
-
-    try:
-        test = open(args.reference, "r")
-    except Exception as e:
-        print(e)
-        logging.exception("Can not open input file: " + args.reference)
-        sys.exit(1)
-
-    try:
-        test = open(args.library, "r")
-    except Exception as e:
-        print(e)
-        logging.exception("Can not open input file: " + args.library)
-        sys.exit(1)
 
     # check if optional arguments are valid
     if args.aligner is None:
