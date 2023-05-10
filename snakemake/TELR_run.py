@@ -10,7 +10,7 @@ def main():
     if len(sys.argv) > 2:
         config = get_args()
         config["tmp_dir"] = os.path.join(config["out"], "intermediate_files")
-        config["verbose"] = False # add as option later
+        config["verbose"] = True # add as option later
         if_verbose = verbose(config["verbose"])
         mkdir(if_verbose, config["tmp_dir"])
         mkdir(if_verbose, os.path.join(config["tmp_dir"], "input"))
@@ -52,7 +52,7 @@ def run_workflow(config, run_id):
 
 def process_input_files(input_file_paths, sample_name):
     def file_extension_of(file):
-        return os.path.splittext(input_file_paths[file])[1]
+        return os.path.splitext(input_file_paths[file])[1]
     accepted_formats_for = { #valid file extensions for each type of input
         "reads":[".fasta",".fastq",".fa",".fq",".bam"],
         "library":[".fasta",".fastq",".fa",".fq"],

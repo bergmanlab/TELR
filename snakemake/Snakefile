@@ -51,8 +51,6 @@ rule sort_index_bam:
     output:
         "intermediate_files/{sample_name}_sort.bam"
     threads: config["thread"]
-    conda:
-        config["conda"]
         #samtools
     shell:
         "python3 TELR_alignment.py sort_index_bam {input} {output} {threads}"
@@ -70,20 +68,16 @@ rule detect_sv:
         out = "intermediate_files",
         sample_name = config["sample_name"],
         thread = config["thread"]
-    conda:
-        config["conda"]
     shell:
         "python3 TELR_sv.py detect_sv {input.bam} {input.reference} {params.out} {params.sample_name} {params.thread}"
 
 rule parse_vcf:
     input:
-        "intermediate_files/{sample_name}_{sv_detector}.vcf"
+        "intermediate_files/{sample_name}_Sniffles.vcf"#replace Sniffles with config[sv_detector] later if there are options
     output:
         "intermediate_files/{sample_name}.vcf_parsed.tsv.tmp"
     params:
         '"%CHROM\\t%POS\\t%END\\t%SVLEN\\t%RE\\t%AF\\t%ID\\t%ALT\\t%RNAMES\\t%FILTER\\t[ %GT]\\t[ %DR]\\t[ %DV]\n"'
-    conda:
-        config["conda"]
         #bcftools
     shell:
         'bcftools query -i \'SVTYPE="INS" & ALT!="<INS>"\' -f {params} {input} > {output}'
@@ -93,8 +87,6 @@ rule swap_vcf_coordinate:
         "intermediate_files/{sample_name}.vcf_parsed.tsv.tmp"
     output:
         "intermediate_files/{sample_name}.vcf_parsed.tsv.swap"
-    conda:
-        config["conda"]
     shell:
         "python3 TELR_sv.py swap_coordinate {input} {output}"
 
@@ -103,8 +95,6 @@ rule rm_vcf_redundancy:
         "intermediate_files/{sample_name}.vcf_parsed.tsv.swap"
     output:
         "intermediate_files/{sample_name}.vcf_parsed.tsv"
-    conda:
-        config["conda"]
     shell:
         "python3 TELR_sv.py rm_vcf_redundancy {input} {output}"
 
@@ -113,27 +103,21 @@ rule write_ins_seqs:
         "intermediate_files/{sample_name}.vcf_parsed.tsv"
     output:
         "intermediate_files/{sample_name_plus}.vcf_ins.fasta"
-    params:
-        output_file = lambda config: f"intermediate_files/{config["sample_name"].replace("+","plus")}.vcf_ins.fasta"
-    conda:
-        config["conda"]
     shell:
-        "python3 TELR_sv.py write_ins_seqs {input} {params.output_file}"
+        "python3 TELR_sv.py write_ins_seqs {input} {output}"
 
 '''1st stage
 Filter for TE insertion candidate (RepeatMasker)
 '''
 rule sv_repeatmask:
     input:
-        ins_seqs = "intermediate_files/{sample_name_plus}.vcf_ins.fasta",
+        ins_seqs = lambda config: f"intermediate_files/{config['sample_name'].replace('+','plus')}.vcf_ins.fasta",
         library = "intermediate_files/input/library-{sample_name}.f{asta_lib}"
     output:
         "intermediate_files/vcf_ins_repeatmask/{ins_seqs}.out.gff"
     params:
         repeatmasker_dir = "intermediate_files/vcf_ins_repeatmask",
         thread = config["thread"]
-    conda:
-        config["conda"]
     shell:
         "python3 TELR_sv.py repeatmask {params.repeatmasker_dir} {input.ins_seqs} {input.library} {params.thread}"
 
@@ -142,8 +126,6 @@ rule sv_RM_sort:
         "intermediate_files/vcf_ins_repeatmask/{ins_seqs}.out.gff"
     output:
         "intermediate_files/vcf_ins_repeatmask/{ins_seqs}.out.sort.gff"
-    conda:
-        config["conda"]
         #bedtools
     shell:
         "bedtools sort -i {input} > {output}"
@@ -153,8 +135,6 @@ rule sv_RM_merge:
         "intermediate_files/vcf_ins_repeatmask/{ins_seqs}.out.sort.gff"
     output:
         "intermediate_files/vcf_ins_repeatmask/{ins_seqs}.out.merge.bed"
-    conda:
-        config["conda"]
         #bedtools
     shell:
         "bedtools merge -i {input} > {output}"
@@ -162,13 +142,11 @@ rule sv_RM_merge:
 rule sv_TE_extract:
     input:
         parsed_vcf = "intermediate_files/{sample_name}.vcf_parsed.tsv",
-        ins_seqs = "intermediate_files/{sample_name_plus}.vcf_ins.fasta",
-        ins_rm_merge = "intermediate_files/vcf_ins_repeatmask/{ins_seqs}.out.merge.bed"
+        ins_seqs = lambda config: f"intermediate_files/{config['sample_name'].replace('+','plus')}.vcf_ins.fasta",
+        ins_rm_merge = lambda config: f"intermediate_files/vcf_ins_repeatmask/{config['sample_name'].replace('+','plus')}.vcf_ins.fasta.out.merge.bed"
     output:
         ins_filtered = "intermediate_files/{sample_name}.vcf.filtered.tmp.tsv",
         loci_eval = "{sample_name}.loci_eval.tsv"
-    conda:
-        config["conda"]
     shell:
         "python3 TELR_sv.py te_extract {input.parsed_vcf} {input.ins_seqs} {input.ins_rm_merge} {output.ins_filtered} {output.loci_eval}"
 
@@ -179,8 +157,6 @@ rule seq_merge:
         "intermediate_files/{sample_name}.vcf.merged.tmp.tsv"
     params:
         window = 20
-    conda:
-        config["conda"]
         #bedtools
     shell:
         'bedtools merge -o collapse -c 2,3,4,5,6,7,8,9,10,11,12,13,14 -delim ";" -d {params.window} -i {input} > {output}'
@@ -190,8 +166,6 @@ rule process_merge:
         "intermediate_files/{sample_name}.vcf.merged.tmp.tsv"
     output:
         "intermediate_files/{sample_name}.vcf_filtered.tsv"
-    conda:
-        config["conda"]
     shell:
         "python3 TELR_sv.py merge_vcf {input} {output}"
 
