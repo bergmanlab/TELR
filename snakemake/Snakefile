@@ -2,7 +2,7 @@ import os
 
 rule all:
     input: 
-        config["output"]
+        "intermediate_files/reads.vcf_filtered.tsv"
         #"{sample_name}.loci_eval.tsv"
 
 rule bam_input: #if input is given in bam format, convert it to fasta format.
