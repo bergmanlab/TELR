@@ -3,8 +3,8 @@ import os
 import subprocess
 import logging
 import time
+from datetime import datetime, timedelta
 from Bio import SeqIO
-from telr.TELR_utility import format_time
 
 def alignment(read, reference, out, sample_name, thread, method, presets):
     """
@@ -20,7 +20,7 @@ def alignment(read, reference, out, sample_name, thread, method, presets):
     else: 
         print(f"Read method not recognized, please provide {string_list(method_array)}, exiting...")
         sys.exit(1)
-    if(presets in method_array["presets"]):
+    if(presets in method_array):
         method_array = method_array[presets]
     else: 
         print(f"Read presets not recognized, please provide {string_list(method_array)}, exiting...")
@@ -105,6 +105,15 @@ def rm_fasta_redundancy(fasta, new_fasta):
             if record.id not in records:
                 records.add(record.id)
                 SeqIO.write(record, output_handle, "fasta")
+
+def format_time(time): #todo - replace with call to telr utility
+    d = datetime(1, 1, 1) + timedelta(seconds=time)
+    if d.hour == 0 and d.minute == 0:
+        return f"{d.second} seconds"
+    elif d.hour == 0 and d.minute != 0:
+        return f"{d.minute} minutes {d.second} seconds"
+    else:
+        return f"{d.hour} hours {d.minute} minutes {d.second} seconds"
 
 if __name__ == '__main__':
     globals()[sys.argv[1]](*sys.argv[2:])

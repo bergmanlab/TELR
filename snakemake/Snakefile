@@ -5,12 +5,19 @@ rule all:
         "intermediate_files/reads.vcf_filtered.tsv"
         #"{sample_name}.loci_eval.tsv"
 
+def input_reads_if_in_bam_format(wildcards):
+    #   this rule returns the bam format input if the input is given in bam format, or an empty list if not.
+    #returning an empty list essentially gives snakemake permission to accept the input file in fasta 
+    #format; otherwise it tries to check the next file back in the workflow, and causes a cyclic dependency
+    #error if the input and output for the rule bam_input are the same.
+    if ".bam" in config["reads"]: return config["reads"]
+    else: return []
 rule bam_input: #if input is given in bam format, convert it to fasta format.
     #todo -- check if this bam format is ACTUALLY aligned.
     input:
-        "intermediate_files/input/reads-{sample_name}.bam"
+        input_reads_if_in_bam_format
     output:
-        "intermediate_files/input/reads-{sample_name}.fasta"
+        config["fasta_reads"]
     shell:
         "python3 TELR_alignment.py bam2fasta {input} {output}"
 
@@ -25,15 +32,12 @@ rule bam_input: #if input is given in bam format, convert it to fasta format.
 #only run if reads are supplied in fasta format
 rule alignment:
     input:
-        'intermediate_files/input/reads-{sample_name}.f{asta_reads}'
+        config["fasta_reads"]
     output:
         "intermediate_files/{sample_name}.sam"
     params:
-        reads = "intermediate_files/inputs/reads-{sample_name}.f{asta_reads}",
-        #{asta_reads}, {asta_ref}, etc: read file extension may be .fna, .fa, .fasta, etc:
-        #.f has to be outside of the wildcard so that snakemake knows the file extension must start with f,
-        #but wildcard included so that it will accept any variation of a fasta file.
-        reference = "intermediate_files/inputs/reference-{sample_name}.f{asta_ref}",
+        reads = config["fasta_reads"],
+        reference = config["reference"],
         out = "intermediate_files",
         method = config["aligner"],#minimap2 or ngmlr
         presets = config["presets"]#ont or pacbio
@@ -43,7 +47,7 @@ rule alignment:
 
 def find_alignment(wildcards):
     bam_input = f"intermediate_files/input/reads-{wildcards.sample_name}.bam"
-    if(os.path.is_file(bam_input)): return bam_input
+    if(os.path.isfile(bam_input)): return bam_input
     else: return f"intermediate_files/{wildcards.sample_name}.sam"
 rule sort_index_bam:
     input:
@@ -61,7 +65,7 @@ SV calling (Sniffles)
 rule detect_sv:
     input:
         bam = "intermediate_files/{sample_name}_sort.bam",
-        reference = "intermediate_files/input/reference-{sample_name}.f{asta_ref}"
+        reference = config["reference"]
     output:
         "intermediate_files/{sample_name}_{sv_detector}.vcf"
     params:
@@ -100,7 +104,7 @@ rule rm_vcf_redundancy:
 
 rule write_ins_seqs:
     input:
-        "intermediate_files/{sample_name}.vcf_parsed.tsv"
+        lambda wildcards: f"intermediate_files/{config['sample_name']}.vcf_parsed.tsv"
     output:
         "intermediate_files/{sample_name_plus}.vcf_ins.fasta"
     shell:
@@ -109,10 +113,11 @@ rule write_ins_seqs:
 '''1st stage
 Filter for TE insertion candidate (RepeatMasker)
 '''
+
 rule sv_repeatmask:
     input:
-        ins_seqs = lambda config: f"intermediate_files/{config['sample_name'].replace('+','plus')}.vcf_ins.fasta",
-        library = "intermediate_files/input/library-{sample_name}.f{asta_lib}"
+        ins_seqs = lambda wildcards: f"intermediate_files/{config['reads'].replace('+','plus')}.vcf_ins.fasta",
+        library = config["library"]
     output:
         "intermediate_files/vcf_ins_repeatmask/{ins_seqs}.out.gff"
     params:
@@ -142,8 +147,8 @@ rule sv_RM_merge:
 rule sv_TE_extract:
     input:
         parsed_vcf = "intermediate_files/{sample_name}.vcf_parsed.tsv",
-        ins_seqs = lambda config: f"intermediate_files/{config['sample_name'].replace('+','plus')}.vcf_ins.fasta",
-        ins_rm_merge = lambda config: f"intermediate_files/vcf_ins_repeatmask/{config['sample_name'].replace('+','plus')}.vcf_ins.fasta.out.merge.bed"
+        ins_seqs = lambda wildcards: f"intermediate_files/{config['sample_name'].replace('+','plus')}.vcf_ins.fasta",
+        ins_rm_merge = lambda wildcards: f"intermediate_files/vcf_ins_repeatmask/{config['sample_name'].replace('+','plus')}.vcf_ins.fasta.out.merge.bed"
     output:
         ins_filtered = "intermediate_files/{sample_name}.vcf.filtered.tmp.tsv",
         loci_eval = "{sample_name}.loci_eval.tsv"

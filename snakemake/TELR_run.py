@@ -15,15 +15,15 @@ def main():
         mkdir(if_verbose, config["tmp_dir"])
         mkdir(if_verbose, os.path.join(config["tmp_dir"], "input"))
         config["sample_name"] = os.path.splitext(os.path.basename(config["reads"]))[0]
+        config.update(process_input_files(
+            {"reads":config["reads"],
+            "reference":config["reference"],
+            "library":config["library"]},
+            config["sample_name"]
+            ))
         run_id = make_run_config(if_verbose, config)
     else: 
         run_id = sys.argv[1] #untested
-    process_input_files(
-        {"reads":config["reads"],
-         "reference":config["reference"],
-         "library":config["library"]},
-         config["sample_name"]
-         )
     run_workflow(config, run_id)
 
 def make_run_config(if_verbose, config):
@@ -58,6 +58,7 @@ def process_input_files(input_file_paths, sample_name):
         "library":[".fasta",".fastq",".fa",".fq"],
         "reference":[".fasta",".fastq",".fa",".fq"]
         }
+    new_paths = {}
     for file in ["reads","reference","library"]:
         try: open(input_file_paths[file], "r")
         except Exception as e:
@@ -69,15 +70,22 @@ def process_input_files(input_file_paths, sample_name):
                 logging.error("Input format not recognized")
                 sys.exit(1)
         else: 
-            symlink(input_file_paths[file], f"intermediate_files/input/{file}-{sample_name}{file_extension_of(file)}")
+            new_paths[file] = f"intermediate_files/input/{file}-{sample_name}{file_extension_of(file)}"
+            symlink(input_file_paths[file], new_paths[file])
+    if ".bam" in new_paths["reads"]: new_paths["fasta_reads"] = f"intermediate_files/input/reads-{sample_name}.fasta"
+    else: new_paths["fasta_reads"] = new_paths["reads"]
+    return new_paths
+        
 
-def symlink(input, output): #create a symbolic link at the output location referencing the input path.
-    if os.path.islink(output):
-        os.remove(output)
+def symlink(input_file, link): #create a symbolic link at the output location referencing the input path.
+    input_file = os.path.abspath(input_file)
+    #abspath needed because path for os.symlink is relative to output, not current directory.
+    if os.path.islink(link):
+        os.remove(link)
     try:
-        os.symlink(input, output)
+        os.symlink(input_file, link)
     except Exception:
-        logging.exception(f"Create symbolic link for {input} failed")
+        logging.exception(f"Create symbolic link for {input_file} failed")
         sys.exit(1)
 
 def mkdir(if_verbose, dir):
