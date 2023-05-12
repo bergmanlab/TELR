@@ -5,7 +5,7 @@ import pandas as pd
 import logging
 import time
 from Bio import SeqIO
-from telr.TELR_utility import mkdir, format_time, create_loci_set
+from TELR_utility import mkdir, format_time, create_loci_set, get_contig_name
 
 
 def detect_sv(
@@ -205,7 +205,7 @@ def te_extract(parsed_vcf, ins_seqs, ins_rm_merge, ins_filtered, loci_eval):
             entry = line.replace("\n", "").split("\t")
             # TODO: maybe add filter for insertion sequences covered by TE?
             if contig_name in ins_te_loci:
-                out_line = line.replace('\n', '') + f"\t{ins_te_loci[contig_name(entry)]}"
+                out_line = line.replace('\n', '') + f"\t{ins_te_loci[get_contig_name(entry)]}"
                 output.write(f"{out_line}\n")
                 
     with open(loci_eval, "a") as output:
@@ -217,11 +217,8 @@ def write_ins_seqs(parsed_vcf, out):
     with open(parsed_vcf, "r") as input, open(out, "w") as output:
         for line in input:
             entry = line.replace("\n", "").split("\t")
-            output.write(f">{contig_name(entry)}\n")
+            output.write(f">{get_contig_name(entry)}\n")
             output.write(f"{entry[7]}\n")
-
-def contig_name(tsv):
-    return "_".join([tsv[0], tsv[1], tsv[2]])
 
 def id_merge(strings):
     string_merged = ",".join(strings)

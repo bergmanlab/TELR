@@ -116,7 +116,7 @@ Filter for TE insertion candidate (RepeatMasker)
 
 rule sv_repeatmask:
     input:
-        ins_seqs = lambda wildcards: f"intermediate_files/{config['reads'].replace('+','plus')}.vcf_ins.fasta",
+        ins_seqs = lambda wildcards: f"intermediate_files/{config['sample_name'].replace('+','plus')}.vcf_ins.fasta",
         library = config["library"]
     output:
         "intermediate_files/vcf_ins_repeatmask/{ins_seqs}.out.gff"
