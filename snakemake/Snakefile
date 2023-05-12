@@ -2,7 +2,7 @@ import os
 
 rule all:
     input: 
-        "intermediate_files/reads.vcf_filtered.tsv"
+        "sv_reads/contig0"
         #"{sample_name}.loci_eval.tsv"
 
 def input_reads_if_in_bam_format(wildcards):
@@ -174,12 +174,57 @@ rule process_merge:
     shell:
         "python3 TELR_sv.py merge_vcf {input} {output}"
 
+rule sv_read_IDlist: # get a list of all the read IDs from the parsed vcf file
+    input:
+        "intermediate_files/{sample_name}.vcf_filtered.tsv"
+    output:
+        "{sample_name}.id"
+    shell:
+        "python3 TELR_assembly.py write_read_IDs {input} {output}"
+
+rule unique_IDlist: # get a list of unique IDs from the readlist
+    input:
+        "{sample_name}.id"
+    output:
+        "{sample_name}.id.unique"
+    shell:
+        "cat {input} | sort | uniq > {output}"
+
 """
 2nd stage: assembly and polish local TE contig
 """
 
+rule filter_readlist: # use seqtk to get the fasta reads from the input reads file
+    input:
+        "{sample_name}.id.unique"
+    output:
+        "{sample_name}.subset.fa"
+    shell:
+        "seqtk subseq {config[fasta_reads]} {input} | seqtk seq -a > {output}"
+
+rule reorder_reads: # 
+    input:
+        subset = "{sample_name}.subset.fa",
+        read_ids = "{sample_name}.id"
+    output:
+        "{sample_name}.subset.reorder.fa"
+    shell:
+        "python3 TELR_assembly.py extract_reads {input.subset} {input.read_ids} {output}"
+
+rule separate_read_files:
+    input:
+        vcf_parsed = lambda wildcards: f"intermediate_files/{config['sample_name']}.vcf_filtered.tsv",
+        subset = lambda wildcards: f"{config['sample_name']}.subset.reorder.fa"
+    output:
+        "sv_reads/contig0"
+    params:
+        reads_dir = "sv_reads"
+    shell:
+        "time python3 TELR_assembly.py separate_read_files {params.reads_dir} {input.vcf_parsed} {input.subset}"
+
+
 '''2nd stage
-Local condig assembly and polishing (wtdbg2/flye + minimap2)
+Local contig assembly and polishing (wtdbg2/flye + minimap2)
 '''
 
 """

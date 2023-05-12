@@ -7,7 +7,7 @@ import logging
 from Bio import SeqIO
 from multiprocessing import Pool
 import pysam
-from telr.TELR_utility import mkdir, check_exist, format_time
+from TELR_utility import mkdir, check_exist, format_time, get_contig_name
 
 
 def get_local_contigs(
@@ -44,7 +44,7 @@ def get_local_contigs(
     with open(vcf_parsed, "r") as input:
         for line in input:
             entry = line.replace("\n", "").split("\t")
-            contig_name = "_".join([entry[0], entry[1], entry[2]])
+            contig_name = get_contig_name(entry)
             # rename variant reads
             sv_reads = sv_reads_dir + "/contig" + str(k)
             sv_reads_rename = sv_reads_dir + "/" + contig_name + ".reads.fa"
@@ -365,83 +365,23 @@ def run_wtdbg2_assembly(sv_reads, asm_dir, contig_name, thread, presets):
     else:
         return None
 
+def write_read_IDs(vcf_parsed, read_ids):
+    with open(vcf_parsed, "r") as input, open(read_ids, "w") as output:
+        for line in input:
+            entry = line.replace("\n", "").split()#"\t"
+            read_list = entry[8].split(",")
+            for read in read_list:
+                output.write(read + "\n")
 
-def prep_assembly_inputs(
-    vcf_parsed, out, sample_name, bam, raw_reads, reads_dir, read_type="sv"
-):
-    """Prepare reads for local assembly"""
-    # logging.info("Prepare reads for local assembly")
-
-    if read_type == "sv":  # TODO: figure out what this does
-        # extract read IDs
-        read_ids = os.path.join(out, sample_name + ".id")
-        with open(vcf_parsed, "r") as input, open(read_ids, "w") as output:
-            for line in input:
-                entry = line.replace("\n", "").split("\t")
-                read_list = entry[8].split(",")
-                for read in read_list:
-                    output.write(read + "\n")
-    else:  # TODO: think about using this for assembly, filter for cigar reads
-        window = 1000
-        samfile = pysam.AlignmentFile(bam, "rb")
-        read_ids = os.path.join(out, sample_name + ".id")
-        vcf_parsed_new = vcf_parsed + ".new"
-        with open(vcf_parsed, "r") as input, open(read_ids, "w") as output, open(
-            vcf_parsed_new, "w"
-        ) as VCF:
-            for line in input:
-                entry = line.replace("\n", "").split("\t")
-
-                # get sniffles read list
-                read_list = entry[8].split(",")
-                reads_sniffles = set(read_list)
-
-                ins_chr = entry[0]
-                ins_breakpoint = round((int(entry[1]) + int(entry[2])) / 2)
-                start = ins_breakpoint - window
-                if start < 0:
-                    start = 0
-                end = ins_breakpoint + window
-                reads = set()
-                # coverage = 0
-                for read in samfile.fetch(ins_chr, start, end):
-                    reads.add(read.query_name)
-                for read in reads:
-                    output.write(read + "\n")
-
-                # write
-                out_line = line.replace("\n", "") + "\t" + str(len(reads))
-                VCF.write(out_line + "\n")
-                vcf_parsed = vcf_parsed_new
-
-    # generate unique ID list
-    read_ids_unique = read_ids + ".unique"
-    command = "cat " + read_ids + " | sort | uniq"
-    with open(read_ids_unique, "w") as output:
-        subprocess.call(command, stdout=output, shell=True)
-
-    # filter raw reads using read list
-    subset_fa = os.path.join(out, sample_name + ".subset.fa")
-    command = "seqtk subseq " + raw_reads + " " + read_ids_unique + " | seqtk seq -a"
-    with open(subset_fa, "w") as output:
-        subprocess.call(command, stdout=output, shell=True)
-
-    # reorder reads
-    subset_fa_reorder = out + "/" + sample_name + ".subset.reorder.fa"
-    extract_reads(subset_fa, read_ids, subset_fa_reorder)
-
-    # separate reads into multiple files, using csplit
+def separate_read_files(reads_dir, vcf_parsed, subset_fa_reorder):
     mkdir(reads_dir)
     csplit_prefix = reads_dir + "/contig"
     m = []
     k = 1
     with open(vcf_parsed, "r") as input:
         for line in input:
-            entry = line.replace("\n", "").split("\t")
-            if read_type == "sv":
-                k = k + 2 * (len(entry[8].split(",")))
-            else:
-                k = k + 2 * int(entry[14])
+            entry = line.replace("\n", "").split()#"\t"
+            k = k + 2 * (len(entry[8].split(",")))
             m.append(k)
     if len(m) == 1:
         subprocess.call(["cp", subset_fa_reorder, reads_dir + "/contig0"])
@@ -450,17 +390,8 @@ def prep_assembly_inputs(
     else:
         m = m[:-1]
         index = " ".join(str(i) for i in m)
-        command = (
-            "csplit -s -f " + csplit_prefix + " -n 1 " + subset_fa_reorder + " " + index
-        )
+        command = f"csplit -s -f {csplit_prefix} -n 1 {subset_fa_reorder} {index}"
         subprocess.call(command, shell=True)
-
-    # remove tmp files
-    os.remove(read_ids)
-    os.remove(read_ids_unique)
-    os.remove(subset_fa)
-    os.remove(subset_fa_reorder)
-
 
 def extract_reads(reads, list, out):
     """Extract reads from fasta using read ID list"""
@@ -469,3 +400,7 @@ def extract_reads(reads, list, out):
         for entry in ID:
             entry = entry.replace("\n", "")
             output_handle.write(record_dict.get_raw(entry))
+
+
+if __name__ == '__main__':
+    globals()[sys.argv[1]](*sys.argv[2:])

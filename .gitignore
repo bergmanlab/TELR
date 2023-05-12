@@ -33,3 +33,5 @@ snakemake/snakemake/
 snakemake/input/
 snakemake/intermediate_files/
 snakemake/envs/
+snakemake/*ignore*
+snakemake/sv_reads
