@@ -1,8 +1,9 @@
 import os
+import subprocess
 
 rule all:
     input: 
-        "sv_reads/contig0"
+        "reads.contigs.fa"
         #"{sample_name}.loci_eval.tsv"
 
 def input_reads_if_in_bam_format(wildcards):
@@ -166,7 +167,7 @@ rule seq_merge:
     shell:
         'bedtools merge -o collapse -c 2,3,4,5,6,7,8,9,10,11,12,13,14 -delim ";" -d {params.window} -i {input} > {output}'
 
-rule process_merge:
+checkpoint merge_parsed_vcf:
     input:
         "intermediate_files/{sample_name}.vcf.merged.tmp.tsv"
     output:
@@ -202,7 +203,7 @@ rule filter_readlist: # use seqtk to get the fasta reads from the input reads fi
     shell:
         "seqtk subseq {config[fasta_reads]} {input} | seqtk seq -a > {output}"
 
-rule reorder_reads: # 
+rule reorder_reads: # this is wher eI am replacing
     input:
         subset = "{sample_name}.subset.fa",
         read_ids = "{sample_name}.id"
@@ -221,6 +222,72 @@ rule separate_read_files:
         reads_dir = "sv_reads"
     shell:
         "time python3 TELR_assembly.py separate_read_files {params.reads_dir} {input.vcf_parsed} {input.subset}"
+
+def all_contigs(wildcards):
+    vcf_parsed_file = checkpoints.merge_parsed_vcf.get().output[0]
+    with open(vcf_parsed_file) as vcf_parsed:
+        contig_filenames = []
+        for line in vcf_parsed:
+            contig_name = "_".join(line.split("\t")[:3])
+            contig_filenames.append(f"intermediate_files/contig_assembly/{contig_name}.cns.ctg1.fa")
+        return contig_filenames
+rule make_contig_file:
+    input:
+        vcf_parsed = lambda wildcards: f"intermediate_files/{config['sample_name']}.vcf_filtered.tsv",
+        reads = "{sample_name}.subset.fa"
+    output:
+        "sv_reads/{contig}.reads.fa"
+    shell:
+        "python3 TELR_assembly.py make_contig_file {input.vcf_parsed} {wildcards.contig} {output} {input.reads}"
+
+rule run_assembly:
+    input:
+        "sv_reads/{contig}.reads.fa"
+    output:
+        "intermediate_files/contig_assembly/{contig}_initial.cns.fa"
+    params:
+        asm_dir = "intermediate_files/contig_assembly"
+    threads: 1
+    shell:
+        "python3 TELR_assembly.py run_{config[assembler]}_assembly {input} {params.asm_dir} {wildcards.contig} {threads} {config[presets]} || touch {output}"
+
+rule run_polishing:
+    input:
+        reads = "sv_reads/{contig}.reads.fa",
+        initial_assembly = "intermediate_files/contig_assembly/{contig}_initial.cns.fa"
+    output:
+        "intermediate_files/contig_assembly/{contig}.cns.fa"
+    params:
+        asm_dir = "intermediate_files/contig_assembly"
+    threads: 1
+    shell:
+        "python3 TELR_assembly.py run_{config[polisher]}_polishing {input.initial_assembly} {output} {input.reads} {params.asm_dir} {wildcards.contig} {threads} {config[polish_iterations]} {config[presets]} || touch {output}"
+
+rule get_parsed_contigs:
+    input:
+        "intermediate_files/contig_assembly/{contig}.cns.fa"
+    output:
+        "intermediate_files/contig_assembly/{contig}.cns.ctg1.fa"
+    shell:
+        "python3 TELR_assembly.py parse_assembled_contig {input} {output} || touch {output}"
+
+def parsed_contigs(wildcards):
+    checkpoints.get_parsed_contigs.get()
+    parsed_contig_files = subprocess.run("ls -d *.ctg1.fa", shell=True, capture_output=True, text=True)
+    return parsed_contig_files.stdout.split("\n")
+rule merged_contigs:
+    input:
+        wild_in = lambda wildcards: f"intermediate_files/{config['sample_name']}.vcf_filtered.tsv",
+        contigs = all_contigs
+    output:
+        "{sample_name}.contigs.fa"
+    params:
+        asm_dir = "intermediate_files/contig_assembly"
+    shell:
+        """
+        cat {input.contigs} > {output}
+        find {params.asm_dir} -type f -empty -delete
+        """
 
 
 '''2nd stage

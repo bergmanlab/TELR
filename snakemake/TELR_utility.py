@@ -13,16 +13,18 @@ def get_contig_name(tsv):
     return "_".join([tsv[0], tsv[1], tsv[2]])
 
 
-def mkdir(dir):
+def mkdir(dir, verbose = True):
     if os.path.isdir(dir):
-        print("Directory %s exists" % dir)
+        if verbose:
+            print(f"Directory {dir} exists")
         return
     try:
         os.mkdir(dir)
     except OSError:
-        print("Creation of the directory %s failed" % dir)
+        print(f"Creation of the directory {dir} failed")
     else:
-        print("Successfully created the directory %s " % dir)
+        if verbose:
+            print(f"Successfully created the directory {dir}")
 
 
 def check_exist(file):

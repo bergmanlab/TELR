@@ -79,74 +79,21 @@ def get_local_contigs(
     proc_time = time.time() - start_time
 
     # merge all contigs
-    assembly_passed_loci = set()
-    merged_contigs = os.path.join(out, sample_name + ".contigs.fa")
-    with open(merged_contigs, "w") as merged_output_handle:
-        for contig in contig_list:
-            if check_exist(contig):
-                contig_name = os.path.basename(contig).replace(".cns.fa", "")
-                assembly_passed_loci.add(contig_name)
-                parsed_contig = os.path.join(contig_dir, contig_name + ".cns.ctg1.fa")
-                with open(contig, "r") as input:
-                    records = SeqIO.parse(input, "fasta")
-                    for record in records:
-                        if record.id == "ctg1" or record.id == "contig_1":
-                            record.id = contig_name
-                            record.description = "len=" + str(len(record.seq))
-                            SeqIO.write(record, merged_output_handle, "fasta")
-                            with open(parsed_contig, "w") as parsed_output_handle:
-                                SeqIO.write(record, parsed_output_handle, "fasta")
 
-    logging.info("Local assembly finished in " + format_time(proc_time))
-    return merged_contigs, assembly_passed_loci
+def parse_assembled_contig(input_contig, parsed_contig):
+    if check_exist(input_contig):
+        contig_name = os.path.basename(contig).replace(".cns.fa", "")
+        with open(input_contig, "r") as input, open(parsed_contig, "w") as parsed_output_handle:
+            records = SeqIO.parse(input, "fasta")
+                for record in records:
+                    if record.id == "ctg1" or record.id == "contig_1":
+                        record.id = contig_name
+                        record.description = "len=" + str(len(record.seq))
+                        SeqIO.write(record, parsed_output_handle, "fasta")
 
-
-def run_assembly_polishing(args):
-    reads = args[0]
-    asm_dir = args[1]
-    contig_name = args[2]
-    thread = args[3]
-    presets = args[4]
-    assembler = args[5]
-    polisher = args[6]
-    polish_iterations = args[7]
-
-    # run assembly
-    if assembler == "wtdbg2":
-        asm_cns = run_wtdbg2_assembly(reads, asm_dir, contig_name, thread, presets)
-    else:
-        asm_cns = run_flye_assembly(reads, asm_dir, contig_name, thread, presets)
-
-    if not check_exist(asm_cns):
-        print("assembly failed")
-        return None
-
-    # run polishing
-    if polish_iterations > 0:
-        if polisher == "wtdbg2":
-            asm_cns = run_wtdbg2_polishing(
-                asm_cns, reads, thread, polish_iterations, presets
-            )
-        else:
-            asm_cns = run_flye_polishing(
-                asm_cns, reads, asm_dir, contig_name, thread, polish_iterations, presets
-            )
-
-    if check_exist(asm_cns):
-        return asm_cns
-    else:
-        return None
-
-
-def run_flye_polishing(
-    asm_cns, reads, asm_dir, contig_name, thread, polish_iterations, presets
-):
+def run_flye_polishing(initial_assembly, assembled_consensus, reads, asm_dir, contig_name, thread, polish_iterations, presets):
     """Run Flye polishing"""
-    if presets == "pacbio":
-        presets_flye = "--pacbio-raw"
-    else:
-        presets_flye = "--nano-raw"
-
+    presets_flye = {"pacbio":"--pacbio-raw","ont":"--nano-raw"}[presets]
     tmp_out_dir = os.path.join(asm_dir, contig_name)
     mkdir(tmp_out_dir)
     try:
@@ -154,7 +101,7 @@ def run_flye_polishing(
             [
                 "flye",
                 "--polish-target",
-                asm_cns,
+                initial_assembly,
                 presets_flye,
                 reads,
                 "--out-dir",
@@ -168,48 +115,29 @@ def run_flye_polishing(
     except Exception as e:
         print(e)
         print("Polishing failed, exiting...")
-        return None
+        sys.exit(1)
 
     # rename contig file
-    polished_contig = os.path.join(
-        tmp_out_dir, "polished_" + str(polish_iterations) + ".fasta"
-    )
+    polished_contig = os.path.join(tmp_out_dir, f"polished_{polish_iterations}.fasta")
     if check_exist(polished_contig):
-        os.rename(polished_contig, asm_cns)
+        os.rename(polished_contig, assembled_consensus)
         shutil.rmtree(tmp_out_dir)
-        return asm_cns
+        sys.exit(0)
     else:
-        return None
+        sys.exit(1)
 
 
-def run_wtdbg2_polishing(asm_cns, reads, threads, polish_iterations, presets):
+def run_wtdbg2_polishing(initial_assembly, assembled_consensus, reads, asm_dir, contig_name, threads, polish_iterations, presets):
     """Run wtdbg2 polishing"""
-    if presets == "pacbio":
-        presets_minimap2 = "map-pb"
-    else:
-        presets_minimap2 = "map-ont"
+    presets_minimap2 = {"pacbio":"map-pb","ont":"map-ont"}[presets]
 
     # polish consensus
-    threads = str(min(threads, 4))
-    bam = asm_cns + ".bam"
-    k = 0
+    threads = str(min(int(threads), 4))
+    bam = f"{initial_assembly}.bam"
+    iteration = 0
     while True:
         # align reads to contigs
-
-        command = (
-            "minimap2 -t "
-            + threads
-            + " -ax "
-            + presets_minimap2
-            + " -r2k "
-            + asm_cns
-            + " "
-            + reads
-            + " | samtools sort -@"
-            + threads
-            + " > "
-            + bam
-        )
+        command = f"minimap2 -t {threads} -ax {presets_minimap2} -r2k {initial_assembly} {reads} | samtools sort -@{threads} > {bam}"
         try:
             subprocess.run(
                 command,
@@ -219,21 +147,12 @@ def run_wtdbg2_polishing(asm_cns, reads, threads, polish_iterations, presets):
                 stderr=subprocess.STDOUT,
             )
         except subprocess.TimeoutExpired:
-            print("fail to map reads to contig: " + asm_cns)
-            return
+            print(f"fail to map reads to contig: {initial_assembly}")
+            sys.exit(1)
 
         # run wtpoa-cns to get polished contig
-        cns_tmp = asm_cns + ".tmp"
-        command = (
-            "samtools view -F0x900 "
-            + bam
-            + " | wtpoa-cns -t "
-            + threads
-            + " -d "
-            + asm_cns
-            + " -i - -fo "
-            + cns_tmp
-        )
+        cns_tmp = f"{initial_assembly}.tmp"
+        command = f"samtools view -F0x900 {bam} | wtpoa-cns -t {threads} -d {initial_assembly} -i - -fo {cns_tmp}"
         try:
             subprocess.run(
                 command,
@@ -243,29 +162,27 @@ def run_wtdbg2_polishing(asm_cns, reads, threads, polish_iterations, presets):
                 stderr=subprocess.STDOUT,
             )
         except subprocess.TimeoutExpired:
-            print("fail to polish contig: " + asm_cns)
-            return
+            print(f"fail to polish contig: {initial_assembly}")
+            sys.exit(1)
         if check_exist(cns_tmp):
-            os.rename(cns_tmp, asm_cns)
+            os.rename(cns_tmp, assembled_consensus)
             os.remove(bam)
         else:
             break
-        k = k + 1
-        if k >= polish_iterations:
+        iteration = iteration + 1
+        if iteration >= polish_iterations:
             break
-    if check_exist(asm_cns):
-        return asm_cns
+    if check_exist(assembled_consensus):
+        sys.exit(0)
     else:
-        print("polishing failed for " + asm_cns + "\n")
-    return None
+        print(f"polishing failed for {initial_assembly}\n")
+        sys.exit(1)
 
 
 def run_flye_assembly(sv_reads, asm_dir, contig_name, thread, presets):
+    mkdir(asm_dir, verbose = False)
     """Run Flye assembly"""
-    if presets == "pacbio":
-        presets_flye = "--pacbio-raw"
-    else:
-        presets_flye = "--nano-raw"
+    presets_flye = {"pacbio":"--pacbio-raw","ont":"--nano-raw"}[presets]
 
     tmp_out_dir = os.path.join(asm_dir, contig_name)
     mkdir(tmp_out_dir)
@@ -286,26 +203,24 @@ def run_flye_assembly(sv_reads, asm_dir, contig_name, thread, presets):
     except Exception as e:
         print(e)
         print("Assembly failed, exiting...")
-        return
+        sys.exit(1)
     # rename contigs
     contig_path = os.path.join(tmp_out_dir, "assembly.fasta")
-    contig_path_new = os.path.join(asm_dir, contig_name + ".cns.fa")
+    contig_path_new = os.path.join(asm_dir, f"{contig_name}_initial.cns.fa")
     if check_exist(contig_path):
         os.rename(contig_path, contig_path_new)
         # remove tmp files
         shutil.rmtree(tmp_out_dir)
-        return contig_path_new
+        sys.exit(0)
     else:
         print("assembly failed")
-        return None
+        sys.exit(1)
 
 
 def run_wtdbg2_assembly(sv_reads, asm_dir, contig_name, thread, presets):
+    mkdir(asm_dir, verbose = False)
     """Run wtdbg2 assembly"""
-    if presets == "pacbio":
-        presets_wtdbg2 = "rs"
-    else:
-        presets_wtdbg2 = "ont"
+    presets_wtdbg2 = {"pacbio":"rs","ont":"ont"}[presets]
     prefix = sv_reads.replace(".reads.fa", "")
     try:
         subprocess.run(
@@ -328,18 +243,18 @@ def run_wtdbg2_assembly(sv_reads, asm_dir, contig_name, thread, presets):
             timeout=300,
         )
     except subprocess.TimeoutExpired:
-        print("fail to build contig layout for contig: " + contig_name)
-        return
+        print(f"fail to build contig layout for contig: {contig_name}")
+        sys.exit(1)
     except Exception as e:
         print(e)
         print("wtdbg2 failed, exiting...")
-        return None
+        sys.exit(1)
 
     # derive consensus
-    contig_layout = prefix + ".ctg.lay.gz"
+    contig_layout = f"{prefix}.ctg.lay.gz"
     if check_exist(contig_layout):
-        cns_thread = str(min(thread, 4))
-        consensus = prefix + ".cns.fa"
+        cns_thread = str(min(int(thread), 4))
+        consensus = f"{prefix}.cns.fa"
         try:
             subprocess.run(
                 [
@@ -355,20 +270,20 @@ def run_wtdbg2_assembly(sv_reads, asm_dir, contig_name, thread, presets):
                 timeout=300,
             )
         except subprocess.TimeoutExpired:
-            print("fail to assemble contig: " + contig_name)
-            return None
+            print(f"fail to assemble contig: {contig_name}")
+        sys.exit(1)
 
     if check_exist(consensus):
-        consensus_rename = os.path.join(asm_dir, contig_name + ".cns.fa")
+        consensus_rename = os.path.join(asm_dir, f"{contig_name}_initial.cns.fa")
         os.rename(consensus, consensus_rename)
-        return consensus_rename
+        sys.exit(0)
     else:
-        return None
+        sys.exit(1)
 
 def write_read_IDs(vcf_parsed, read_ids):
     with open(vcf_parsed, "r") as input, open(read_ids, "w") as output:
         for line in input:
-            entry = line.replace("\n", "").split()#"\t"
+            entry = line.replace("\n", "").split("\t")
             read_list = entry[8].split(",")
             for read in read_list:
                 output.write(read + "\n")
@@ -380,7 +295,7 @@ def separate_read_files(reads_dir, vcf_parsed, subset_fa_reorder):
     k = 1
     with open(vcf_parsed, "r") as input:
         for line in input:
-            entry = line.replace("\n", "").split()#"\t"
+            entry = line.replace("\n", "").split("\t")
             k = k + 2 * (len(entry[8].split(",")))
             m.append(k)
     if len(m) == 1:
@@ -393,13 +308,26 @@ def separate_read_files(reads_dir, vcf_parsed, subset_fa_reorder):
         command = f"csplit -s -f {csplit_prefix} -n 1 {subset_fa_reorder} {index}"
         subprocess.call(command, shell=True)
 
-def extract_reads(reads, list, out):
+def extract_reads(reads, id_list, out):
     """Extract reads from fasta using read ID list"""
     record_dict = SeqIO.index(reads, "fasta")
-    with open(out, "wb") as output_handle, open(list, "r") as ID:
+    if type(id_list) is list:
+        ID = id_list
+    else:
+        ID = open(id_list, "r")
+    with open(out, "wb") as output_handle:
         for entry in ID:
             entry = entry.replace("\n", "")
             output_handle.write(record_dict.get_raw(entry))
+
+def make_contig_file(vcf_parsed, contig_name, contig_file, reads):
+    mkdir(os.path.split(contig_file)[0], verbose = False)
+    contig_name = contig_name.split("_")
+    contig_name = f"{'_'.join(contig_name)[:-2]}\t{contig_name[-2]}\t{contig_name[-1]}"
+    with open(vcf_parsed, "r") as input:
+        sequences = set([i for i in input if contig_name in i][0].split("\t")[8].split(",")) # get all of the read names for the matching contig
+    extract_reads(reads, sequences, contig_file)
+
 
 
 if __name__ == '__main__':

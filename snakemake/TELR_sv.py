@@ -203,9 +203,10 @@ def te_extract(parsed_vcf, ins_seqs, ins_rm_merge, ins_filtered, loci_eval):
     with open(parsed_vcf, "r") as input, open(ins_filtered, "w") as output:
         for line in input:
             entry = line.replace("\n", "").split("\t")
+            contig_name = get_contig_name(entry)
             # TODO: maybe add filter for insertion sequences covered by TE?
             if contig_name in ins_te_loci:
-                out_line = line.replace('\n', '') + f"\t{ins_te_loci[get_contig_name(entry)]}"
+                out_line = line.replace('\n', '') + f"\t{ins_te_loci[contig_name]}"
                 output.write(f"{out_line}\n")
                 
     with open(loci_eval, "a") as output:
