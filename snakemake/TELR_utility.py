@@ -78,7 +78,6 @@ def get_rev_comp_sequence(fasta_in, fasta_out):
                 ">" + record.id + "\n" + str(record.seq.reverse_complement()) + "\n"
             )
 
-
 def export_env(file):
     """export conda environment"""
     file_tmp = file + ".tmp"
@@ -93,3 +92,13 @@ def export_env(file):
             ):
                 output.write(line)
     os.remove(file_tmp)
+
+def read_vcf(vcf_file, contig_name = False, column = 8):
+    if contig_name is False:
+        pass #add functionality later if needed
+    else:
+        contig_name = contig_name.split("_")
+        contig_name = f"{'_'.join(contig_name[:-2])}\t{contig_name[-2]}\t{contig_name[-1]}"
+        with open(vcf_file, "r") as input:
+            matching_row = [i for i in input if contig_name in i][0].split("\t")
+        return matching_row[column]

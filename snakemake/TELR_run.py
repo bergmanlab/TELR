@@ -46,7 +46,8 @@ def run_workflow(config, run_id):
     command = [
         "snakemake", #"--use-conda",#"--conda-prefix",f"{telr_dir}/envs",
         "--configfile", f"{os.path.join(config['out'], 'snakemake')}/config/config_{run_id}.json",
-        "--cores", str(config["thread"])#, "--quiet"
+        "--cores", str(config["thread"]),# "--quiet"
+        #"--unlock"
     ]
     subprocess.call(command)
 

@@ -7,7 +7,7 @@ import logging
 from Bio import SeqIO
 from multiprocessing import Pool
 import pysam
-from TELR_utility import mkdir, check_exist, format_time, get_contig_name
+from TELR_utility import mkdir, check_exist, format_time, get_contig_name, read_vcf
 
 
 def parse_assembled_contig(input_contig, parsed_contig):
@@ -216,26 +216,6 @@ def write_read_IDs(vcf_parsed, read_ids):
             for read in read_list:
                 output.write(read + "\n")
 
-def separate_read_files(reads_dir, vcf_parsed, subset_fa_reorder):
-    mkdir(reads_dir)
-    csplit_prefix = reads_dir + "/contig"
-    m = []
-    k = 1
-    with open(vcf_parsed, "r") as input:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
-            k = k + 2 * (len(entry[8].split(",")))
-            m.append(k)
-    if len(m) == 1:
-        subprocess.call(["cp", subset_fa_reorder, reads_dir + "/contig0"])
-    elif len(m) == 0:
-        print("No insertion detected, exiting...")
-    else:
-        m = m[:-1]
-        index = " ".join(str(i) for i in m)
-        command = f"csplit -s -f {csplit_prefix} -n 1 {subset_fa_reorder} {index}"
-        subprocess.call(command, shell=True)
-
 def extract_reads(reads, id_list, out):
     """Extract reads from fasta using read ID list"""
     record_dict = SeqIO.index(reads, "fasta")
@@ -250,11 +230,8 @@ def extract_reads(reads, id_list, out):
 
 def make_contig_file(vcf_parsed, contig_name, contig_file, reads):
     mkdir(os.path.split(contig_file)[0], verbose = False)
-    contig_name = contig_name.split("_")
-    contig_name = f"{'_'.join(contig_name[:-2])}\t{contig_name[-2]}\t{contig_name[-1]}"
-    with open(vcf_parsed, "r") as input:
-        sequences = [i for i in input if contig_name in i]
-        sequences = set(sequences[0].split("\t")[8].split(",")) # get all of the read names for the matching contig
+    # get all of the read names for the matching contig
+    sequences = set(read_vcf(vcf_parsed, contig_name, column=8).split(","))
     extract_reads(reads, sequences, contig_file)
 
 

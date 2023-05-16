@@ -7,16 +7,37 @@ import logging
 import time
 import statistics
 from multiprocessing import Pool
-from telr.TELR_utility import (
+from TELR_utility import (
     check_exist,
     mkdir,
     format_time,
     get_cmd_output,
     get_rev_comp_sequence,
+    get_contig_name,
+    read_vcf
 )
-from telr.TELR_liftover import liftover
-from telr.TELR_assembly import prep_assembly_inputs
+#from telr.TELR_liftover import liftover
+#from telr.TELR_assembly import prep_assembly_inputs
 
+def get_vcf_seq(contig, vcf_parsed, sequence_file):
+    sequence = read_vcf(vcf_parsed, contig, column=7)
+    with open(sequence_file, "w") as output:
+        output.write(f">{contig}\n")
+        output.write(sequence)
+
+def try_minimap2(subject, query, presets):
+    minimap2_presets = {"pacbio":"map-pb","ont":"map-ont"}[presets]
+    cmd = [
+        "minimap2",
+        "-cx",
+        minimap2_presets,
+        "--secondary=no",
+        "-v",
+        "0",
+        subject,
+        query,
+    ]
+    print(get_cmd_output(cmd))
 
 def annotate_contig(
     contigs,
@@ -31,10 +52,7 @@ def annotate_contig(
     loci_eval,
 ):
     logging.info("Annotate contigs...")
-    if presets == "pacbio":
-        minimap2_presets = "map-pb"
-    else:
-        minimap2_presets = "map-ont"
+    minimap2_presets = {"pacbio":"map-pb","ont":"map-ont"}[presets]
 
     # map sequence to contigs
     vcf_seq2contig_out = os.path.join(out, "seq2contig.paf")
@@ -48,7 +66,7 @@ def annotate_contig(
     with open(vcf_parsed, "r") as input, open(vcf_seq2contig_out, "w") as output:
         for line in input:
             entry = line.replace("\n", "").split("\t")
-            contig_name = "_".join([entry[0], entry[1], entry[2]])
+            contig_name = get_contig_name
             if contig_name in assembly_passed_loci:
                 vcf_seq = entry[7]
                 query = os.path.join(vcf_seq2contig_dir, contig_name + ".seq.fa")
@@ -931,3 +949,7 @@ def create_fa(header, seq, out):
     with open(out, "w") as output:
         output.write(">" + header + "\n")
         output.write(seq)
+
+
+if __name__ == '__main__':
+    globals()[sys.argv[1]](*sys.argv[2:])
