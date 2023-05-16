@@ -85,11 +85,11 @@ def parse_assembled_contig(input_contig, parsed_contig):
         contig_name = os.path.basename(contig).replace(".cns.fa", "")
         with open(input_contig, "r") as input, open(parsed_contig, "w") as parsed_output_handle:
             records = SeqIO.parse(input, "fasta")
-                for record in records:
-                    if record.id == "ctg1" or record.id == "contig_1":
-                        record.id = contig_name
-                        record.description = "len=" + str(len(record.seq))
-                        SeqIO.write(record, parsed_output_handle, "fasta")
+            for record in records:
+                if record.id == "ctg1" or record.id == "contig_1":
+                    record.id = contig_name
+                    record.description = "len=" + str(len(record.seq))
+                    SeqIO.write(record, parsed_output_handle, "fasta")
 
 def run_flye_polishing(initial_assembly, assembled_consensus, reads, asm_dir, contig_name, thread, polish_iterations, presets):
     """Run Flye polishing"""
@@ -179,7 +179,7 @@ def run_wtdbg2_polishing(initial_assembly, assembled_consensus, reads, asm_dir, 
         sys.exit(1)
 
 
-def run_flye_assembly(sv_reads, asm_dir, contig_name, thread, presets):
+def run_flye_assembly(sv_reads, asm_dir, contig_name, thread, presets, output):
     mkdir(asm_dir, verbose = False)
     """Run Flye assembly"""
     presets_flye = {"pacbio":"--pacbio-raw","ont":"--nano-raw"}[presets]
@@ -206,9 +206,8 @@ def run_flye_assembly(sv_reads, asm_dir, contig_name, thread, presets):
         sys.exit(1)
     # rename contigs
     contig_path = os.path.join(tmp_out_dir, "assembly.fasta")
-    contig_path_new = os.path.join(asm_dir, f"{contig_name}_initial.cns.fa")
     if check_exist(contig_path):
-        os.rename(contig_path, contig_path_new)
+        os.rename(contig_path, output)
         # remove tmp files
         shutil.rmtree(tmp_out_dir)
         sys.exit(0)
@@ -217,7 +216,7 @@ def run_flye_assembly(sv_reads, asm_dir, contig_name, thread, presets):
         sys.exit(1)
 
 
-def run_wtdbg2_assembly(sv_reads, asm_dir, contig_name, thread, presets):
+def run_wtdbg2_assembly(sv_reads, asm_dir, contig_name, thread, presets, output):
     mkdir(asm_dir, verbose = False)
     """Run wtdbg2 assembly"""
     presets_wtdbg2 = {"pacbio":"rs","ont":"ont"}[presets]
@@ -271,11 +270,11 @@ def run_wtdbg2_assembly(sv_reads, asm_dir, contig_name, thread, presets):
             )
         except subprocess.TimeoutExpired:
             print(f"fail to assemble contig: {contig_name}")
-        sys.exit(1)
+            sys.exit(1)
 
+    print(output)
     if check_exist(consensus):
-        consensus_rename = os.path.join(asm_dir, f"{contig_name}_initial.cns.fa")
-        os.rename(consensus, consensus_rename)
+        os.rename(consensus, output)
         sys.exit(0)
     else:
         sys.exit(1)
@@ -311,7 +310,7 @@ def separate_read_files(reads_dir, vcf_parsed, subset_fa_reorder):
 def extract_reads(reads, id_list, out):
     """Extract reads from fasta using read ID list"""
     record_dict = SeqIO.index(reads, "fasta")
-    if type(id_list) is list:
+    if type(id_list) in [list, set]:
         ID = id_list
     else:
         ID = open(id_list, "r")
@@ -321,11 +320,13 @@ def extract_reads(reads, id_list, out):
             output_handle.write(record_dict.get_raw(entry))
 
 def make_contig_file(vcf_parsed, contig_name, contig_file, reads):
+    print(os.path.split(contig_file)[0])
     mkdir(os.path.split(contig_file)[0], verbose = False)
     contig_name = contig_name.split("_")
-    contig_name = f"{'_'.join(contig_name)[:-2]}\t{contig_name[-2]}\t{contig_name[-1]}"
+    contig_name = f"{'_'.join(contig_name[:-2])}\t{contig_name[-2]}\t{contig_name[-1]}"
     with open(vcf_parsed, "r") as input:
-        sequences = set([i for i in input if contig_name in i][0].split("\t")[8].split(",")) # get all of the read names for the matching contig
+        sequences = [i for i in input if contig_name in i]
+        sequences = set(sequences[0].split("\t")[8].split(",")) # get all of the read names for the matching contig
     extract_reads(reads, sequences, contig_file)
 
 
