@@ -10,79 +10,9 @@ import pysam
 from TELR_utility import mkdir, check_exist, format_time, get_contig_name
 
 
-def get_local_contigs(
-    assembler,
-    polisher,
-    contig_dir,
-    vcf_parsed,
-    out,
-    sample_name,
-    bam,
-    raw_reads,
-    thread,
-    presets,
-    polish_iterations,
-):
-    """Perform local assembly using reads from parsed VCF file in parallel"""
-
-    # Prepare reads used for local assembly and polishing
-    sv_reads_dir = os.path.join(out, "sv_reads")
-
-    try:
-        prep_assembly_inputs(
-            vcf_parsed, out, sample_name, bam, raw_reads, sv_reads_dir, read_type="sv"
-        )
-    except Exception as e:
-        print(e)
-        print("Prepare local assembly input data failed, exiting...")
-        sys.exit(1)
-
-    mkdir(contig_dir)
-
-    k = 0
-    asm_pa_list = []
-    with open(vcf_parsed, "r") as input:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
-            contig_name = get_contig_name(entry)
-            # rename variant reads
-            sv_reads = sv_reads_dir + "/contig" + str(k)
-            sv_reads_rename = sv_reads_dir + "/" + contig_name + ".reads.fa"
-            os.rename(sv_reads, sv_reads_rename)
-            thread_asm = 1
-            asm_pa = [
-                sv_reads_rename,
-                contig_dir,
-                contig_name,
-                thread_asm,
-                presets,
-                assembler,
-                polisher,
-                polish_iterations,
-            ]
-            asm_pa_list.append(asm_pa)
-            k = k + 1
-    # run assembly in parallel
-    logging.info("Perform local assembly of non-reference TE loci...")
-    start_time = time.time()
-
-    try:
-        pool = Pool(processes=thread)
-        contig_list = pool.map(run_assembly_polishing, asm_pa_list)
-        pool.close()
-        pool.join()
-    except Exception as e:
-        print(e)
-        print("Local assembly failed, exiting...")
-        sys.exit(1)
-
-    proc_time = time.time() - start_time
-
-    # merge all contigs
-
 def parse_assembled_contig(input_contig, parsed_contig):
     if check_exist(input_contig):
-        contig_name = os.path.basename(contig).replace(".cns.fa", "")
+        contig_name = os.path.basename(input_contig).replace(".cns.fa", "")
         with open(input_contig, "r") as input, open(parsed_contig, "w") as parsed_output_handle:
             records = SeqIO.parse(input, "fasta")
             for record in records:
@@ -130,7 +60,7 @@ def run_flye_polishing(initial_assembly, assembled_consensus, reads, asm_dir, co
 def run_wtdbg2_polishing(initial_assembly, assembled_consensus, reads, asm_dir, contig_name, threads, polish_iterations, presets):
     """Run wtdbg2 polishing"""
     presets_minimap2 = {"pacbio":"map-pb","ont":"map-ont"}[presets]
-
+    polish_iterations = int(polish_iterations)
     # polish consensus
     threads = str(min(int(threads), 4))
     bam = f"{initial_assembly}.bam"
@@ -272,7 +202,6 @@ def run_wtdbg2_assembly(sv_reads, asm_dir, contig_name, thread, presets, output)
             print(f"fail to assemble contig: {contig_name}")
             sys.exit(1)
 
-    print(output)
     if check_exist(consensus):
         os.rename(consensus, output)
         sys.exit(0)
@@ -320,7 +249,6 @@ def extract_reads(reads, id_list, out):
             output_handle.write(record_dict.get_raw(entry))
 
 def make_contig_file(vcf_parsed, contig_name, contig_file, reads):
-    print(os.path.split(contig_file)[0])
     mkdir(os.path.split(contig_file)[0], verbose = False)
     contig_name = contig_name.split("_")
     contig_name = f"{'_'.join(contig_name[:-2])}\t{contig_name[-2]}\t{contig_name[-1]}"
