@@ -3,8 +3,8 @@ import subprocess
 
 rule all:
     input: 
-        "big_reads_ignore.contigs.fa",
-        "intermediate_files/big_reads_ignore.vcf_filtered.tsv"
+        "intermediate_files/chr2L_33030_33030.te2contig_filter.tsv",
+        lambda wildcards: f"intermediate_files/{config['sample_name']}.vcf_filtered.tsv"
         #"{sample_name}.loci_eval.tsv"
 
 def input_reads_if_in_bam_format(wildcards):
@@ -213,32 +213,28 @@ rule make_contig_file:
         vcf_parsed = lambda wildcards: f"intermediate_files/{config['sample_name']}.vcf_filtered.tsv",
         reads = lambda wildcards: f"{config['sample_name']}.subset.fa"
     output:
-        "sv_reads/{contig}.reads.fa"
+        "intermediate_files/contigs/{contig}/00_reads.fa"
     shell:
         "python3 TELR_assembly.py make_contig_file {input.vcf_parsed} {wildcards.contig} {output} {input.reads}"
 
 rule run_assembly:
     input:
-        "sv_reads/{contig}.reads.fa"
+        "intermediate_files/contigs/{contig}/00_reads.fa"
     output:
-        "intermediate_files/contig_assembly/{contig}.initial_cns.fa"
-    params:
-        asm_dir = "intermediate_files/contig_assembly"
+        "intermediate_files/contigs/{contig}/01_initial_assembly.fa"
     threads: 1
     shell:
         """
-        python3 TELR_assembly.py run_{config[assembler]}_assembly {input} {params.asm_dir} {wildcards.contig} {threads} {config[presets]} {output} || true
+        python3 TELR_assembly.py run_{config[assembler]}_assembly {input} {wildcards.contig} {threads} {config[presets]} {output} || true
         touch {output}
         """
 
 rule run_polishing:
     input:
-        reads = "sv_reads/{contig}.reads.fa",
-        initial_assembly = "intermediate_files/contig_assembly/{contig}.initial_cns.fa"
+        reads = "intermediate_files/contigs/{contig}/00_reads.fa",
+        initial_assembly = "intermediate_files/contigs/{contig}/01_initial_assembly.fa"
     output:
-        "intermediate_files/contig_assembly/{contig}.cns.fa"
-    params:
-        asm_dir = "intermediate_files/contig_assembly"
+        "intermediate_files/contigs/{contig}/02_polished_assembly.fa"
     threads: 1
     shell:
         """
@@ -248,9 +244,9 @@ rule run_polishing:
 
 rule get_parsed_contigs:
     input:
-        "intermediate_files/contig_assembly/{contig}.cns.fa"
+        "intermediate_files/contigs/{contig}/02_polished_assembly.fa"
     output:
-        "intermediate_files/contig_assembly/{contig}.cns.ctg1.fa"
+        "intermediate_files/contigs/{contig}/03_contig1.fa"
     shell:
         """
         python3 TELR_assembly.py parse_assembled_contig {input} {output} || true
@@ -263,20 +259,17 @@ def all_contigs(wildcards):
         contig_filenames = []
         for line in vcf_parsed:
             contig_name = "_".join(line.split()[:3])
-            contig_filenames.append(f"intermediate_files/contig_assembly/{contig_name}.cns.ctg1.fa")
+            contig_filenames.append(f"intermediate_files/contigs/{contig_name}/03_contig1.fa")
         return contig_filenames
 rule merged_contigs:
     input:
         all_contigs
     output:
         "{sample_name}.contigs.fa"
-    params:
-        asm_dir = "intermediate_files/contig_assembly"
     shell:
         """
         cat {input} > {output}
         """
-        #find {params.asm_dir} -type f -empty -delete
 
 """
 3rd stage: annotate TE and predict location in reference genome
@@ -288,31 +281,71 @@ Contig TE annotation (minimap2 + RepeatMasker)
 
 rule get_vcf_seq:
     input:
-        contig = "sv_reads/{contig}.reads.fa",
+        contig = "intermediate_files/contigs/{contig}/00_reads.fa",
         vcf_parsed = lambda wildcards: f"intermediate_files/{config['sample_name']}.vcf_filtered.tsv"
     output:
-        "intermediate_files/vcf_seq2contig/{contig}.seq.fa"
+        "intermediate_files/contigs/{contig}/04_vcf_seq.fa"
     shell:
         """
-        if [ ! -d intermediate_files/vcf_seq2contig ]; then mkdir intermediate_files/vcf_seq2contig; fi
         python3 TELR_te.py get_vcf_seq {wildcards.contig} {input.vcf_parsed} {output} || true
         touch {output}
         """
 
 rule map_contig:
     input:
-        subject = "intermediate_files/contig_assembly/{contig}.cns.ctg1.fa",
-        query = "intermediate_files/vcf_seq2contig/{contig}.seq.fa"
+        subject = "intermediate_files/contigs/{contig}/03_contig1.fa",
+        query = "intermediate_files/contigs/{contig}/04_vcf_seq.fa"
     output:
-        "intermediate_files/vcf_seq2contig/{contig}.paf"
+        "intermediate_files/contigs/{contig}/05_vcf_mm2.paf"
     params:
         presets = lambda wildcards: {"pacbio":"map-pb","ont":"map-ont"}[config["presets"]]
+    threads: 1
     shell:
         """
-        minimap2 -cx {params.presets} --secondary=no -v 0 {input.subject} {input.query} > {output}
+        minimap2 -cx {params.presets} --secondary=no -v 0 -t {threads} {input.subject} {input.query} > {output}
         """
 
-#annotate_contig
+rule te_contig_map:
+    input:
+        minimap_initial = "intermediate_files/contigs/{contig}/05_vcf_mm2.paf",
+        subject = "intermediate_files/contigs/{contig}/03_contig1.fa",
+        library = config["library"]
+    output:
+        "intermediate_files/contigs/{contig}/06_te_mm2.paf"
+    params:
+        presets = lambda wildcards: {"pacbio":"map-pb","ont":"map-ont"}[config["presets"]]
+    threads: 1
+    shell:
+        """
+        if [ -s {input.minimap_initial} ]; then
+            minimap2 -cx {params.presets} {input.subject} {input.library} -v 0 -t {threads} > {output}
+        else
+            touch {output}
+        fi
+        """
+
+rule minimap2bed:
+    input:
+        "intermediate_files/{minimap_output}.paf"
+    output:
+        "intermediate_files/{minimap_output}.bed"
+    shell:
+        "python3 TELR_utility.py minimap2bed {input} {output}"
+
+rule vcf_alignment_filter:
+    input:
+        vcf_seq_mm2 = "intermediate_files/contigs/{contig}/05_vcf_mm2.bed",
+        te_mm2 = "intermediate_files/contigs/{contig}/06_te_mm2.bed"
+    output:
+        "intermediate_files/contigs/{contig}/07_te2contig_filter.tsv"
+    shell:
+        """
+        if [ -s {input.te_mm2} ]; then
+            bedtools intersect -a {input.te_mm2} -b {input.vcf_seq_mm2} -wao > {output}
+        else
+            touch {output}
+        fi
+        """
 
 '''3rd stage
 Identify TE insertion breakpoint (minimap2)

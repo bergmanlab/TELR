@@ -21,9 +21,10 @@ def parse_assembled_contig(input_contig, parsed_contig):
                     record.description = "len=" + str(len(record.seq))
                     SeqIO.write(record, parsed_output_handle, "fasta")
 
-def run_flye_polishing(initial_assembly, assembled_consensus, reads, asm_dir, contig_name, thread, polish_iterations, presets):
+def run_flye_polishing(initial_assembly, assembled_consensus, reads, contig_name, thread, polish_iterations, presets):
     """Run Flye polishing"""
     presets_flye = {"pacbio":"--pacbio-raw","ont":"--nano-raw"}[presets]
+    asm_dir = os.path.split(output)[0]
     tmp_out_dir = os.path.join(asm_dir, contig_name)
     mkdir(tmp_out_dir)
     try:
@@ -57,10 +58,11 @@ def run_flye_polishing(initial_assembly, assembled_consensus, reads, asm_dir, co
         sys.exit(1)
 
 
-def run_wtdbg2_polishing(initial_assembly, assembled_consensus, reads, asm_dir, contig_name, threads, polish_iterations, presets):
+def run_wtdbg2_polishing(initial_assembly, assembled_consensus, reads, contig_name, threads, polish_iterations, presets):
     """Run wtdbg2 polishing"""
     presets_minimap2 = {"pacbio":"map-pb","ont":"map-ont"}[presets]
     polish_iterations = int(polish_iterations)
+    asm_dir = os.path.split(output)[0]
     # polish consensus
     threads = str(min(int(threads), 4))
     bam = f"{initial_assembly}.bam"
@@ -109,10 +111,10 @@ def run_wtdbg2_polishing(initial_assembly, assembled_consensus, reads, asm_dir, 
         sys.exit(1)
 
 
-def run_flye_assembly(sv_reads, asm_dir, contig_name, thread, presets, output):
-    mkdir(asm_dir, verbose = False)
+def run_flye_assembly(sv_reads, contig_name, thread, presets, output):
     """Run Flye assembly"""
     presets_flye = {"pacbio":"--pacbio-raw","ont":"--nano-raw"}[presets]
+    asm_dir = os.path.split(output)[0]
 
     tmp_out_dir = os.path.join(asm_dir, contig_name)
     mkdir(tmp_out_dir)
@@ -146,11 +148,11 @@ def run_flye_assembly(sv_reads, asm_dir, contig_name, thread, presets, output):
         sys.exit(1)
 
 
-def run_wtdbg2_assembly(sv_reads, asm_dir, contig_name, thread, presets, output):
-    mkdir(asm_dir, verbose = False)
+def run_wtdbg2_assembly(sv_reads, contig_name, thread, presets, output):
     """Run wtdbg2 assembly"""
     presets_wtdbg2 = {"pacbio":"rs","ont":"ont"}[presets]
     prefix = sv_reads.replace(".reads.fa", "")
+    asm_dir = os.path.split(output)[0]
     try:
         subprocess.run(
             [
@@ -229,7 +231,10 @@ def extract_reads(reads, id_list, out):
             output_handle.write(record_dict.get_raw(entry))
 
 def make_contig_file(vcf_parsed, contig_name, contig_file, reads):
-    mkdir(os.path.split(contig_file)[0], verbose = False)
+    contigs_dir = contig_file[:contig_file.index(f"/{contig_name}")]
+    mkdir(contigs_dir, verbose = False)
+    contig_dir = f"{contigs_dir}/{contig_name}"
+    mkdir(contig_dir)
     # get all of the read names for the matching contig
     sequences = set(read_vcf(vcf_parsed, contig_name, column=8).split(","))
     extract_reads(reads, sequences, contig_file)

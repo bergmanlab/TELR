@@ -1,4 +1,5 @@
 import os
+import sys
 from datetime import datetime, timedelta
 import subprocess
 from Bio import SeqIO
@@ -102,3 +103,16 @@ def read_vcf(vcf_file, contig_name = False, column = 8):
         with open(vcf_file, "r") as input:
             matching_row = [i for i in input if contig_name in i][0].split("\t")
         return matching_row[column]
+
+def minimap2bed(minimap_file, bed_file):#0 and 5 swapped, recheck later
+    with open(minimap_file, "r") as input, open(bed_file, "w") as output:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            bed_line = "\t".join(
+                [entry[5], entry[7], entry[8], entry[0], entry[11], entry[4]]
+            )
+            output.write(bed_line + "\n")
+
+
+if __name__ == '__main__':
+    globals()[sys.argv[1]](*sys.argv[2:])
