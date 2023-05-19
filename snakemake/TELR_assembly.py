@@ -24,7 +24,7 @@ def parse_assembled_contig(input_contig, parsed_contig):
 def run_flye_polishing(initial_assembly, assembled_consensus, reads, contig_name, thread, polish_iterations, presets):
     """Run Flye polishing"""
     presets_flye = {"pacbio":"--pacbio-raw","ont":"--nano-raw"}[presets]
-    asm_dir = os.path.split(output)[0]
+    asm_dir = os.path.split(assembled_consensus)[0]
     tmp_out_dir = os.path.join(asm_dir, contig_name)
     mkdir(tmp_out_dir)
     try:
@@ -62,7 +62,7 @@ def run_wtdbg2_polishing(initial_assembly, assembled_consensus, reads, contig_na
     """Run wtdbg2 polishing"""
     presets_minimap2 = {"pacbio":"map-pb","ont":"map-ont"}[presets]
     polish_iterations = int(polish_iterations)
-    asm_dir = os.path.split(output)[0]
+    asm_dir = os.path.split(assembled_consensus)[0]
     # polish consensus
     threads = str(min(int(threads), 4))
     bam = f"{initial_assembly}.bam"

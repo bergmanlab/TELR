@@ -39,150 +39,8 @@ def try_minimap2(subject, query, presets):
     ]
     print(get_cmd_output(cmd))
 
-def annotate_contig(
-    contigs,
-    assembly_passed_loci,
-    te_library,
-    vcf_parsed,
-    out,
-    sample_name,
-    thread,
-    presets,
-    minimap2_family,
-    loci_eval,
-):
-    logging.info("Annotate contigs...")
-    minimap2_presets = {"pacbio":"map-pb","ont":"map-ont"}[presets]
-
-    # map sequence to contigs
-    vcf_seq2contig_out = os.path.join(out, "seq2contig.paf")
-    # if os.path.isfile(vcf_seq2contig_out):
-    #     os.remove(vcf_seq2contig_out)
-
-    # TODO: consider that some contigs might not exist
-    seq2contig_passed_loci = set()
-    vcf_seq2contig_dir = os.path.join(out, "vcf_seq2contig")
-    mkdir(vcf_seq2contig_dir)
-    with open(vcf_parsed, "r") as input, open(vcf_seq2contig_out, "w") as output:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
-            contig_name = get_contig_name
-            if contig_name in assembly_passed_loci:
-                vcf_seq = entry[7]
-                query = os.path.join(vcf_seq2contig_dir, contig_name + ".seq.fa")
-                create_fa(contig_name, vcf_seq, query)
-                subject = os.path.join(
-                    vcf_seq2contig_dir, contig_name + ".contig.fa"
-                )  ## TODO: this can be replaced
-                with open(subject, "w") as subject_output_handle:
-                    try:
-                        subprocess.call(
-                            ["samtools", "faidx", contigs, contig_name],
-                            stdout=subject_output_handle,
-                        )
-                    except subprocess.CalledProcessError:
-                        print(contig_name + ":contig assembly doesn't exist")
-                        continue
-                cmd = [
-                    "minimap2",
-                    "-cx",
-                    minimap2_presets,
-                    "--secondary=no",
-                    "-v",
-                    "0",
-                    subject,
-                    query,
-                ]
-                vcf_seq2contig_output = get_cmd_output(cmd)
-                if vcf_seq2contig_output != "":
-                    output.write(vcf_seq2contig_output)
-                    seq2contig_passed_loci.add(contig_name)
-                    # with open(vcf_seq2contig_out, "a") as output:
-                os.remove(query)
-                os.remove(subject)
-    os.rmdir(vcf_seq2contig_dir)
-
-    # covert to bed format
-    seq2contig_bed = os.path.join(out, "seq2contig.bed")
-    with open(vcf_seq2contig_out, "r") as input, open(seq2contig_bed, "w") as output:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
-            bed_line = "\t".join(
-                [entry[0], entry[7], entry[8], entry[5], entry[11], entry[4]]
-            )
-            output.write(bed_line + "\n")
-
-    # # report ins-contig failed loci
-    # with open(loci_eval, "a") as output:
-    #     for locus in assembly_passed_loci:
-    #         if locus not in seq2contig_passed_loci:
-    #             output.write(
-    #                 "\t".join(
-    #                     [locus, "Sniffles VCF sequence not mapped to assembled contig"]
-    #                 )
-    #                 + "\n"
-    #             )
-
-    # map TE library to contigs using minimap2
-    # TE-contig alignment
-    te2contig_out = os.path.join(out, sample_name + ".te2contig.paf")
-    if os.path.isfile(te2contig_out):
-        os.remove(te2contig_out)
-    for locus in seq2contig_passed_loci:
-        contig_fa = os.path.join(out, locus + ".fa")
-        with open(contig_fa, "w") as output:
-            subprocess.call(["samtools", "faidx", contigs, locus], stdout=output)
-        # map TE library to contig using minimap2
-        with open(te2contig_out, "a") as output:
-            subprocess.call(
-                [
-                    "minimap2",
-                    "-cx",
-                    minimap2_presets,
-                    contig_fa,
-                    te_library,
-                    "-v",
-                    "0",
-                    "-t",
-                    str(thread),
-                ],
-                stdout=output,
-            )
-        os.remove(contig_fa)
-    # convert to bed format
-    te2contig_bed = os.path.join(out, sample_name + ".te2contig.bed")
-    with open(te2contig_out, "r") as input, open(te2contig_bed, "w") as output:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
-            bed_line = "\t".join(
-                [entry[5], entry[7], entry[8], entry[0], entry[11], entry[4]]
-            )
-            output.write(bed_line + "\n")
-
-    # Use VCF sequence alignment to filter minimap2 TE-contig alignment
-    te2contig_filter_raw = os.path.join(out, sample_name + ".te2contig_filter.tsv")
-    with open(te2contig_filter_raw, "w") as output:
-        subprocess.call(
-            [
-                "bedtools",
-                "intersect",
-                "-a",
-                te2contig_bed,
-                "-b",
-                seq2contig_bed,
-                "-wao",
-            ],
-            stdout=output,
-        )
-
-    # filter and merge
-    # get rid of -1 and make it into bed format
-    te2contig_filter_tmp_bed = os.path.join(
-        out, sample_name + ".te2contig_filter.tmp.bed"
-    )
-    with open(te2contig_filter_raw, "r") as input, open(
-        te2contig_filter_tmp_bed, "w"
-    ) as output:
+def vcf_alignment_filter(intersect_file, output_file):
+    with open(intersect_file, "r") as input, open(output_file, "w") as output:
         for line in input:
             entry = line.replace("\n", "").split("\t")
             # the overlap between VCF sequence alignment and TE-contig alignment has to be over 10bp
@@ -191,41 +49,9 @@ def annotate_contig(
                     [entry[0], entry[1], entry[2], entry[3], entry[4], entry[5]]
                 )
                 output.write(out_line + "\n")
-    # sort # TODO: package this part, hide variables
-    te2contig_filter_tmp_sort_bed = (
-        out + "/" + sample_name + ".te2contig_filter.tmp.sort.bed"
-    )
-    command = "bedtools sort -i " + te2contig_filter_tmp_bed
-    with open(te2contig_filter_tmp_sort_bed, "w") as output:
-        subprocess.call(command, shell=True, stdout=output)
 
-    # find out what's filtered out
-    seq_mm2_overlap_loci = set()
-    with open(te2contig_filter_tmp_sort_bed, "r") as input:
-        for line in input:
-            seq_mm2_overlap_loci.add(line.split("\t")[0])
-    # seq_mm2_overlap_loci = create_loci_set(te2contig_filter_tmp_sort_bed)
-    with open(loci_eval, "a") as output:
-        for locus in seq2contig_passed_loci:
-            if locus not in seq_mm2_overlap_loci:
-                output.write(
-                    "\t".join([locus, "VCF sequence doesn't overlap contig annotation"])
-                    + "\n"
-                )
-
-    # merge
-    contig_te_annotation_tmp = out + "/" + sample_name + ".te2contig_filter.bed.tmp"
-    command = (
-        'bedtools merge -d 10000 -c 4,6 -o distinct,distinct -delim "|" -i '
-        + te2contig_filter_tmp_sort_bed
-    )
-    with open(contig_te_annotation_tmp, "w") as output:
-        subprocess.call(command, shell=True, stdout=output)
-
-    contig_te_annotation = out + "/" + sample_name + ".te2contig_filter.bed"
-    with open(contig_te_annotation_tmp, "r") as input, open(
-        contig_te_annotation, "w"
-    ) as output:
+def annotate_contig(merge_output, annotated_contig_file):
+    with open(merged_output, "r") as input, open(annotated_contig_file, "w") as output:
         for line in input:
             entry = line.replace("\n", "").split("\t")
             contig_name = entry[0]
@@ -242,27 +68,23 @@ def annotate_contig(
                     contig_te_end,
                     contig_te_family,
                     ".",
-                    contig_te_strand,
+                    contig_te_strand
                 ]
             )
             output.write(out_line + "\n")
 
-    contig_te_annotation_sorted = out + "/" + sample_name + ".te2contig_filter_sort.bed"
-    command = "bedtools sort -i " + contig_te_annotation
-    with open(contig_te_annotation_sorted, "w") as output:
-        subprocess.call(command, shell=True, stdout=output)
-
-    # seq_mm2_overlap_merge_loci = create_loci_set(contig_te_annotation)
-
-    # remove tmp files
-    os.remove(te2contig_bed)
-    os.remove(te2contig_out)
-    os.remove(seq2contig_bed)
-    os.remove(te2contig_filter_raw)
-    os.remove(te2contig_filter_tmp_bed)
-    os.remove(te2contig_filter_tmp_sort_bed)
-    os.remove(contig_te_annotation)
-
+def annotatecontig(
+    contigs,
+    assembly_passed_loci,
+    te_library,
+    vcf_parsed,
+    out,
+    sample_name,
+    thread,
+    presets,
+    minimap2_family,
+    loci_eval,
+):
     # extract sequence and RM
     if "+" in sample_name:
         sample_name_replace = sample_name.replace("+", "plus")

@@ -3,7 +3,7 @@ import subprocess
 
 rule all:
     input: 
-        "intermediate_files/chr2L_33030_33030.te2contig_filter.tsv",
+        "intermediate_files/contigs/chr2L_33030_33030/07_te2contig_filter.tsv",
         lambda wildcards: f"intermediate_files/{config['sample_name']}.vcf_filtered.tsv"
         #"{sample_name}.loci_eval.tsv"
 
@@ -238,7 +238,7 @@ rule run_polishing:
     threads: 1
     shell:
         """
-        python3 TELR_assembly.py run_{config[polisher]}_polishing {input.initial_assembly} {output} {input.reads} {params.asm_dir} {wildcards.contig} {threads} {config[polish_iterations]} {config[presets]} || true
+        python3 TELR_assembly.py run_{config[polisher]}_polishing {input.initial_assembly} {output} {input.reads} {wildcards.contig} {threads} {config[polish_iterations]} {config[presets]} || true
         touch {output}
         """
 
@@ -332,7 +332,7 @@ rule minimap2bed:
     shell:
         "python3 TELR_utility.py minimap2bed {input} {output}"
 
-rule vcf_alignment_filter:
+rule vcf_alignment_filter_intersect:
     input:
         vcf_seq_mm2 = "intermediate_files/contigs/{contig}/05_vcf_mm2.bed",
         te_mm2 = "intermediate_files/contigs/{contig}/06_te_mm2.bed"
@@ -342,6 +342,64 @@ rule vcf_alignment_filter:
         """
         if [ -s {input.te_mm2} ]; then
             bedtools intersect -a {input.te_mm2} -b {input.vcf_seq_mm2} -wao > {output}
+        else
+            touch {output}
+        fi
+        """
+
+rule vcf_alignment_filter:
+    input:
+        "intermediate_files/contigs/{contig}/07_te2contig_filter.tsv"
+    output:
+        "intermediate_files/contigs/{contig}/08_te2contig_filtered.bed"
+    shell:
+        """
+        if [ -s {input} ]; then
+            python3 TELR_te.py vcf_alignment_filter {input} {output}
+        fi
+        touch {output}
+        """
+
+rule te_annotation_merge:
+    input:
+        "intermediate_files/contigs/{contig}/08_te2contig_filtered.bed"
+    output:
+        "intermediate_files/contigs/{contig}/09_te2contig_merged.bed"
+    shell:
+        """
+        if [ -s {input} ]; then
+            bedtools merge -d 10000 -c 4,6 -o distinct,distinct -delim "|" -i {input} > {output}
+        else
+            touch {output}
+        fi
+        """
+
+rule annotated_contig:
+    input:
+        "intermediate_files/contigs/{contig}/09_te2contig_merged.bed"
+    output:
+        "intermediate_files/contigs/{contig}/10_annotation.bed"
+    shell:
+        """
+        if [ -s {input} ]; then
+            python3 TELR_te.py annotate_contig {input} {output}
+        else
+            touch {output}
+        fi
+        """
+
+## use RM to annotate config -- add logic for this later
+
+rule te_fasta:
+    input:
+        bed_file = "intermediate_files/contigs/{contig}/10_annotation.bed",
+        sequence = "intermediate_files/contigs/{contig}/03_contig1.fa"
+    output:
+        "intermediate_files/contigs/{contig}/11_annotated_tes.fasta"
+    shell:
+        """
+        if [ -s {input.bed_file} ]; then
+            bedtools getfasta -fi {input.sequence} -bed {input.bed_file} > {output}
         else
             touch {output}
         fi
