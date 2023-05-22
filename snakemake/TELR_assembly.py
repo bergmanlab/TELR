@@ -239,6 +239,34 @@ def make_contig_file(vcf_parsed, contig_name, contig_file, reads):
     sequences = set(read_vcf(vcf_parsed, contig_name, column=8).split(","))
     extract_reads(reads, sequences, contig_file)
 
+def prep_assembly_inputs():
+    window = 1000
+    samfile = pysam.AlignmentFile(bam, "rb")
+    read_ids = os.path.join(out, sample_name + ".id")
+    vcf_parsed_new = vcf_parsed + ".new"
+    with open(vcf_parsed, "r") as input, open(read_ids, "w") as output, open(
+        vcf_parsed_new, "w"
+    ) as VCF:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+
+            ins_chr = entry[0]
+            ins_breakpoint = round((int(entry[1]) + int(entry[2])) / 2)
+            start = ins_breakpoint - window
+            if start < 0:
+                start = 0
+            end = ins_breakpoint + window
+            reads = set()
+            # coverage = 0
+            for read in samfile.fetch(ins_chr, start, end):
+                reads.add(read.query_name)
+            for read in reads:
+                output.write(read + "\n")
+
+            # write
+            out_line = line.replace("\n", "") + "\t" + str(len(reads))
+            VCF.write(out_line + "\n")
+            vcf_parsed = vcf_parsed_new
 
 
 if __name__ == '__main__':

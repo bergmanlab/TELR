@@ -395,7 +395,7 @@ rule te_fasta:
         bed_file = "intermediate_files/contigs/{contig}/10_annotation.bed",
         sequence = "intermediate_files/contigs/{contig}/03_contig1.fa"
     output:
-        "intermediate_files/contigs/{contig}/11_annotated_tes.fasta"
+        "intermediate_files/contigs/{contig}/rm_01_annotated_tes.fasta"
     shell:
         """
         if [ -s {input.bed_file} ]; then
@@ -404,6 +404,84 @@ rule te_fasta:
             touch {output}
         fi
         """
+
+rule rm_annotate:
+    input:
+        te_fasta = "intermediate_files/contigs/{contig}/rm_01_annotated_tes.fasta",
+        te_library = config["library"]
+    output:
+        "intermediate_files/contigs/{contig}/rm_01_annotated_tes.fasta.out.gff"
+    params:
+        rm_dir = lambda wildcards: f"intermediate_files/contigs/{wildcards.contig}"
+    threads: 1
+    shell:
+        """
+        if [ -s {input.te_fasta} ]; then
+            RepeatMasker -dir {params.rm_dir} -gff -s -nolow -no_is -xsmall -e ncbi -lib {input.te_library} -pa {threads} {input.te_fasta}
+        fi
+        touch {output}
+        """
+
+rule rm_annotation_sort:
+    input:
+        "intermediate_files/contigs/{contig}/rm_01_annotated_tes.fasta.out.gff"
+    output:
+        "intermediate_files/contigs/{contig}/rm_02_annotated_tes.out.sort.gff"
+    shell:
+        """
+        if [ -s {input.bed_file} ]; then
+            bedtools sort -i {input} > {output}
+        else
+            touch {output}
+        fi
+        """
+
+rule rm_annotation_parse_merge:
+    input:
+        "intermediate_files/contigs/{contig}/rm_02_annotated_tes.out.sort.gff"
+    output:
+        "intermediate_files/contigs/{contig}/rm_03_annotated_tes_parsed.bed"
+    shell:
+        """
+        if [ -s {input} ]; then
+            python3 TELR_te.py rm_parse_merge {input} {output}
+        else
+            touch {output}
+        fi
+        """
+
+rule rm_annotation_bedtools_merge:
+    input:
+        "intermediate_files/contigs/{contig}/rm_03_annotated_tes_parsed.bed"
+    output:
+        "intermediate_files/contigs/{contig}/rm_04_annotated_tes_merged.bed"
+    shell:
+        """
+        if [ -s {input} ]; then
+            bedtools merge -c 4,6 -o distinct -delim "|" -i {input} > {output}
+        else
+            touch {output}
+        fi
+        """
+
+rule rm_reannotate:
+    input:
+        repeat_masker_out = "intermediate_files/contigs/{contig}/rm_04_annotated_tes_merged.bed",
+        original_bed = "intermediate_files/contigs/{contig}/10_annotation.bed"
+    output:
+        "intermediate_files/contigs/{contig}/rm_05_rm_reannotated_tes.bed"
+    shell:
+        """
+        if [ -s {input.repeat_masker_out} ]; then
+            python3 TELR_te.py rm_reannotate {input.repeat_masker_out} {input.original_bed} {output}
+        else
+            touch {output}
+        fi
+        """
+
+def annotation_from_option(wildcards):
+    return {True:f"intermediate_files/contigs/{wildcards.contig}/10_annotation.bed",False:f"intermediate_files/contigs/{wildcards.contig}/rm_05_rm_reannotated_tes.bed"}[config["minimap2_family"]]
+rule 
 
 '''3rd stage
 Identify TE insertion breakpoint (minimap2)

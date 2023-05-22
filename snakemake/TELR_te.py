@@ -73,153 +73,56 @@ def annotate_contig(merge_output, annotated_contig_file):
             )
             output.write(out_line + "\n")
 
-def annotatecontig(
-    contigs,
-    assembly_passed_loci,
-    te_library,
-    vcf_parsed,
-    out,
-    sample_name,
-    thread,
-    presets,
-    minimap2_family,
-    loci_eval,
-):
-    # extract sequence and RM
-    if "+" in sample_name:
-        sample_name_replace = sample_name.replace("+", "plus")
-    else:
-        sample_name_replace = sample_name
-    te_fa = out + "/" + sample_name_replace + ".te.fa"
-    with open(te_fa, "w") as output:
-        subprocess.call(
-            [
-                "bedtools",
-                "getfasta",
-                "-fi",
-                contigs,
-                "-bed",
-                contig_te_annotation_sorted,
-            ],
-            stdout=output,
-        )
-
-    if not minimap2_family:
-        print("Use repeatmasker to annotate contig TE families instead of minimap2")
-        repeatmasker_dir = os.path.join(out, "contig_te_repeatmask")
-        mkdir(repeatmasker_dir)
-        try:
-            subprocess.call(
-                [
-                    "RepeatMasker",
-                    "-dir",
-                    repeatmasker_dir,
-                    "-gff",
-                    "-s",
-                    "-nolow",
-                    "-no_is",
-                    "-xsmall",
-                    "-e",
-                    "ncbi",
-                    "-lib",
-                    te_library,
-                    "-pa",
-                    str(thread),
-                    te_fa,
-                ]
-            )
-            contig_te_repeatmasked = os.path.join(
-                repeatmasker_dir, os.path.basename(te_fa) + ".out.gff"
-            )
-            open(contig_te_repeatmasked, "r")
-        except Exception as e:
-            print(e)
-            print("Repeatmasking contig TE sequences failed, exiting...")
-            sys.exit(1)
-
-        # sort RM gff
-        contig_te_repeatmasked_sort = os.path.join(
-            repeatmasker_dir, os.path.basename(te_fa) + ".out.sort.gff"
-        )
-        with open(contig_te_repeatmasked_sort, "w") as output:
-            subprocess.call(["bedtools", "sort", "-i", contig_te_repeatmasked], stdout=output)
-
-
-        ## parse and merge
-        te2contig_rm = out + "/" + sample_name + ".te2contig_rm.bed"
-        with open(contig_te_repeatmasked_sort, "r") as input, open(
-            te2contig_rm, "w"
-        ) as output:
-            for line in input:
-                if "##" not in line:
-                    entry = line.replace("\n", "").split("\t")
-                    contig_name = entry[0].rsplit(":", 1)[0]
-                    start = entry[0].rsplit(":", 1)[1].split("-")[0]
-                    end = entry[0].rsplit(":", 1)[1].split("-")[1]
-                    # contigs = entry[0].replace(':', '-').split("-")
-                    family = re.sub('Target "Motif:|".*', "", entry[8])
-                    strand = entry[6]
-                    score = entry[5]
-                    out_line = "\t".join(
-                        [contig_name, start, end, family, score, strand]
-                    )
-                    output.write(out_line + "\n")
-        print("Done\n")
-
-        contig_rm_annotation = out + "/" + sample_name + ".te2contig_rm.merge.bed"
-        command = 'bedtools merge -c 4,6 -o distinct -delim "|" -i ' + te2contig_rm
-        with open(contig_rm_annotation, "w") as output:
-            subprocess.call(command, shell=True, stdout=output)
-        # os.remove(te2contig_rm)
-
-        # replace contig_te_annotation family with ones from RM
-        contig_te_annotation_new = contig_te_annotation_sorted.replace(
-            "bed", "family_reannotated.bed"
-        )
-        contig_rm_family_dict = dict()
-        with open(contig_rm_annotation, "r") as input:
-            for line in input:
+def rm_parse_merge(input_file, output_file):
+    with open(input_file, "r") as input, open(output_file, "w") as output:
+        for line in input:
+            if "##" not in line:
                 entry = line.replace("\n", "").split("\t")
-                contig_name = entry[0]
-                family = entry[3]
-                contig_rm_family_dict[contig_name] = family
+                contig_name = entry[0].rsplit(":", 1)[0]
+                start = entry[0].rsplit(":", 1)[1].split("-")[0]
+                end = entry[0].rsplit(":", 1)[1].split("-")[1]
+                # contigs = entry[0].replace(':', '-').split("-")
+                family = re.sub('Target "Motif:|".*', "", entry[8])
+                strand = entry[6]
+                score = entry[5]
+                out_line = "\t".join(
+                    [contig_name, start, end, family, score, strand]
+                )
+                output.write(out_line + "\n")
 
-        with open(contig_te_annotation_new, "w") as output, open(
-            contig_te_annotation_sorted, "r"
-        ) as input:
-            for line in input:
-                entry = line.replace("\n", "").split("\t")
-                contig_name = entry[0]
-                contig_te_start = entry[1]
-                contig_te_end = entry[2]
-                if contig_name in contig_rm_family_dict:
-                    contig_te_family = contig_rm_family_dict[contig_name]
-                    contig_te_strand = entry[5]
-                    out_line = "\t".join(
-                        [
-                            contig_name,
-                            contig_te_start,
-                            contig_te_end,
-                            contig_te_family,
-                            ".",
-                            contig_te_strand,
-                        ]
-                    )
-                    output.write(out_line + "\n")
-
-        contig_te_annotation_sorted = contig_te_annotation_new
-
-    # build frequency dict
-    te_freq = dict()
-    with open(vcf_parsed, "r") as input:
+def rm_reannotate(rm_raw, original_bed, output_file):
+    # replace contig_te_annotation family with ones from RM
+    contig_te_annotation_new = contig_te_annotation_sorted.replace(
+        "bed", "family_reannotated.bed"
+    )
+    contig_rm_family_dict = dict()
+    with open(rm_raw, "r") as input:
         for line in input:
             entry = line.replace("\n", "").split("\t")
-            contig_name = "_".join([entry[0], entry[1], entry[2]])
-            freq = entry[5]
-            te_freq[contig_name] = freq
+            contig_name = entry[0]
+            family = entry[3]
+            contig_rm_family_dict[contig_name] = family
 
-    return contig_te_annotation_sorted, te_fa
-
+    with open(output_file, "w") as output, open(original_bed, "r") as input:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            contig_name = entry[0]
+            contig_te_start = entry[1]
+            contig_te_end = entry[2]
+            if contig_name in contig_rm_family_dict:
+                contig_te_family = contig_rm_family_dict[contig_name]
+                contig_te_strand = entry[5]
+                out_line = "\t".join(
+                    [
+                        contig_name,
+                        contig_te_start,
+                        contig_te_end,
+                        contig_te_family,
+                        ".",
+                        contig_te_strand,
+                    ]
+                )
+                output.write(out_line + "\n")
 
 def seq2contig(seq, contig, out):
     with open(out, "a") as output:
