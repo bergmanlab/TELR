@@ -75,9 +75,7 @@ def get_rev_comp_sequence(fasta_in, fasta_out):
     """get reverse complement of a sequence"""
     with open(fasta_out, "w") as output:
         for record in SeqIO.parse(fasta_in, "fasta"):
-            output.write(
-                ">" + record.id + "\n" + str(record.seq.reverse_complement()) + "\n"
-            )
+            output.write(f">{record.id}\n{record.seq.reverse_complement()}\n")
 
 def export_env(file):
     """export conda environment"""
@@ -94,15 +92,22 @@ def export_env(file):
                 output.write(line)
     os.remove(file_tmp)
 
-def read_vcf(vcf_file, contig_name = False, column = 8):
+def read_vcf(vcf_file, contig_name = False, column = False, single_contig = False):
     if contig_name is False:
         pass #add functionality later if needed
     else:
         contig_name = contig_name.split("_")
         contig_name = f"{'_'.join(contig_name[:-2])}\t{contig_name[-2]}\t{contig_name[-1]}"
         with open(vcf_file, "r") as input:
-            matching_row = [i for i in input if contig_name in i][0].split("\t")
-        return matching_row[column]
+            if single_contig: matching_row = input[0]
+            else: matching_row = [i for i in input if contig_name in i][0]
+            matching_row = matching_row.replace("\n","").split("\t")
+        if type(column) is int: 
+            return matching_row[column]
+        elif type(column) in [list, set]:
+            return {column_number:matching_row[column_number] for column_number in column}
+        elif column == False:
+            return matching_row
 
 def minimap2bed(minimap_file, bed_file):#0 and 5 swapped, recheck later
     with open(minimap_file, "r") as input, open(bed_file, "w") as output:

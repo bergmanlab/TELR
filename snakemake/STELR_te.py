@@ -20,7 +20,7 @@ from TELR_utility import (
 #from telr.TELR_assembly import prep_assembly_inputs
 
 def get_vcf_seq(contig, vcf_parsed, sequence_file):
-    sequence = read_vcf(vcf_parsed, contig, column=7)
+    sequence = read_vcf(vcf_parsed, contig, column=7, single_contig=True)
     with open(sequence_file, "w") as output:
         output.write(f">{contig}\n")
         output.write(sequence)
@@ -368,7 +368,7 @@ def get_af(
                 contig_dir, contig_name + ".cns.ctg1.revcomp.fa"
             )
             get_rev_comp_sequence(contig, contig_rev_comp)
-
+#######
             # prepare reads for assembly
             raw_reads = os.path.join(telr_reads_dir, contig_name + ".reads.fa")
 

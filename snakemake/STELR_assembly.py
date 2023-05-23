@@ -210,13 +210,11 @@ def run_wtdbg2_assembly(sv_reads, contig_name, thread, presets, output):
     else:
         sys.exit(1)
 
-def write_read_IDs(vcf_parsed, read_ids):
-    with open(vcf_parsed, "r") as input, open(read_ids, "w") as output:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
-            read_list = entry[8].split(",")
-            for read in read_list:
-                output.write(read + "\n")
+def write_read_IDs(vcf_parsed, contig_name, output_file):
+    read_list = read_vcf(vcf_parsed, contig_name, column=8, single_contig=True).split(",")
+    with open(output_file, "w") as output:
+        for read in read_list:
+            output.write(read + "\n")
 
 def extract_reads(reads, id_list, out):
     """Extract reads from fasta using read ID list"""
@@ -230,43 +228,39 @@ def extract_reads(reads, id_list, out):
             entry = entry.replace("\n", "")
             output_handle.write(record_dict.get_raw(entry))
 
-def make_contig_file(vcf_parsed, contig_name, contig_file, reads):
-    contigs_dir = contig_file[:contig_file.index(f"/{contig_name}")]
+def make_contig_dir(vcf_parsed_full, contig_name, vcf_parsed_contig):
+    contigs_dir = vcf_parsed_contig[:vcf_parsed_contig.index(f"/{contig_name}")]
     mkdir(contigs_dir, verbose = False)
     contig_dir = f"{contigs_dir}/{contig_name}"
     mkdir(contig_dir)
+    with open(cf_parsed_contig, "w") as output:
+        output.write("\t".join(read_vcf(vcf_parsed_full, contig_name)))
+
+def make_contig_file(vcf_parsed, contig_name, contig_file, reads):
     # get all of the read names for the matching contig
     sequences = set(read_vcf(vcf_parsed, contig_name, column=8).split(","))
     extract_reads(reads, sequences, contig_file)
 
-def prep_assembly_inputs():
-    window = 1000
+def read_context(contig, vcf_parsed, bam, read_ids, vcf_parsed_new, window = 1000):
+    window = int(window)
+    vcf_line = read_vcf(vcf_parsed, contig, single_contig=True)
     samfile = pysam.AlignmentFile(bam, "rb")
-    read_ids = os.path.join(out, sample_name + ".id")
-    vcf_parsed_new = vcf_parsed + ".new"
-    with open(vcf_parsed, "r") as input, open(read_ids, "w") as output, open(
-        vcf_parsed_new, "w"
-    ) as VCF:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
+    with open(read_ids, "w") as output, open(vcf_parsed_new, "w") as VCF:
+        ins_chr = vcf_line[0]
+        ins_breakpoint = round((int(vcf_line[1]) + int(vcf_line[2])) / 2)
+        start = ins_breakpoint - window
+        if start < 0:
+            start = 0
+        end = ins_breakpoint + window
+        reads = set()
+        # coverage = 0
+        for read in samfile.fetch(ins_chr, start, end):
+            reads.add(read.query_name)
+        for read in reads:
+            output.write(read + "\n")
 
-            ins_chr = entry[0]
-            ins_breakpoint = round((int(entry[1]) + int(entry[2])) / 2)
-            start = ins_breakpoint - window
-            if start < 0:
-                start = 0
-            end = ins_breakpoint + window
-            reads = set()
-            # coverage = 0
-            for read in samfile.fetch(ins_chr, start, end):
-                reads.add(read.query_name)
-            for read in reads:
-                output.write(read + "\n")
-
-            # write
-            out_line = line.replace("\n", "") + "\t" + str(len(reads))
-            VCF.write(out_line + "\n")
-            vcf_parsed = vcf_parsed_new
+        # write
+        VCF.write("\t".join(vcf_line) + f"\t{len(reads)}")
 
 
 if __name__ == '__main__':
