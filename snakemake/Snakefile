@@ -253,7 +253,7 @@ rule get_parsed_contigs:
         """
 
 def merged_contigs_input(wildcards):
-    return [f"intermediate_files/contigs/{contig}/03_contig1.fa" for contig in all_contigs(wildcards)]
+    return [f"intermediate_files/contigs/{contig}/03_contig1.fa" for contig in all_contigs(**wildcards)]
 def all_contigs(wildcards):
     vcf_parsed_file = checkpoints.merge_parsed_vcf.get(**wildcards).output[0]
     with open(vcf_parsed_file) as vcf_parsed:
@@ -374,11 +374,11 @@ rule te_annotation_merge:
         fi
         """
 
-rule annotated_contig:
+checkpoint annotate_contig:
     input:
         "intermediate_files/contigs/{contig}/09_te2contig_merged.bed"
     output:
-        "intermediate_files/contigs/{contig}/10_annotation.bed"
+        "intermediate_files/contigs/{contig}/tes/annotation.bed"
     shell:
         """
         if [ -s {input} ]; then
@@ -392,7 +392,7 @@ rule annotated_contig:
 
 rule te_fasta:
     input:
-        bed_file = "intermediate_files/contigs/{contig}/10_annotation.bed",
+        bed_file = "intermediate_files/contigs/{contig}/tes/annotation.bed",
         sequence = "intermediate_files/contigs/{contig}/03_contig1.fa"
     output:
         "intermediate_files/contigs/{contig}/rm_01_annotated_tes.fasta"
@@ -467,9 +467,9 @@ rule rm_annotation_bedtools_merge:
 rule rm_reannotate:
     input:
         repeat_masker_out = "intermediate_files/contigs/{contig}/rm_04_annotated_tes_merged.bed",
-        original_bed = "intermediate_files/contigs/{contig}/10_annotation.bed"
+        original_bed = "intermediate_files/contigs/{contig}/tes/annotation.bed"
     output:
-        "intermediate_files/contigs/{contig}/rm_05_rm_reannotated_tes.bed"
+        "intermediate_files/contigs/{contig}/rm_05_annotation.bed"
     shell:
         """
         if [ -s {input.repeat_masker_out} ]; then
@@ -495,7 +495,7 @@ rule get_reverse_complement:
     input:
         "intermediate_files/contigs/{contig}/03_contig1.fa"
     output:
-        "intermediate_files/contigs/{contig}/11_revcomp.fa"
+        "intermediate_files/contigs/{contig}/10_revcomp.fa"
     shell:
         """
         if [ -s {input} ]; then
@@ -505,10 +505,77 @@ rule get_reverse_complement:
         fi
         """
         
+rule realignment:
+    input:
+        contig = "intermediate_files/contigs/{contig}/{contig_revcomp}.fa",
+        reads = "intermediate_files/contigs/{contig}/00_read_context.fa"
+    output:
+        "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.sam"
+    params:
+        presets = lambda wildcards: {"pacbio":"map-pb","ont":"map-ont"}[config["presets"]]
+    shell:
+        """
+        if [ -s {input.contig} ]; then
+            minimap2 -a -x {params.presets} -v 0 {input.contig} {input.reads} > {output}
+        else
+            touch {output}
+        fi
+        """
+
+rule realignment_to_bam:
+    input:
+        "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.sam"
+    output:
+        "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.bam"
+    shell:
+        """
+        if [ -s {input} ]; then
+            samtools view -bS {input} > {output}
+        else
+            touch {output}
+        fi
+        """
+
+rule sort_index_realignment:
+    input:
+        "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.bam"
+    output:
+        "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.sort.bam"
+    threads: 1
+    shell:
+        """
+        if [ -s {input} ]; then
+            samtools sort -@ {threads} -o {output} {input}
+            samtools index -@ {threads} {output}
+        else
+            touch {output}
+        fi
+        """
+
+rule read_depth:####need to implement te subdirs I think
+    input:
+        "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.sort.bam"
+    output:
+        "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.depth"
+    params:
+        contig_name = lambda wildcards: f"{'_'.join(wildcards.contig.split("_")[:-2])}:{wildcards.contig.split("_")[-2]}-{wildcards.contig.split("_")[-1]}"
+    shell:
+        """
+        if [ -s {input} ]; then
+            samtools depth -aa -r {params.contig_name} 
+        else
+            touch {output}
+        fi
+        """
     
 
 def annotation_from_option(wildcards):
     return {True:f"intermediate_files/contigs/{wildcards.contig}/10_annotation.bed",False:f"intermediate_files/contigs/{wildcards.contig}/rm_05_rm_reannotated_tes.bed"}[config["minimap2_family"]]
+
+rule estimate_coverage:
+    input:
+        annotation = annotation_from_option
+        contig = "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.sort."
 
     shell:
         """
@@ -518,6 +585,13 @@ def annotation_from_option(wildcards):
             touch {output}
         fi
         """
+
+def get_te_dirs(wildcards): #expects annotation file to be in contigs/{contig}/tes/
+    annotation_file = checkpoints.annotate_contig.get(**wildcards).output[0]
+    te_dir = annotation_file[:annotation_file.rindex("/")]
+    annotation_file = annotation_file[annotation_file.rindex("/")+1:]
+    ls = subprocess.run(f"ls {te_dir}", shell=True, capture_output=True, text=True)
+    ls = ls.stdout.split().remove(annotation_file)
 
 '''3rd stage
 Identify TE insertion breakpoint (minimap2)

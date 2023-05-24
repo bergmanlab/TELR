@@ -50,8 +50,10 @@ def vcf_alignment_filter(intersect_file, output_file):
                 )
                 output.write(out_line + "\n")
 
-def annotate_contig(merge_output, annotated_contig_file):
-    with open(merged_output, "r") as input, open(annotated_contig_file, "w") as output:
+def annotate_contig(merge_output, annotation_file):
+    te_dir = annotation_file[:annotation_file.rindex("/")]
+    mkdir(te_dir)
+    with open(merged_output, "r") as input, open(annotation_file, "w") as output:
         for line in input:
             entry = line.replace("\n", "").split("\t")
             contig_name = entry[0]
@@ -72,6 +74,10 @@ def annotate_contig(merge_output, annotated_contig_file):
                 ]
             )
             output.write(out_line + "\n")
+            te_name = f"te_{contig_te_start}_{contig_te_end}"
+            mkdir(f"{te_dir}/{te_name}")
+            with open(f"{te_dir}/{te_name}/00_annotation.bed", "w") as te_annotation:
+                te_annotation.write(out_line)
 
 def rm_parse_merge(input_file, output_file):
     with open(input_file, "r") as input, open(output_file, "w") as output:
@@ -234,30 +240,6 @@ def parse_rm_out(rm_gff, gff3):
                 )
                 output.write(out_line + "\n")
 
-
-def realignment(args):
-    query = args[0]
-    subject = args[1]
-    presets = args[2]
-    prefix = args[3]
-    thread = 1
-
-    sam = prefix + ".sam"
-    with open(sam, "w") as output:
-        subprocess.call(
-            ["minimap2", "-a", "-x", presets, "-v", "0", subject, query], stdout=output
-        )
-    bam = prefix + ".realign.bam"
-    with open(bam, "w") as output:
-        subprocess.call(["samtools", "view", "-bS", sam], stdout=output)
-    sorted_bam = prefix + ".realign.sort.bam"
-    subprocess.call(["samtools", "sort", "-@", str(thread), "-o", sorted_bam, bam])
-    subprocess.call(["samtools", "index", "-@", str(thread), sorted_bam])
-
-    os.remove(sam)
-    os.remove(bam)
-
-
 def get_flank_cov(bam, contig_name, contig_length, start, end, flank_len, offset):
     """
     Get the coverage of the flanking regions of a TE
@@ -317,6 +299,63 @@ def get_te_flank_ratio(te_cov, flank_cov):
     else:
         return None
 
+def estimate_coverage(annotation_file, vcf_parsed_file, contig_file, alignment_file, te_interval_size, te_offset):
+    # read contig annotation to dict
+    annotation_dict = {}
+    with open(annotation_file, "r") as annotation, open(vcf_parsed_file, "r") as vcf_parsed:
+        for te in annotation:
+            entry = te.replace("\n", "").split("\t")
+            start = int(entry[1])
+            end = int(entry[2])
+            if "revcomp" in annotation:
+                fwd_contig = contig_file.replace("11_revcomp","03_contig1")
+                contig_length = get_contig_length(fwd_contig)
+                start, end = contig_length - end, contig_length - start
+            else:
+                contig_length = get_contig_length(contig_file)
+            te_5p_cov, te_3p_cov = get_te_cov(#this
+                alignment_file, get_contig_name(contig_file), start, end, te_interval_size, te_offset
+            )
+            
+                
+
+    # analyze realignment and estimate coverage
+    vcf_parsed_freq = vcf_parsed + ".freq"
+    with open(vcf_parsed, "r") as input, open(vcf_parsed_freq, "w") as output:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            contig_name = "_".join([entry[0], entry[1], entry[2]])
+            bam = os.path.join(telr_reads_dir, contig_name + ".realign.sort.bam")
+            if os.path.isfile(bam):
+                if contig_name in contig_te_coord_dict:
+                    start, end = contig_te_coord_dict[contig_name]["fw"]
+                    # get contig size
+                    contig = os.path.join(contig_dir, contig_name + ".cns.ctg1.fa")
+                    contig_length = get_contig_length(contig)
+                    # get TE locus coverage
+                    te_5p_cov, te_3p_cov = get_te_cov(#this
+                        bam, contig_name, start, end, te_interval_size, te_offset
+                    )
+                    # get flanking coverage
+                    flank_5p_cov, flank_3p_cov = get_flank_cov(
+                        bam,
+                        contig_name,
+                        contig_length,
+                        start,
+                        end,
+                        flank_intervel_size,
+                        flank_offset,
+                    )
+                    out_line = "\t".join(
+                        entry
+                        + [
+                            str(te_5p_cov),
+                            str(te_3p_cov),
+                            str(flank_5p_cov),
+                            str(flank_3p_cov),
+                        ]
+                    )
+                    output.write(out_line + "\n")
 
 def get_af(
     out,
@@ -333,69 +372,70 @@ def get_af(
     presets,
     thread,
 ):
-    logging.info("Estimating allele frequency...")
-    start_time = time.time()
-    if presets == "ont":
-        presets = "map-ont"
-    else:
-        presets = "map-pb"
+    ##already looked at
+        logging.info("Estimating allele frequency...")
+        start_time = time.time()
+        if presets == "ont":
+            presets = "map-ont"
+        else:
+            presets = "map-pb"
 
-    # prepare reads
-    telr_reads_dir = os.path.join(out, "telr_reads")
-    prep_assembly_inputs(
-        vcf_parsed, out, sample_name, bam, raw_reads, telr_reads_dir, read_type="all"
-    )
+        # prepare reads
+        telr_reads_dir = os.path.join(out, "telr_reads")
+        prep_assembly_inputs(
+            vcf_parsed, out, sample_name, bam, raw_reads, telr_reads_dir, read_type="all"
+        )
 
-    # re-align reads to assembly, both forward and reverse
-    k = 0
-    realign_pa1_list = []
-    realign_pa2_list = []
-    with open(vcf_parsed, "r") as input:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
-            contig_name = "_".join([entry[0], entry[1], entry[2]])
-            # rename all reads around breakpoints
-            telr_reads = telr_reads_dir + "/contig" + str(k)
-            telr_reads_rename = telr_reads_dir + "/" + contig_name + ".reads.fa"
-            os.rename(telr_reads, telr_reads_rename)
-            k = k + 1
+        # re-align reads to assembly, both forward and reverse
+        k = 0
+        realign_pa1_list = []
+        realign_pa2_list = []
+        with open(vcf_parsed, "r") as input:
+            for line in input:
+                entry = line.replace("\n", "").split("\t")
+                contig_name = "_".join([entry[0], entry[1], entry[2]])
+                # rename all reads around breakpoints
+                telr_reads = telr_reads_dir + "/contig" + str(k)
+                telr_reads_rename = telr_reads_dir + "/" + contig_name + ".reads.fa"
+                os.rename(telr_reads, telr_reads_rename)
+                k = k + 1
 
-            contig = os.path.join(contig_dir, contig_name + ".cns.ctg1.fa")
-            if not os.path.isfile(contig):
-                print(contig_name + " no assembly")
-                continue
-            contig_rev_comp = os.path.join(
-                contig_dir, contig_name + ".cns.ctg1.revcomp.fa"
-            )
-            get_rev_comp_sequence(contig, contig_rev_comp)
+                contig = os.path.join(contig_dir, contig_name + ".cns.ctg1.fa")
+                if not os.path.isfile(contig):
+                    print(contig_name + " no assembly")
+                    continue
+                contig_rev_comp = os.path.join(
+                    contig_dir, contig_name + ".cns.ctg1.revcomp.fa"
+                )
+                get_rev_comp_sequence(contig, contig_rev_comp)
+
+                # prepare reads for assembly
+                raw_reads = os.path.join(telr_reads_dir, contig_name + ".reads.fa")
+
+                prefix1 = os.path.join(telr_reads_dir, contig_name)
+                align_pa1 = [raw_reads, contig, presets, prefix1]
+                realign_pa1_list.append(align_pa1)
+
+                prefix2 = os.path.join(telr_reads_dir, contig_name + ".revcomp")
+                align_pa2 = [raw_reads, contig_rev_comp, presets, prefix2]
+                realign_pa2_list.append(align_pa2)
+
+        # run realignment in parallel
+        logging.info("Perform local realignment...")
+        start_time = time.time()
+        try:
+            pool = Pool(processes=thread)
+            pool.map(realignment, realign_pa1_list)
+            pool.map(realignment, realign_pa2_list)
+            pool.close()
+            pool.join()
+        except Exception as e:
+            print(e)
+            print("Local realignment failed, exiting...")
+            sys.exit(1)
+        proc_time = time.time() - start_time
+        logging.info("Local realignment finished in " + format_time(proc_time))
 #######
-            # prepare reads for assembly
-            raw_reads = os.path.join(telr_reads_dir, contig_name + ".reads.fa")
-
-            prefix1 = os.path.join(telr_reads_dir, contig_name)
-            align_pa1 = [raw_reads, contig, presets, prefix1]
-            realign_pa1_list.append(align_pa1)
-
-            prefix2 = os.path.join(telr_reads_dir, contig_name + ".revcomp")
-            align_pa2 = [raw_reads, contig_rev_comp, presets, prefix2]
-            realign_pa2_list.append(align_pa2)
-
-    # run realignment in parallel
-    logging.info("Perform local realignment...")
-    start_time = time.time()
-    try:
-        pool = Pool(processes=thread)
-        pool.map(realignment, realign_pa1_list)
-        pool.map(realignment, realign_pa2_list)
-        pool.close()
-        pool.join()
-    except Exception as e:
-        print(e)
-        print("Local realignment failed, exiting...")
-        sys.exit(1)
-    proc_time = time.time() - start_time
-    logging.info("Local realignment finished in " + format_time(proc_time))
-
     # read contig annotation to dict
     contig_te_coord_dict = dict()
     with open(contig_te_annotation, "r") as input:
@@ -674,7 +714,6 @@ def create_fa(header, seq, out):
     with open(out, "w") as output:
         output.write(">" + header + "\n")
         output.write(seq)
-
 
 if __name__ == '__main__':
     globals()[sys.argv[1]](*sys.argv[2:])
