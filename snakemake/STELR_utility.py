@@ -10,8 +10,13 @@ def rm_file(file):
         os.remove(file)
 
 
-def get_contig_name(tsv):
-    return "_".join([tsv[0], tsv[1], tsv[2]])
+def get_contig_name(some_input):
+    if type(some_input) is list:
+        return "_".join([some_input[0], some_input[1], some_input[2]])
+    elif type(some_input) is str:
+        if "contigs/" in some_input:
+            some_input = some_input[some_input.index("contigs/")+8:]
+            return some_input[:some_input.index("/")] 
 
 
 def mkdir(dir, verbose = True):
