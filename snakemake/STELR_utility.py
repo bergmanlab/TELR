@@ -123,6 +123,15 @@ def minimap2bed(minimap_file, bed_file):#0 and 5 swapped, recheck later
             )
             output.write(bed_line + "\n")
 
+def get_contig_length(contig):
+    if os.path.isfile(contig):
+        with open(contig, "r") as handle:
+            records = SeqIO.parse(handle, "fasta")
+            for record in records:
+                contig_length = len(record.seq)
+                return contig_length
+    else:
+        print("no contig " + contig)
 
 if __name__ == '__main__':
     globals()[sys.argv[1]](*sys.argv[2:])

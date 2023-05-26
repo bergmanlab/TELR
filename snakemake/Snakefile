@@ -1,5 +1,6 @@
 import os
 import subprocess
+from TELR_utility import get_contig_length
 
 rule all:
     input: 
@@ -479,6 +480,63 @@ rule rm_reannotate:
         fi
         """
 
+# repeatmask reference genome using custom TE library
+#   Not sure which step in the workflow this actually belongs to
+rule ref_repeatmask:
+    input:
+        ref = config["reference"],
+        lib = config["library"]
+    output:
+        "intermediate_files/ref_repeatmask/{reference}.out.gff"
+    params:
+        ref_rm_dir = "intermediate_files/ref_repeatmask"
+    threads: config["thread"]
+    shell:
+        """
+        if [ ! -d {params.ref_rm_dir} ]; then mkdir {params.ref_rm_dir}
+        fi
+        RepeatMasker -dir {params.ref_rm_dir} -gff -s -nolow -no_is -e ncbi -lib {input.lib} -pa {threads} {input.ref}
+        touch {output}
+        """
+
+rule ref_rm_process:
+    input:
+        lambda wildcards: f"intermediate_files/ref_repeatmask/{os.path.basename(config['reference'])}.out.gff"
+        #left off here, STELR_te.py repeatmask()
+
+
+def annotation_from_option(wildcards):
+    return {True:f"intermediate_files/contigs/{wildcards.contig}/10_annotation.bed",False:f"intermediate_files/contigs/{wildcards.contig}/rm_05_rm_reannotated_tes.bed"}[config["minimap2_family"]]
+
+
+    shell:
+        """
+        if [ -s {input} ]; then
+            
+        else
+            touch {output}
+        fi
+        """
+
+def get_te_dirs(wildcards): #expects annotation file to be in contigs/{contig}/tes/
+    annotation_file = checkpoints.annotate_contig.get(**wildcards).output[0]
+    te_dir = annotation_file[:annotation_file.rindex("/")]
+    annotation_file = annotation_file[annotation_file.rindex("/")+1:]
+    ls = subprocess.run(f"ls {te_dir}", shell=True, capture_output=True, text=True)
+    return ls.stdout.split().remove(annotation_file)
+
+'''3rd stage
+Identify TE insertion breakpoint (minimap2)
+'''
+
+"""
+4th stage: estimate intra-sample TE allele frequency (TAF)
+"""
+
+'''4th stage
+Read extraction (samtools)
+'''
+
 rule read_context:
     input:
         vcf_parsed = "intermediate_files/contigs/{contig}/00_vcf_parsed.tsv",
@@ -490,6 +548,10 @@ rule read_context:
         window = 1000
     shell:
         "python3 STELR_assembly.py read_context {wildcards.contig} {input.vcf_parsed} {input.bam} {output.read_ids} {output.vcf_parsed_new} {params.window}"
+
+'''4th stage
+Read alignment to TE contig (minimap2)
+'''
 
 rule get_reverse_complement:
     input:
@@ -552,63 +614,64 @@ rule sort_index_realignment:
         fi
         """
 
-rule read_depth:####need to implement te subdirs I think
+'''4th stage
+Depth-based TAF estimation (SAMtools)
+'''
+
+rule estimate_te_depth:
     input:
-        "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.sort.bam"
+        bam = "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.sort.bam",
+        contig = "intermediate_files/contigs/{contig}/{contig_revcomp}.fa"
     output:
-        "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.depth"
+        depth_5p = "intermediate_files/contigs/{contig}/tes/{te}/{contig_revcomp}_5p_te.depth",
+        depth_3p = "intermediate_files/contigs/{contig}/tes/{te}/{contig_revcomp}_3p_te.depth"
     params:
-        contig_name = lambda wildcards: f"{'_'.join(wildcards.contig.split("_")[:-2])}:{wildcards.contig.split("_")[-2]}-{wildcards.contig.split("_")[-1]}"
+        te_interval = config["af_te_interval"],
+        te_offset = config["af_te_offset"]
     shell:
         """
-        if [ -s {input} ]; then
-            samtools depth -aa -r {params.contig_name} 
+        if [ -s {input.bam} ]; then
+            python3 STELR_te.py estimate_te_depth {input.bam} {input.contig} {wildcards.te} {params.te_interval} {params.te_offset} {output.depth_5p} {output.depth_3p}
+        else
+            touch {output}
+        fi
+        """
+
+rule estimate_flank_depth:
+    input:
+        bam = "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.sort.bam",
+        contig = "intermediate_files/contigs/{contig}/{contig_revcomp}.fa"
+    output:
+        depth_5p = "intermediate_files/contigs/{contig}/tes/{te}/{contig_revcomp}_5p_flank.depth",
+        depth_3p = "intermediate_files/contigs/{contig}/tes/{te}/{contig_revcomp}_3p_flank.depth"
+    params:
+        flank_len = config["af_flank_interval"],
+        flank_offset = config["af_flank_offset"]
+    shell:
+        """
+        if [ -s {input.bam} ]; then
+            python3 STELR_te.py estimate_flank_depth {input.bam} {input.contig} {wildcards.te} {params.flank_len} {params.flank_offset} {output.depth_5p} {output.depth_3p}
         else
             touch {output}
         fi
         """
     
-
-def annotation_from_option(wildcards):
-    return {True:f"intermediate_files/contigs/{wildcards.contig}/10_annotation.bed",False:f"intermediate_files/contigs/{wildcards.contig}/rm_05_rm_reannotated_tes.bed"}[config["minimap2_family"]]
-
 rule estimate_coverage:
     input:
-        annotation = annotation_from_option
-        contig = "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.sort."
-
+        te_5p = "intermediate_files/contigs/{contig}/tes/{te}/{contig_revcomp}_5p_te.depth",
+        te_3p = "intermediate_files/contigs/{contig}/tes/{te}/{contig_revcomp}_3p_te.depth",
+        flank_5p = "intermediate_files/contigs/{contig}/tes/{te}/{contig_revcomp}_5p_flank.depth",
+        flank_3p = "intermediate_files/contigs/{contig}/tes/{te}/{contig_revcomp}_3p_flank.depth"
+    output:
+        "intermediate_files/contigs/{contig}/tes/{te}/{contig_revcomp}.freq"
     shell:
-        """
-        if [ -s {input} ]; then
-            
-        else
-            touch {output}
-        fi
-        """
+        "python3 STELR_te.py estimate_coverage {input.te_5p} {input.te_3p} {flank_5p} {flank_3p} {output}"
 
-def get_te_dirs(wildcards): #expects annotation file to be in contigs/{contig}/tes/
-    annotation_file = checkpoints.annotate_contig.get(**wildcards).output[0]
-    te_dir = annotation_file[:annotation_file.rindex("/")]
-    annotation_file = annotation_file[annotation_file.rindex("/")+1:]
-    ls = subprocess.run(f"ls {te_dir}", shell=True, capture_output=True, text=True)
-    ls = ls.stdout.split().remove(annotation_file)
-
-'''3rd stage
-Identify TE insertion breakpoint (minimap2)
-'''
-
-"""
-4th stage: estimate intra-sample TE allele frequency (TAF)
-"""
-
-'''4th stage
-Read extraction (samtools)
-'''
-
-'''4th stage
-Read alignment to TE contig (minimap2)
-'''
-
-'''4th stage
-Depth-based TAF estimation (SAMtools)
-'''
+rule get_allele_frequency:
+    input:
+        fwd = "intermediate_files/contigs/{contig}/tes/{te}/03_contig1.freq",
+        rev = "intermediate_files/contigs/{contig}/tes/{te}/10_revcomp.freq"
+    output:
+        "intermediate_files/contigs/{contig}/tes/{te}/11_allele_frequency.json"
+    shell:
+        "python3 STELR_te.py get_af {input.fwd} {input.rev} {output}"

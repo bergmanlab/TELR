@@ -1,6 +1,7 @@
 import os
 import sys
 import subprocess
+import json
 from Bio import SeqIO
 import re
 import logging
@@ -14,6 +15,7 @@ from TELR_utility import (
     get_cmd_output,
     get_rev_comp_sequence,
     get_contig_name,
+    get_contig_length,
     read_vcf
 )
 #from telr.TELR_liftover import liftover
@@ -24,20 +26,6 @@ def get_vcf_seq(contig, vcf_parsed, sequence_file):
     with open(sequence_file, "w") as output:
         output.write(f">{contig}\n")
         output.write(sequence)
-
-def try_minimap2(subject, query, presets):
-    minimap2_presets = {"pacbio":"map-pb","ont":"map-ont"}[presets]
-    cmd = [
-        "minimap2",
-        "-cx",
-        minimap2_presets,
-        "--secondary=no",
-        "-v",
-        "0",
-        subject,
-        query,
-    ]
-    print(get_cmd_output(cmd))
 
 def vcf_alignment_filter(intersect_file, output_file):
     with open(intersect_file, "r") as input, open(output_file, "w") as output:
@@ -130,12 +118,12 @@ def rm_reannotate(rm_raw, original_bed, output_file):
                 )
                 output.write(out_line + "\n")
 
+#delete this?
 def seq2contig(seq, contig, out):
     with open(out, "a") as output:
         subprocess.call(
             ["minimap2", "-cx", "map-pb", "--secondary=no", contig, seq], stdout=output
         )  # only retain primary alignment
-
 
 def repeatmask(ref, library, outdir, thread):
     mkdir(outdir)
@@ -181,7 +169,6 @@ def repeatmask(ref, library, outdir, thread):
         sys.exit(1)
     return ref_rm, gff3
 
-
 def gff3tobed(gff, bed):
     # check GFF3 format
     with open(gff, "r") as input:
@@ -216,7 +203,6 @@ def gff3tobed(gff, bed):
         subprocess.call(command, shell=True, stdout=output)
     os.remove(bed_tmp)
 
-
 def parse_rm_out(rm_gff, gff3):
     with open(gff3, "w") as output, open(rm_gff, "r") as input:
         for line in input:
@@ -240,58 +226,12 @@ def parse_rm_out(rm_gff, gff3):
                 )
                 output.write(out_line + "\n")
 
-def get_flank_cov(bam, contig_name, contig_length, start, end, flank_len, offset):
-    """
-    Get the coverage of the flanking regions of a TE
-    """
-    # left_flank_present = True
-    # right_flank_present = True
-    left_flank_cov = None
-    right_flank_cov = None
-    # flank_cov = 0
-    if start - flank_len - offset >= 0:
-        left_flank_cov = get_median_cov(
-            bam, contig_name, start - flank_len - offset, start - offset
-        )
-    # else:
-    #     left_flank_present = False
-
-    if end + flank_len + offset <= contig_length:
-        right_flank_cov = get_median_cov(
-            bam, contig_name, end + offset, end + flank_len + offset
-        )
-    # else:
-    #     right_flank_present = False
-
-    # if left_flank_present and right_flank_present:
-    #     flank_cov = (left_flank_cov + right_flank_cov) / 2
-    # elif left_flank_present:
-    #     flank_cov = left_flank_cov
-    # elif right_flank_present:
-    #     flank_cov = right_flank_cov
-    # else:
-    #     print(contig_name + " no flank present")
-
-    return left_flank_cov, right_flank_cov
-
-
-def get_contig_length(contig):
-    if os.path.isfile(contig):
-        with open(contig, "r") as handle:
-            records = SeqIO.parse(handle, "fasta")
-            for record in records:
-                contig_length = len(record.seq)
-                return contig_length
-    else:
-        print("no contig " + contig)
-
-
-def get_te_flank_ratio(te_cov, flank_cov):
-    if te_cov and flank_cov:
-        if flank_cov == 0:
+def get_te_flank_ratio(cov_dict):
+    if cov_dict["te"] and cov_dict["flank"]:
+        if cov_dict["flank"] == 0:
             return None
         else:
-            ratio = te_cov / flank_cov
+            ratio = cov_dict["te"] / cov_dict["flank"]
             if ratio > 1.5:
                 return None
             else:
@@ -299,373 +239,105 @@ def get_te_flank_ratio(te_cov, flank_cov):
     else:
         return None
 
-def estimate_coverage(annotation_file, vcf_parsed_file, contig_file, alignment_file, te_interval_size, te_offset):
+def estimate_coverage(te_5p, te_3p, flank_5p, flank_3p, frequency_file):
     # read contig annotation to dict
-    annotation_dict = {}
-    with open(annotation_file, "r") as annotation, open(vcf_parsed_file, "r") as vcf_parsed:
-        for te in annotation:
-            entry = te.replace("\n", "").split("\t")
-            start = int(entry[1])
-            end = int(entry[2])
-            if "revcomp" in annotation:
-                fwd_contig = contig_file.replace("11_revcomp","03_contig1")
-                contig_length = get_contig_length(fwd_contig)
-                start, end = contig_length - end, contig_length - start
-            else:
-                contig_length = get_contig_length(contig_file)
-            te_5p_cov, te_3p_cov = get_te_cov(#this
-                alignment_file, get_contig_name(contig_file), start, end, te_interval_size, te_offset
-            )
-            
-                
+    depths = {
+        "5p":{
+            "te":median_cov(te_5p),
+            "flank":median_cov(flank_5p)
+        }
+        "flank":{
+            "te":median_cov(te_3p),
+            "flank":median_cov(flank_3p)
+        }
+    }
+    if depths["3p"]["te"] is None:
+        depths["3p"]["te"] = depths["5p"]["te"]
+    with open(frequency_file, "w") as output:
+        json.dump(depths, output)
 
-    # analyze realignment and estimate coverage
-    vcf_parsed_freq = vcf_parsed + ".freq"
-    with open(vcf_parsed, "r") as input, open(vcf_parsed_freq, "w") as output:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
-            contig_name = "_".join([entry[0], entry[1], entry[2]])
-            bam = os.path.join(telr_reads_dir, contig_name + ".realign.sort.bam")
-            if os.path.isfile(bam):
-                if contig_name in contig_te_coord_dict:
-                    start, end = contig_te_coord_dict[contig_name]["fw"]
-                    # get contig size
-                    contig = os.path.join(contig_dir, contig_name + ".cns.ctg1.fa")
-                    contig_length = get_contig_length(contig)
-                    # get TE locus coverage
-                    te_5p_cov, te_3p_cov = get_te_cov(#this
-                        bam, contig_name, start, end, te_interval_size, te_offset
-                    )
-                    # get flanking coverage
-                    flank_5p_cov, flank_3p_cov = get_flank_cov(
-                        bam,
-                        contig_name,
-                        contig_length,
-                        start,
-                        end,
-                        flank_intervel_size,
-                        flank_offset,
-                    )
-                    out_line = "\t".join(
-                        entry
-                        + [
-                            str(te_5p_cov),
-                            str(te_3p_cov),
-                            str(flank_5p_cov),
-                            str(flank_3p_cov),
-                        ]
-                    )
-                    output.write(out_line + "\n")
-
-def get_af(
-    out,
-    sample_name,
-    bam,
-    raw_reads,
-    contig_te_annotation,
-    contig_dir,
-    vcf_parsed,
-    flank_intervel_size,
-    flank_offset,
-    te_interval_size,
-    te_offset,
-    presets,
-    thread,
-):
-    ##already looked at
-        logging.info("Estimating allele frequency...")
-        start_time = time.time()
-        if presets == "ont":
-            presets = "map-ont"
+def get_af(fwd_freq, rev_freq, out_file):
+    allele_freqs = {
+        "fwd": fwd_freq,
+        "rev": rev_freq
+    }
+    for direction in allele_freqs:
+        with open(allele_freqs[direction], "r") as input:
+            allele_freqs[direction] = json.load(input)
+    
+    taf_5p = get_te_flank_ratio(allele_freqs["fwd"]["5p"])
+    taf_3p = get_te_flank_ratio(allele_freqs["rev"]["5p"])
+    if taf_5p and taf_3p:
+        if abs(taf_5p - taf_3p) <= 0.3:
+            freq = (taf_5p + taf_3p) / 2
         else:
-            presets = "map-pb"
+            freq = None
+    elif taf_5p:
+        freq = taf_5p
+    elif taf_3p:
+        freq = taf_3p
+    else:
+        freq = None
+    if freq:
+        if freq > 1:
+            freq = 1
+        allele_freqs["freq"] = round(freq, 3)
+    else: allele_freqs["freq"] = None
 
-        # prepare reads
-        telr_reads_dir = os.path.join(out, "telr_reads")
-        prep_assembly_inputs(
-            vcf_parsed, out, sample_name, bam, raw_reads, telr_reads_dir, read_type="all"
-        )
+    with open(outfile, "w") as output:
+        json.dump(allele_freqs, output)
 
-        # re-align reads to assembly, both forward and reverse
-        k = 0
-        realign_pa1_list = []
-        realign_pa2_list = []
-        with open(vcf_parsed, "r") as input:
-            for line in input:
-                entry = line.replace("\n", "").split("\t")
-                contig_name = "_".join([entry[0], entry[1], entry[2]])
-                # rename all reads around breakpoints
-                telr_reads = telr_reads_dir + "/contig" + str(k)
-                telr_reads_rename = telr_reads_dir + "/" + contig_name + ".reads.fa"
-                os.rename(telr_reads, telr_reads_rename)
-                k = k + 1
+def get_start_end(te, contig):
+    start = int(te.split("_")[-2])
+    end = int(te.split("_")[-1])
+    if "revcomp" in contig:
+        length = get_contig_length(contig)
+        start, end = length - end, length - start
+    return start, end    
 
-                contig = os.path.join(contig_dir, contig_name + ".cns.ctg1.fa")
-                if not os.path.isfile(contig):
-                    print(contig_name + " no assembly")
-                    continue
-                contig_rev_comp = os.path.join(
-                    contig_dir, contig_name + ".cns.ctg1.revcomp.fa"
-                )
-                get_rev_comp_sequence(contig, contig_rev_comp)
-
-                # prepare reads for assembly
-                raw_reads = os.path.join(telr_reads_dir, contig_name + ".reads.fa")
-
-                prefix1 = os.path.join(telr_reads_dir, contig_name)
-                align_pa1 = [raw_reads, contig, presets, prefix1]
-                realign_pa1_list.append(align_pa1)
-
-                prefix2 = os.path.join(telr_reads_dir, contig_name + ".revcomp")
-                align_pa2 = [raw_reads, contig_rev_comp, presets, prefix2]
-                realign_pa2_list.append(align_pa2)
-
-        # run realignment in parallel
-        logging.info("Perform local realignment...")
-        start_time = time.time()
-        try:
-            pool = Pool(processes=thread)
-            pool.map(realignment, realign_pa1_list)
-            pool.map(realignment, realign_pa2_list)
-            pool.close()
-            pool.join()
-        except Exception as e:
-            print(e)
-            print("Local realignment failed, exiting...")
-            sys.exit(1)
-        proc_time = time.time() - start_time
-        logging.info("Local realignment finished in " + format_time(proc_time))
-#######
-    # read contig annotation to dict
-    contig_te_coord_dict = dict()
-    with open(contig_te_annotation, "r") as input:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
-            contig_name = entry[0]
-            # get coordinates of TEs on reverse complement
-            contig = os.path.join(contig_dir, contig_name + ".cns.ctg1.fa")
-            if check_exist(contig):
-                start = int(entry[1])
-                end = int(entry[2])
-                contig_length = get_contig_length(contig)
-                start_revcomp = contig_length - end
-                end_revcomp = contig_length - start
-                contig_te_coord_dict[contig_name] = {
-                    "fw": (start, end),
-                    "rc": (start_revcomp, end_revcomp),
-                }
-            else:
-                continue
-
-    # analyze realignment and estimate coverage
-    vcf_parsed_freq = vcf_parsed + ".freq"
-    with open(vcf_parsed, "r") as input, open(vcf_parsed_freq, "w") as output:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
-            contig_name = "_".join([entry[0], entry[1], entry[2]])
-            bam = os.path.join(telr_reads_dir, contig_name + ".realign.sort.bam")
-            if os.path.isfile(bam):
-                if contig_name in contig_te_coord_dict:
-                    start, end = contig_te_coord_dict[contig_name]["fw"]
-                    # get contig size
-                    contig = os.path.join(contig_dir, contig_name + ".cns.ctg1.fa")
-                    contig_length = get_contig_length(contig)
-                    # get TE locus coverage
-                    te_5p_cov, te_3p_cov = get_te_cov(
-                        bam, contig_name, start, end, te_interval_size, te_offset
-                    )
-                    # get flanking coverage
-                    flank_5p_cov, flank_3p_cov = get_flank_cov(
-                        bam,
-                        contig_name,
-                        contig_length,
-                        start,
-                        end,
-                        flank_intervel_size,
-                        flank_offset,
-                    )
-                    out_line = "\t".join(
-                        entry
-                        + [
-                            str(te_5p_cov),
-                            str(te_3p_cov),
-                            str(flank_5p_cov),
-                            str(flank_3p_cov),
-                        ]
-                    )
-                    output.write(out_line + "\n")
-
-    # analyze realignment and estimate coverage, on rev-comp contigs
-    vcf_parsed_freq_revcomp = vcf_parsed + ".revcomp.freq"
-    with open(vcf_parsed, "r") as input, open(vcf_parsed_freq_revcomp, "w") as output:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
-            contig_name = "_".join([entry[0], entry[1], entry[2]])
-            bam = os.path.join(
-                telr_reads_dir, contig_name + ".revcomp.realign.sort.bam"
-            )
-            if os.path.isfile(bam):
-                if contig_name in contig_te_coord_dict:
-                    start, end = contig_te_coord_dict[contig_name]["rc"]
-                    # get contig size
-                    contig = os.path.join(
-                        contig_dir, contig_name + ".cns.ctg1.revcomp.fa"
-                    )
-                    contig_length = get_contig_length(contig)
-                    # get TE locus coverage
-                    te_5p_cov, te_3p_cov = get_te_cov(
-                        bam, contig_name, start, end, te_interval_size, te_offset
-                    )
-                    # get flanking coverage
-                    flank_5p_cov, flank_3p_cov = get_flank_cov(
-                        bam,
-                        contig_name,
-                        contig_length,
-                        start,
-                        end,
-                        flank_intervel_size,
-                        flank_offset,
-                    )
-                    out_line = "\t".join(
-                        entry
-                        + [
-                            str(te_5p_cov),
-                            str(te_3p_cov),
-                            str(flank_5p_cov),
-                            str(flank_3p_cov),
-                        ]
-                    )
-                    output.write(out_line + "\n")
-
-    # get frequency
-    te_freq = dict()
-    with open(vcf_parsed_freq, "r") as input:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
-            contig_name = "_".join([entry[0], entry[1], entry[2]])
-            te_freq[contig_name] = dict()
-            if entry[14] != "None":
-                te_5p_cov = float(entry[14])
-            else:
-                te_5p_cov = None
-            if entry[15] != "None":
-                te_3p_cov = float(entry[15])
-            else:
-                te_3p_cov = None
-            if entry[16] != "None":
-                flank_5p_cov = float(entry[16])
-            else:
-                flank_5p_cov = None
-            if entry[17] != "None":
-                flank_3p_cov = float(entry[17])
-            else:
-                flank_3p_cov = None
-            te_freq[contig_name]["te_5p_cov"] = te_5p_cov
-            te_freq[contig_name]["te_3p_cov"] = te_3p_cov
-            te_freq[contig_name]["flank_5p_cov"] = flank_5p_cov
-            te_freq[contig_name]["flank_3p_cov"] = flank_3p_cov
-
-    # get TAF on reverse-complemented contigs
-    with open(vcf_parsed_freq_revcomp, "r") as input:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
-            contig_name = "_".join([entry[0], entry[1], entry[2]])
-            if entry[14] != "None":
-                te_5p_cov = float(entry[14])
-            else:
-                te_5p_cov = None
-            if entry[15] != "None":
-                te_3p_cov = float(entry[15])
-            else:
-                te_3p_cov = None
-            if entry[16] != "None":
-                flank_5p_cov = float(entry[16])
-            else:
-                flank_5p_cov = None
-            if entry[17] != "None":
-                flank_3p_cov = float(entry[17])
-            else:
-                flank_3p_cov = None
-            te_freq[contig_name]["te_5p_cov_rc"] = te_5p_cov
-            te_freq[contig_name]["te_3p_cov_rc"] = te_3p_cov
-            te_freq[contig_name]["flank_5p_cov_rc"] = flank_5p_cov
-            te_freq[contig_name]["flank_3p_cov_rc"] = flank_3p_cov
-            taf_5p = get_te_flank_ratio(
-                te_freq[contig_name]["te_5p_cov"],
-                te_freq[contig_name]["flank_5p_cov"],
-            )
-            taf_3p = get_te_flank_ratio(
-                te_freq[contig_name]["te_5p_cov_rc"],
-                te_freq[contig_name]["flank_5p_cov_rc"],
-            )
-            if taf_5p and taf_3p:
-                if abs(taf_5p - taf_3p) <= 0.3:
-                    freq = (taf_5p + taf_3p) / 2
-                else:
-                    freq = None
-            elif taf_5p:
-                freq = taf_5p
-            elif taf_3p:
-                freq = taf_3p
-            else:
-                freq = None
-            if freq:
-                if freq > 1:
-                    freq = 1
-            if freq:
-                te_freq[contig_name]["freq"] = round(freq, 3)
-            else:
-                te_freq[contig_name]["freq"] = None
-    proc_time = time.time() - start_time
-    logging.info("Allele frequency estimation finished in " + format_time(proc_time))
-    return te_freq
-
-
-def get_te_cov(bam, contig_name, start, end, te_interval_size, te_offset):
-    """
-    Get TE locus coverage
-    """
-    te_5p_cov = None
-    te_3p_cov = None
-    whole_te_locus_cov = False
+def estimate_te_depth(bam, contig, te, te_interval_size, te_offset, output_5p, output_3p):
+    start, end = get_start_end(te, contig)
+    contig_name = get_contig_name(contig)
+    te_interval_size, te_offset = int(te_interval_size), int(te_offset)
+    commands = {
+        "5p":f"samtools depth -aa -r {contig_name}:{start}-{end} {bam} > {output_5p}",
+        "3p":f"touch {output_3p}"
+    }
     if te_interval_size:
         if start + te_offset + te_interval_size < end:
-            te_5p_cov = get_median_cov(
-                bam,
-                contig_name,
-                start + te_offset,
-                start + te_offset + te_interval_size,
-            )
-            te_3p_cov = get_median_cov(
-                bam, contig_name, end - te_interval_size - te_offset, end - te_offset
-            )
-        else:
-            whole_te_locus_cov = True
-    else:
-        whole_te_locus_cov = True
+            commands["5p"] = f"samtools depth -aa -r {contig_name}:{start+te_offset}-{end+te_offset+te_interval_size} {bam} > {output_5p}"
+            commands["3p"] = f"samtools depth -aa -r {contig_name}:{end-te_interval_size-te_offset}-{end-te_offset} {bam} > {output_3p}"
+    
+    subprocess.run(commands["5p"], shell=True)
+    subprocess.run(commands["3p"], shell=True)
 
-    if whole_te_locus_cov:
-        te_5p_cov = get_median_cov(bam, contig_name, start, end)
-        te_3p_cov = te_5p_cov
-    return te_5p_cov, te_3p_cov
+def estimate_flank_depth(bam, contig, te, flank_len, flank_offset, output_5p, output_3p):
+    start, end = get_start_end(te, contig)
+    contig_length = get_contig_length(contig)
+    contig_name = get_contig_name(contig)
+    flank_len, flank_offset = int(flank_len), int(flank_offset)
+    commands = {
+        "5p":f"touch {output_5p}",
+        "3p":f"touch {output_3p}"
+    }
+    if start - flank_len - flank_offset >= 0:
+        commands["5p"] = f"samtools depth -aa -r {contig_name}:{start-flank_len-offset}-{start-offset} {bam} > {output_5p}"
+    if end + flank_len + flank_offset <= contig_length:
+        commands["3p"] = f"samtools depth -aa -r {contig_name}:{end+flank_offset}-{end+flank_len+flank_offset} {bam} > {output_3p}"
+    
+    subprocess.run(commands["5p"], shell=True)
+    subprocess.run(commands["3p"], shell=True)
 
-
-def get_median_cov(bam, chr, start, end):
-    commands = (
-        "samtools depth -aa -r " + chr + ":" + str(start) + "-" + str(end) + " " + bam
-    )
-    depth = bam + ".depth"
-    with open(depth, "w") as output:
-        subprocess.call(commands, shell=True, stdout=output)
+def get_median_cov(depth):
     covs = []
-    with open(depth, "r") as input:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
-            covs.append(int(entry[2]))
-    median_cov = statistics.median(covs)
-    os.remove(depth)
+    if os.stat(depth).st_size != 0:
+        with open(depth, "r") as input:
+            for line in input:
+                entry = line.replace("\n", "").split("\t")
+                covs.append(int(entry[2]))
+        median_cov = statistics.median(covs)
+    else: median_cov = None
     return median_cov
-
 
 def find_te(
     contigs_fa,
@@ -708,7 +380,6 @@ def find_te(
     )
 
     return json_report
-
 
 def create_fa(header, seq, out):
     with open(out, "w") as output:
