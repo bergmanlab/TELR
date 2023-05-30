@@ -487,7 +487,9 @@ rule ref_repeatmask:
         ref = config["reference"],
         lib = config["library"]
     output:
-        "intermediate_files/ref_repeatmask/{reference}.out.gff"
+        "intermediate_files/ref_repeatmask/{reference}.masked",
+        "intermediate_files/ref_repeatmask/{reference}.out.gff",
+        "intermediate_files/ref_repeatmask/{reference}.out"
     params:
         ref_rm_dir = "intermediate_files/ref_repeatmask"
     threads: config["thread"]
@@ -501,9 +503,56 @@ rule ref_repeatmask:
 
 rule ref_rm_process:
     input:
-        lambda wildcards: f"intermediate_files/ref_repeatmask/{os.path.basename(config['reference'])}.out.gff"
+        gff = lambda wildcards: f"intermediate_files/ref_repeatmask/{os.path.basename(config['reference'])}.out.gff",
+        out = "intermediate_files/ref_repeatmask/{reference}.out"
+    output:
+        "intermediate_files/ref_repeatmask/{reference}.out.gff3"
+    shell:
+        "python3 STELR_te.py parse_rm_out {input} {output}"
         #left off here, STELR_te.py repeatmask()
 
+rule ref_te_bed:
+    input:
+        "intermediate_files/ref_repeatmask/{reference}.out.gff3"
+    output:
+        "intermediate_files/ref_repeatmask/{reference}.te.bed.unsorted"
+    shell:
+        """
+        python3 STELR_te.py gff3tobed {input} {output}
+        touch {output}
+        """
+
+rule sort_ref_rm:
+    input:
+        "intermediate_files/ref_repeatmask/{reference}.te.bed.unsorted"
+    output:
+        "intermediate_files/ref_repeatmask/{reference}.te.bed"
+    shell:
+        """
+        if [ -s {input} ]; then
+            bedtools sort -i {input} > {output}
+        else
+            touch {output}
+        fi
+        """
+
+##### TELR Liftover
+
+rule build_index:
+    input:
+        "intermediate_files/{genome}"
+    output:
+        "intermediate_files/{genome}.fai"
+    shell:
+        "samtools faidx {input}"
+
+rule make_te_json:
+    input:
+        "intermediate_files/contigs/{contig}/tes/{te}/00_annotation.bed"
+    output:
+        "intermediate_files/contigs/{contigs}/tes/{te}/00_annotation.json"
+    shell:
+        "python3 STELR_liftover.py make_json {input} {output}"
 
 def annotation_from_option(wildcards):
     return {True:f"intermediate_files/contigs/{wildcards.contig}/10_annotation.bed",False:f"intermediate_files/contigs/{wildcards.contig}/rm_05_rm_reannotated_tes.bed"}[config["minimap2_family"]]

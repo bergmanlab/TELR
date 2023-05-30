@@ -125,55 +125,14 @@ def seq2contig(seq, contig, out):
             ["minimap2", "-cx", "map-pb", "--secondary=no", contig, seq], stdout=output
         )  # only retain primary alignment
 
-def repeatmask(ref, library, outdir, thread):
-    mkdir(outdir)
-    try:
-        subprocess.call(
-            [
-                "RepeatMasker",
-                "-dir",
-                outdir,
-                "-gff",
-                "-s",
-                "-nolow",
-                "-no_is",
-                "-e",
-                "ncbi",
-                "-lib",
-                library,
-                "-pa",
-                str(thread),
-                ref,
-            ]
-        )
-        ref_rm = os.path.join(outdir, os.path.basename(ref) + ".masked")
-        gff = os.path.join(outdir, os.path.basename(ref) + ".out.gff")
-        gff3 = os.path.join(outdir, os.path.basename(ref) + ".out.gff3")
-        if not os.path.isfile(ref_rm):
-            ref_rm_out = os.path.join(outdir, os.path.basename(ref) + ".out")
-            with open(ref_rm_out, "r") as input:
-                for line in input:
-                    if "There were no repetitive sequences detected" in line:
-                        print("No repetitive sequences detected")
-                        ref_rm = ref
-                        gff = None
-                        gff3 = None
-                    else:
-                        raise Exception("Repeatmasking failed, exiting...")
-        else:
-            parse_rm_out(gff, gff3)
-            open(ref_rm, "r")
-    except Exception as e:
-        print(e)
-        print("Repeatmasking failed, exiting...")
-        sys.exit(1)
-    return ref_rm, gff3
-
 def gff3tobed(gff, bed):
     # check GFF3 format
+    repeats_in_ref = True
     with open(gff, "r") as input:
         for line in input:
-            if "#" not in line:
+            if "No repetitive sequences detected" in line:
+                repeats_in_ref = False
+            elif "#" not in line:
                 if "Target=" not in line:
                     print(
                         "Incorrect GFF3 format, please check README for expected format, exiting..."
@@ -183,48 +142,50 @@ def gff3tobed(gff, bed):
                     )
                     sys.exit(1)
                 break
-    bed_tmp = bed + ".tmp"
-    with open(bed_tmp, "w") as output, open(gff, "r") as input:
-        for line in input:
-            if "#" not in line:
-                entry = line.replace("\n", "").split("\t")
-                info = entry[8].split(";")
-                for item in info:
-                    if "Target=" in item:
-                        family = item.replace("Target=", "")
-                out_line = "\t".join(
-                    [entry[0], str(int(entry[3]) - 1), entry[4], family, ".", entry[6]]
-                )
-                output.write(out_line + "\n")
-    
-    # sort BED file
-    command = "bedtools sort -i " + bed_tmp
-    with open(bed, "w") as output:
-        subprocess.call(command, shell=True, stdout=output)
-    os.remove(bed_tmp)
+    if repeats_in_ref:
+        with open(bed, "w") as output, open(gff, "r") as input:
+            for line in input:
+                if "#" not in line:
+                    entry = line.replace("\n", "").split("\t")
+                    info = entry[8].split(";")
+                    for item in info:
+                        if "Target=" in item:
+                            family = item.replace("Target=", "")
+                    out_line = "\t".join(
+                        [entry[0], str(int(entry[3]) - 1), entry[4], family, ".", entry[6]]
+                    )
+                    output.write(out_line + "\n")
 
-def parse_rm_out(rm_gff, gff3):
-    with open(gff3, "w") as output, open(rm_gff, "r") as input:
-        for line in input:
-            if "RepeatMasker" in line:
-                entry = line.replace("\n", "").split("\t")
-                family = entry[8].split(" ")[1]
-                family = re.sub('"Motif:', "", family)
-                family = re.sub('"', "", family)
-                out_line = "\t".join(
-                    [
-                        entry[0],
-                        "RepeatMasker",
-                        "dispersed_repeat",
-                        entry[3],
-                        entry[4],
-                        entry[5],
-                        entry[6],
-                        entry[7],
-                        "Target=" + family,
-                    ]
-                )
-                output.write(out_line + "\n")
+def parse_rm_out(rm_gff, rm_out, gff3):
+    if os.stat(rm_gff).st_size != 0:
+        with open(gff3, "w") as output, open(rm_gff, "r") as input:
+            for line in input:
+                if "RepeatMasker" in line:
+                    entry = line.replace("\n", "").split("\t")
+                    family = entry[8].split(" ")[1]
+                    family = re.sub('"Motif:', "", family)
+                    family = re.sub('"', "", family)
+                    out_line = "\t".join(
+                        [
+                            entry[0],
+                            "RepeatMasker",
+                            "dispersed_repeat",
+                            entry[3],
+                            entry[4],
+                            entry[5],
+                            entry[6],
+                            entry[7],
+                            f"Target={family}",
+                        ]
+                    )
+                    output.write(f"{out_line}\n")
+    else:
+        with open(gff3, "w") as output, open(rm_out, "r") as input:
+            input = "".join([line for line in input])
+            if "There were no repetitive sequences detected" in input:
+                output.write("No repetitive sequences detected")
+            else:
+                raise Exception("Repeatmasking failed, exiting...")
 
 def get_te_flank_ratio(cov_dict):
     if cov_dict["te"] and cov_dict["flank"]:

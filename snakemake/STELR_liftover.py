@@ -968,10 +968,34 @@ def check_file(file):
     else:
         return False
 
+def make_json(bed_input, json_output):
+    with open(bed_input, "r") as input, open(json_output, "w") as output:
+        entry = input[0].replace("\n", "").split("\t")
+        chrom = entry[0]
+        start = int(entry[1])
+        end = int(entry[2])
+        family = entry[3]
+        strand = entry[5]
 
-def build_index(fa):
-    subprocess.call(["samtools", "faidx", fa])
-
+        annotation = {
+            "chrom": chrom,
+            "start": start,
+            "end": end,
+            "family": family,
+            "strand": strand#,
+            #"fasta1": fasta1,
+            #"fasta2": fasta2,
+            #"out_dir": tmp_dir,
+            #"flank_len": flank_len,
+            #"flank_gap_max": flank_gap_max,
+            #"flank_overlap_max": flank_overlap_max,
+            #"bed2": bed2,
+            #"preset": preset,
+            # "single_flank": single_flank,
+            #"different_contig_name": different_contig_name,
+            #"telr_mode": telr_mode,
+        }
+        json.dump(annotation, output)
 
 def liftover(
     fasta1,
@@ -992,16 +1016,16 @@ def liftover(
     """
     Core function to do annotation liftover from one assembly/contig to another
     """
+    #Already completed:
+        # generate genome1 index file if not present
+        genome1_index = fasta1 + ".fai"
+        if not check_file(genome1_index):
+            build_index(fasta1)
 
-    # generate genome1 index file if not present
-    genome1_index = fasta1 + ".fai"
-    if not check_file(genome1_index):
-        build_index(fasta1)
-
-    # generate genome2 index file if not present
-    genome2_index = fasta2 + ".fai"
-    if not check_file(genome2_index):
-        build_index(fasta2)
+        # generate genome2 index file if not present
+        genome2_index = fasta2 + ".fai"
+        if not check_file(genome2_index):
+            build_index(fasta2)
 
     # loop through TE annotations, prepare data for parallel liftover jobs
     input_json_dir = os.path.join(out, "input_json")
@@ -1243,5 +1267,5 @@ def main():
     )
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    globals()[sys.argv[1]](*sys.argv[2:])
