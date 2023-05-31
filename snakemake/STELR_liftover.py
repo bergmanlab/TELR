@@ -380,14 +380,14 @@ def get_paf_info(paf):
     return paf_info
 
 
-def get_genome_size(fasta):
-    genome_index = fasta + ".fai"
+def get_genome_size(genome_index, size_file):
     genome_size_dict = dict()
     with open(genome_index, "r") as input:
         for line in input:
             entry = line.replace("\n", "").split("\t")
             genome_size_dict[entry[0]] = int(entry[1])
-    return genome_size_dict
+    with open(size_file, "w") as output:
+        json.dump(genome_size_dict, output)
 
 
 def run_liftover_single_annotation(input_json):
