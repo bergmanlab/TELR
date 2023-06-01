@@ -139,5 +139,13 @@ def string_to_bool(bool_string, default=False)
     if bool_string in bool_dict: return bool_dict[bool_string]
     else: return default
 
+def get_subseq(fasta, chrom, start, end):
+    """
+    Extract subsequence from fasta based on coordinates
+    """
+    command = ["samtools", "faidx", ref, f"{chrom}:{start}-{end}"]
+    subseq = subprocess.run(command, capture_output=True, text=True).stdout
+    return subseq
+
 if __name__ == '__main__':
     globals()[sys.argv[1]](*sys.argv[2:])
