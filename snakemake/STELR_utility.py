@@ -133,5 +133,11 @@ def get_contig_length(contig):
     else:
         print("no contig " + contig)
 
+def string_to_bool(bool_string, default=False)
+    bool_string = str(bool_string).lower()
+    bool_dict = {"true":True,"false":False}
+    if bool_string in bool_dict: return bool_dict[bool_string]
+    else: return default
+
 if __name__ == '__main__':
     globals()[sys.argv[1]](*sys.argv[2:])
