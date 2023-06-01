@@ -683,41 +683,18 @@ checkpoint json_for_report:
         touch {output}
         """
 
-rule bed_for_check_nearby_ref:
-    input:
-        "intermediate_files/contigs/{contig}/tes/{te}/00_annotation.json"
-    output:
-        "intermediate_files/contigs/{contig}/tes/{te}/16_{overlap_id}_pre-check_{flank}_flank.bed"
-    shell:
-        """
-        python3 STELR_liftover.py bed_for_check_nearby_ref {input} {output}
-        """
-
-rule check_nearby_ref:
-    input:
-        query_bed = "intermediate_files/contigs/{contig}/tes/{te}/16_{overlap_id}_pre-check_{flank}_flank.bed",
-        ref_bed = lambda wildcards: f"intermediate_files/ref_repeatmask/{os.path.basename(config['reference'])}.te.bed"
-    output:
-        "intermediate_files/contigs/{contig}/tes/{te}/16_{overlap_id}_check_{flank}_flank.bed"
-    shell:
-        """
-        bedtools closest -a {input.query_bed} -b {input.ref_bed} -d -D ref -k 5 > {output} || true
-        touch {output}
-        """
-
 rule make_report:
     input:
         overlap = "intermediate_files/contigs/{contig}/tes/{te}/15_flank_overlap.json",
         te_json = "intermediate_files/contigs/{contig}/tes/{te}/00_annotation.json",
-        ref_check_5p = "intermediate_files/contigs/{contig}/tes/{te}/16_{overlap_id}_check_5p_flank.bed",
-        ref_check_3p = "intermediate_files/contigs/{contig}/tes/{te}/16_{overlap_id}_check_3p_flank.bed"
+        ref_bed = lambda wildcards: f"intermediate_files/ref_repeatmask/{os.path.basename(config['reference'])}.te.bed"
     output:
-        "intermediate_files/contigs/{contig}/tes/{te}/17_{overlap_id}_report.json"
+        "intermediate_files/contigs/{contig}/tes/{te}/16_{overlap_id}_report.json"
     params: 
         flank_overlap_max = config["overlap"],
         flank_gap_max = config["gap"]
     """
-    python3 STELR_liftover.py make_report {input.overlap} {wildcards.overlap_id} {input.te_json} {input.ref_check_5p} {input.ref_check_3p} {config[reference]} {params.flank_overlap_max} {params.flank_gap_max} {output} || true
+    python3 STELR_liftover.py make_report {input.overlap} {wildcards.overlap_id} {input.te_json} {input.ref_bed} {config[reference]} {params.flank_overlap_max} {params.flank_gap_max} {output} || true
     touch {output}
     """
 

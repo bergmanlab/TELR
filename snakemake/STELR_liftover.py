@@ -4,17 +4,7 @@ import json
 import subprocess
 import shutil
 from multiprocessing import Pool
-from STELR_utility.py import string_to_bool, get_subseq
-
-def check_exist(file):
-    if file:
-        if os.path.isfile(file) and os.stat(file).st_size != 0:
-            return True
-        else:
-            return False
-    else:
-        return False
-
+from STELR_utility.py import string_to_bool, get_subseq, check_exist
 
 def extract_genome_seqs(ref, ref_size, te_json, flank_len, output_file):
     """
@@ -72,28 +62,6 @@ def paf_to_bed(paf, bed, contig_name, different_contig_name):
                 out_line = "\t".join([chrom, start, end, name, score, strand])
                 output.write(f"{out_line}\n")
 
-#no longer used
-def align_flank(flank_fa, ref_fa, paf_out, preset, num_secondary):
-    """
-    Align flanking sequences to genome 2
-    """
-    with open(paf_out, "w") as output:
-        subprocess.call(
-            [
-                "minimap2",
-                "-cx",
-                preset,
-                "-v",
-                "0",
-                "-N",
-                str(num_secondary),
-                ref_fa,
-                flank_fa,
-            ],
-            stdout=output,
-        )
-
-
 def get_coord(start_3p, end_3p, start_5p, end_5p, strand):
     if strand == "+":
         start = end_3p
@@ -111,47 +79,6 @@ def create_bed(chrom, start, end, family, strand, filename):
     with open(filename, "w") as output:
         out_line = "\t".join([chrom, str(start), str(end), family, ".", strand])
         output.write(out_line)
-
-def bed_for_check_nearby_ref(te_json, bed_file):
-    info = "(".join(os.path.basename(bedfile).split("(")[1:])
-    info = ")".join(info.split(")")[:-1])
-    chrom = ",".join(info.split(",")[:-3])
-    index_5p, index_3p, strand = info.split(",")[-3:]
-    index_from = {True:index_5p,False:index_3p}["5p" in bed_file.split(")")[-1]]
-    start, end = index_from.split("-")
-    with open(te_json, "r") as te_dict_file:
-        te_dict = json.load(te_dict_file)
-        family = te_dict["family"]
-    with open(bed_file, "w") as output:
-        output.write(f"{chrom}\t{start}\t{end}\t{family}\t.\t{strand}")
-    
-
-def check_nearby_ref(overlap):
-    """
-    Check if flanking seqeunce alignments have nearby TE annotations in genome 2
-    """
-    distance = None
-    if check_exist(overlap):
-        with open(overlap, "r") as input:
-            for line in input:
-                entry = line.replace("\n", "").split("\t")
-                chrom1 = entry[0]
-                chrom2 = entry[6]
-                family1 = entry[3]
-                family2 = entry[9]
-                strand1 = entry[5]
-                strand2 = entry[11]
-                if chrom1 == chrom2 and family1 == family2 and strand1 == strand2:
-                    distance_new = int(entry[12])
-                    if distance is None:
-                        distance = distance_new
-                    else:
-                        distance = absmin(distance, distance_new)
-        if distance is not None:
-            if abs(distance) > threshold:
-                distance = None
-    return distance
-
 
 def absmin(num1, num2):
     """
@@ -201,555 +128,6 @@ def get_genome_size(genome_index, size_file):
     with open(size_file, "w") as output:
         json.dump(genome_size_dict, output)
 
-
-def run_liftover_single_annotation(input_json):
-    """
-    Main liftover function for a single annotation
-    """
-    # initiate liftover report dictionary
-    lift_entries = dict()
-
-    # load input data from json
-    with open(input_json) as f:
-        input_values = json.load(f)
-    chrom = input_values["chrom"]
-    start = input_values["start"]
-    end = input_values["end"]
-    family = input_values["family"]
-    strand = input_values["strand"]
-    fasta1 = input_values["fasta1"]
-    fasta2 = input_values["fasta2"]
-    out_dir = input_values["out_dir"]
-    flank_len = input_values["flank_len"]
-    flank_gap_max = input_values["flank_gap_max"]
-    flank_overlap_max = input_values["flank_overlap_max"]
-    bed2 = input_values["bed2"]  # could be None
-    preset = input_values["preset"]
-    # single_flank = input_values["single_flank"]
-    different_contig_name = input_values["different_contig_name"]
-    telr_mode = input_values["telr_mode"]
-
-    prefix = "_".join([chrom, str(start), str(end)])
-    prefix = prefix.replace("|", "_")
-    lift_entries["ID"] = prefix
-    genome1_coord = chrom + ":" + str(start) + "-" + str(end)
-    lift_entries["genome1_coord"] = genome1_coord
-
-    te_length = int(end) - int(start)
-    lift_entries["te_length"] = te_length
-
-    # get genome 1 size
-    genome1_size_dict = get_genome_size(fasta1)
-
-    # extract 5 prime flank
-    start_5p_flank = int(start) - flank_len + 1
-    end_5p_flank = int(start)
-    prefix_5p = prefix + "_5p"
-    fa_5p = extract_genome_seqs(
-        fasta1,
-        genome1_size_dict,
-        chrom,
-        start_5p_flank,
-        end_5p_flank,
-        prefix_5p,
-        out_dir,
-    )
-    # extract 3 prime flank
-    start_3p_flank = int(end)
-    end_3p_flank = int(end) + flank_len
-    prefix_3p = prefix + "_3p"
-    fa_3p = extract_genome_seqs(
-        fasta1,
-        genome1_size_dict,
-        chrom,
-        start_3p_flank,
-        end_3p_flank,
-        prefix_3p,
-        out_dir,
-    )
-
-    # intiate minimap2 parameters
-    num_secondary = 10  # save 10 secondary alignments
-    if not different_contig_name:
-        if telr_mode:
-            filter_chrom = "_".join(chrom.split("_")[:-2])
-        else:
-            filter_chrom = chrom
-    else:
-        filter_chrom = None
-
-    # map 5 prime flanks to genome2
-    if fa_5p:
-        align_5p_flank_paf = out_dir + "/" + prefix_5p + ".paf"
-        align_flank(fa_5p, fasta2, align_5p_flank_paf, preset, num_secondary)
-        align_5p_flank_qcs = dict()
-        if check_exist(align_5p_flank_paf):
-            align_5p_flank_qcs = get_paf_info(align_5p_flank_paf)
-
-        align_5p_flank_bed = out_dir + "/" + prefix_5p + ".bed"
-
-        paf_to_bed(align_5p_flank_paf, align_5p_flank_bed, filter=filter_chrom)
-        os.remove(align_5p_flank_paf)
-        os.remove(fa_5p)
-    else:
-        align_5p_flank_bed = None
-
-    # map 3 prime flanks to genome2
-    if fa_3p:
-        align_3p_flank_paf = out_dir + "/" + prefix_3p + ".paf"
-        align_flank(fa_3p, fasta2, align_3p_flank_paf, preset, num_secondary)
-        align_3p_flank_qcs = dict()
-        if check_exist(align_3p_flank_paf):
-            align_3p_flank_qcs = get_paf_info(align_3p_flank_paf)
-
-        align_3p_flank_bed = out_dir + "/" + prefix_3p + ".bed"
-        paf_to_bed(align_3p_flank_paf, align_3p_flank_bed, filter=None)
-        os.remove(align_3p_flank_paf)
-        os.remove(fa_3p)
-    else:
-        align_3p_flank_bed = None
-
-    # find closest entries between 3 prime and 5 prime flank alignments, require two alignments to be on the same strand, also report distance
-    overlap = out_dir + "/" + prefix + ".overlap"
-    if check_file(align_5p_flank_bed) and check_file(align_3p_flank_bed):
-        with open(overlap, "w") as output:
-            subprocess.call(
-                [
-                    "bedtools",
-                    "closest",
-                    "-a",
-                    align_5p_flank_bed,
-                    "-b",
-                    align_3p_flank_bed,
-                    "-s",
-                    "-d",
-                    "-t",
-                    "all",
-                ],
-                stdout=output,
-            )
-
-    # identify liftover coordinates and report in json format
-    lift_entries["report"] = []
-    lift_start = 0
-    lift_end = 0
-    num_hits = 0  # number of non-reference liftover hits
-    reported = False
-    if check_file(overlap):
-        with open(overlap, "r") as input:
-            for line in input:
-                entry = line.replace("\n", "").split("\t")
-
-                chrom_genome2_5p = entry[0]
-                chrom_genome2_3p = entry[6]
-                flank_strand = entry[5]
-                mapp_quality_5p = int(entry[4])
-                mapp_quality_3p = int(entry[10])
-                if (
-                    chrom_genome2_5p == chrom_genome2_3p and chrom_genome2_3p != "."
-                ):  # to make sure the entry exists
-                    lift_chrom = chrom_genome2_5p
-                    # get flank qc
-                    align_5p_flank_id = "_".join(
-                        [entry[3], entry[0], entry[1], entry[2]]
-                    )
-                    align_5p_flank_qc = align_5p_flank_qcs[align_5p_flank_id]
-                    align_3p_flank_id = "_".join(
-                        [entry[9], entry[6], entry[7], entry[8]]
-                    )
-                    align_3p_flank_qc = align_3p_flank_qcs[align_3p_flank_id]
-
-                    start_5p = int(entry[1])
-                    end_5p = int(entry[2])
-                    start_3p = int(entry[7])
-                    end_3p = int(entry[8])
-                    # get final liftover coordiantes
-                    lift_start, lift_end, lift_gap = get_coord(
-                        start_5p, end_5p, start_3p, end_3p, flank_strand
-                    )
-                    # figure out the strand of the lifted annotation
-                    if flank_strand == strand:
-                        lift_strand = "+"
-                    else:
-                        lift_strand = "-"
-                    # report the flanking sequence alignments
-                    align_5p_coord = (
-                        chrom_genome2_5p + ":" + str(start_5p) + "-" + str(end_5p)
-                    )
-                    align_3p_coord = (
-                        chrom_genome2_3p + ":" + str(start_3p) + "-" + str(end_3p)
-                    )
-                    lift_entry = {
-                        "type": None,
-                        "family": family,
-                        "chrom": lift_chrom,
-                        "start": int(lift_start),
-                        "end": int(lift_end),
-                        "strand": lift_strand,
-                        "gap": lift_gap,
-                        "TSD_length": None,
-                        "TSD_sequence": None,
-                        "5p_flank_align_coord": align_5p_coord,
-                        "5p_flank_mapping_quality": mapp_quality_5p,
-                        "5p_flank_num_residue_matches": align_5p_flank_qc[
-                            "num_residue_matches"
-                        ],
-                        "5p_flank_alignment_block_length": align_5p_flank_qc[
-                            "alignment_block_length"
-                        ],
-                        "5p_flank_sequence_identity": align_5p_flank_qc[
-                            "sequence_identity"
-                        ],
-                        "3p_flank_align_coord": align_3p_coord,
-                        "3p_flank_mapping_quality": mapp_quality_3p,
-                        "3p_flank_num_residue_matches": align_3p_flank_qc[
-                            "num_residue_matches"
-                        ],
-                        "3p_flank_alignment_block_length": align_3p_flank_qc[
-                            "alignment_block_length"
-                        ],
-                        "3p_flank_sequence_identity": align_3p_flank_qc[
-                            "sequence_identity"
-                        ],
-                        "distance_5p_flank_ref_te": None,
-                        "distance_3p_flank_ref_te": None,
-                        "comment": None,
-                    }
-                    # check the distance between flank alignment and nearast TE annotation
-                    distance_5p = check_nearby_ref(
-                        lift_chrom,
-                        start_5p,
-                        end_5p,
-                        family,
-                        lift_strand,
-                        bed2,
-                        out_dir,
-                    )
-                    distance_3p = check_nearby_ref(
-                        lift_chrom,
-                        start_3p,
-                        end_3p,
-                        family,
-                        lift_strand,
-                        bed2,
-                        out_dir,
-                    )
-                    if distance_5p is not None:
-                        lift_entry["distance_5p_flank_ref_te"] = distance_5p
-                    if distance_3p is not None:
-                        lift_entry["distance_3p_flank_ref_te"] = distance_3p
-
-                    # if the overlap between flank alignments is greater than 50bp, don't report
-                    if lift_gap < -flank_overlap_max:
-                        if not reported:
-                            reported = False  # TODO: redundant
-                    elif lift_gap >= -flank_overlap_max and lift_gap <= flank_gap_max:
-                        # if the gap between flank alignments is smaller than 50bp
-                        # report as reference if 1) there is a reference 2 TE in between two flanks or 2) the gap size and original TE size is similar or 3) the gap size is bigger than the size of the TE.
-                        # report as non-reference otherwise.
-                        if (
-                            (
-                                distance_5p is not None
-                                and distance_5p >= 0
-                                and distance_5p <= lift_gap
-                                and distance_3p is not None
-                                and distance_3p <= 0
-                                and -distance_3p <= lift_gap
-                            )
-                            or check_nums_similar(lift_gap, te_length)
-                            or (lift_gap >= te_length)
-                        ):
-                            lift_entry["type"] = "reference"
-                            lift_entry[
-                                "comment"
-                            ] = "overlap/gap size between 3p and 5p flanks within threshold, include genome2 TE in between"
-                        else:
-                            lift_entry["type"] = "non-reference"
-                            lift_entry[
-                                "comment"
-                            ] = "overlap/gap size between 3p and 5p flanks within threshold"
-                            # get TSD length and sequence
-                            if lift_gap == 0:
-                                lift_entry["TSD_length"] = 0
-                                lift_entry["TSD_sequence"] = None
-                            if lift_gap < 0:
-                                lift_entry["TSD_length"] = -lift_gap
-                                lift_entry["TSD_sequence"] = get_ref_seq(
-                                    fasta2, lift_chrom, lift_start, lift_end, out_dir
-                                )
-
-                            num_hits = num_hits + 1
-                        lift_entries["report"].append(lift_entry)
-                        reported = True
-                    else:  # if the gap between flanks is greater than 50bp
-                        if lift_gap > flank_gap_max and lift_gap <= 0.5 * te_length:
-                            # if the gap size is smaller than half of the original TE size
-                            # report as reference if 1) there is a reference 2 TE in between two flanks
-                            # report as non-reference otherwise.
-                            if (
-                                distance_5p is not None
-                                and distance_5p >= 0
-                                and distance_5p <= lift_gap
-                                and distance_3p is not None
-                                and distance_3p <= 0
-                                and -distance_3p <= lift_gap
-                            ):
-                                lift_entry["type"] = "reference"
-                                lift_entry[
-                                    "comment"
-                                ] = "flanks gap size less than half of TE annotation, include genome2 TE in between"
-                            else:
-                                lift_entry["type"] = "non-reference"
-                                lift_entry[
-                                    "comment"
-                                ] = "flanks gap size exceeds threshold but less than half of TE annotation, no genome2 TE in between"
-                                num_hits = num_hits + 1
-                            lift_entries["report"].append(lift_entry)
-                            reported = True
-                        elif lift_gap >= 0.5 * te_length and lift_gap <= 20000:
-                            # if the gap size is greater than half of the original TE size and smaller than 20kb
-                            lift_entry["type"] = "reference"
-                            if (
-                                distance_5p is not None
-                                and distance_5p >= 0
-                                and distance_5p <= lift_gap
-                                and distance_3p is not None
-                                and distance_3p <= 0
-                                and -distance_3p <= lift_gap
-                            ):
-                                lift_entry[
-                                    "comment"
-                                ] = "flanks gap size greater than half of TE annotation, include genome2 TE in between"  # TODO: check same family?
-                            else:
-                                lift_entry[
-                                    "comment"
-                                ] = "flanks gap size greater than half of TE annotation, no genome2 TE in between"
-                            lift_entries["report"].append(lift_entry)
-                            reported = True
-                        else:
-                            # if the gap size is greater than 20kb
-                            if not reported:
-                                reported = False  # redundant
-
-    ####left off here!!!
-    # more than one report per annotation, need to filter
-    # first step is to choose the best reference annotation by comparing gap size with TE length
-    if len(lift_entries["report"]) > 1:
-        best_ref_entry = dict()
-        best_nonref_entry = dict()
-        for report in lift_entries["report"]:
-            if report["type"] == "reference":
-                if not best_ref_entry:
-                    best_ref_entry = report
-                else:
-                    current_gap_size = best_ref_entry["gap"]
-                    new_gap_size = report["gap"]
-                    if choose_new_size(te_length, current_gap_size, new_gap_size):
-                        best_ref_entry = report
-            if report["type"] == "non-reference":
-                if not best_nonref_entry:
-                    best_nonref_entry = report
-                else:
-                    reported = False
-        lift_entries["report"] = None
-        if reported:
-            if best_ref_entry and best_nonref_entry:
-                # if both reference and non-reference liftover can be found, report the non-reference one
-                # lift_entries["report"].append(best_ref_entry)
-                lift_entries["report"] = best_nonref_entry
-            elif best_ref_entry:
-                lift_entries["report"] = best_ref_entry
-            elif best_nonref_entry:
-                lift_entries["report"] = best_nonref_entry
-            else:
-                reported = False
-    elif len(lift_entries["report"]) == 1:
-        lift_entries["report"] = lift_entries["report"][0]
-
-    if not reported:
-        lift_entry = {
-            "type": "unlifted",
-            "family": family,
-            "chrom": None,
-            "start": None,
-            "end": None,
-            "strand": None,
-            "gap": None,
-            "TSD_length": None,
-            "TSD_sequence": None,
-            "5p_flank_align_coord": None,
-            "5p_flank_mapping_quality": None,
-            "5p_flank_num_residue_matches": None,
-            "5p_flank_alignment_block_length": None,
-            "5p_flank_sequence_identity": None,
-            "3p_flank_align_coord": None,
-            "3p_flank_mapping_quality": None,
-            "3p_flank_num_residue_matches": None,
-            "3p_flank_alignment_block_length": None,
-            "3p_flank_sequence_identity": None,
-            "distance_5p_flank_ref_te": None,
-            "distance_3p_flank_ref_te": None,
-            "comment": "flank alignments not nearby each other / only one flank aligned",
-        }
-        # TODO: if only one flank can be lifted, check to see if there is a reference TE nearby (same family, same strand, similar size?)
-        align_5p_coords = []
-        align_3p_coords = []
-        if check_file(align_5p_flank_bed):
-            with open(align_5p_flank_bed, "r") as input:
-                for line in input:
-                    entry = line.replace("\n", "").split("\t")
-                    align_5p_coords.append(entry[0] + ":" + entry[1] + "-" + entry[2])
-        if check_file(align_3p_flank_bed):
-            with open(align_3p_flank_bed, "r") as input:
-                for line in input:
-                    entry = line.replace("\n", "").split("\t")
-                    align_3p_coords.append(entry[0] + ":" + entry[1] + "-" + entry[2])
-
-        if len(align_5p_coords) == 1:
-            lift_entry["5p_flank_align_coord"] = align_5p_coords[0]
-        elif len(align_5p_coords) > 1:
-            lift_entry["5p_flank_align_coord"] = align_5p_coords
-
-        if len(align_3p_coords) == 1:
-            lift_entry["3p_flank_align_coord"] = align_3p_coords[0]
-        elif len(align_3p_coords) > 1:
-            lift_entry["3p_flank_align_coord"] = align_3p_coords
-
-        # if single flank mode is turned on, inspect single flanks and report as lifted
-        # if single_flank:
-        if len(align_5p_coords) == 1 and len(align_3p_coords) == 0:
-            with open(align_5p_flank_bed, "r") as input:
-                for line in input:
-                    entry = line.replace("\n", "").split("\t")
-                    flank_chrom = entry[0]
-                    flank_start = int(entry[1])
-                    flank_end = int(entry[2])
-                    flank_mapping_quality = int(entry[4])
-                    flank_strand = entry[5]
-                    align_5p_flank_id = "_".join(
-                        [entry[3], entry[0], entry[1], entry[2]]
-                    )
-            if flank_strand == strand:
-                lift_strand = "+"
-            else:
-                lift_strand = "-"
-            if flank_strand == "+":
-                lift_start = lift_end = flank_end
-            else:
-                lift_start = lift_end = flank_start
-
-            align_5p_flank_qc = align_5p_flank_qcs[align_5p_flank_id]
-
-            lift_entry["chrom"] = flank_chrom
-            lift_entry["start"] = int(lift_start)
-            lift_entry["end"] = int(lift_end)
-            lift_entry["mapp_quality_5p"] = flank_mapping_quality
-            lift_entry["strand"] = lift_strand
-            lift_entry["5p_flank_num_residue_matches"] = align_5p_flank_qc[
-                "num_residue_matches"
-            ]
-            lift_entry["5p_flank_alignment_block_length"] = align_5p_flank_qc[
-                "alignment_block_length"
-            ]
-            lift_entry["5p_flank_sequence_identity"] = align_5p_flank_qc[
-                "sequence_identity"
-            ]
-
-            distance_5p = check_nearby_ref(
-                flank_chrom,
-                flank_start,
-                flank_end,
-                family,
-                lift_strand,
-                bed2,
-                out_dir,
-            )
-            lift_entry["distance_5p_flank_ref_te"] = distance_5p
-            # if distance between flank and ref is small, report as ref, otherwise as non-ref
-            if distance_5p is not None and abs(distance_5p) <= 5:
-                lift_entry["type"] = "reference"
-                lift_entry[
-                    "comment"
-                ] = "only one flank aligned, flank alignment adjacent to reference TE"
-            else:
-                lift_entry["type"] = "non-reference"
-                lift_entry[
-                    "comment"
-                ] = "only one flank aligned, flank alignment not adjacent to reference TE"
-                num_hits = 1
-
-        elif len(align_5p_coords) == 0 and len(align_3p_coords) == 1:
-            with open(align_3p_flank_bed, "r") as input:
-                for line in input:
-                    entry = line.replace("\n", "").split("\t")
-                    flank_chrom = entry[0]
-                    flank_start = int(entry[1])
-                    flank_end = int(entry[2])
-                    flank_mapping_quality = int(entry[4])
-                    flank_strand = entry[5]
-                    align_3p_flank_id = "_".join(
-                        [entry[3], entry[0], entry[1], entry[2]]
-                    )
-            if flank_strand == strand:
-                lift_strand = "+"
-            else:
-                lift_strand = "-"
-            if flank_strand == "+":
-                lift_start = lift_end = flank_start
-            else:
-                lift_start = lift_end = flank_end
-
-            align_3p_flank_qc = align_3p_flank_qcs[align_3p_flank_id]
-
-            lift_entry["chrom"] = flank_chrom
-            lift_entry["start"] = int(lift_start)
-            lift_entry["end"] = int(lift_end)
-            lift_entry["mapp_quality_5p"] = flank_mapping_quality
-            lift_entry["strand"] = lift_strand
-            lift_entry["5p_flank_num_residue_matches"] = align_3p_flank_qc[
-                "num_residue_matches"
-            ]
-            lift_entry["5p_flank_alignment_block_length"] = align_3p_flank_qc[
-                "alignment_block_length"
-            ]
-            lift_entry["5p_flank_sequence_identity"] = align_3p_flank_qc[
-                "sequence_identity"
-            ]
-
-            distance_3p = check_nearby_ref(
-                flank_chrom,
-                flank_start,
-                flank_end,
-                family,
-                lift_strand,
-                bed2,
-                out_dir,
-            )
-            lift_entry["distance_3p_flank_ref_te"] = distance_3p
-            # if distance between flank and ref is small, report as ref, otherwise as non-ref
-            if distance_3p is not None and abs(distance_3p) <= 5:
-                lift_entry["type"] = "reference"
-                lift_entry[
-                    "comment"
-                ] = "only one flank aligned, flank alignment adjacent to reference TE"
-            else:
-                lift_entry["type"] = "non-reference"
-                lift_entry[
-                    "comment"
-                ] = "only one flank aligned, flank alignment not adjacent to reference TE"
-                num_hits = 1
-
-        lift_entries["report"] = lift_entry
-    lift_entries["num_hits"] = num_hits
-
-    # write
-    liftover_report = out_dir + "/" + prefix + "_report.json"
-    with open(liftover_report, "w") as output:
-        json.dump(lift_entries, output, indent=4, sort_keys=False)
-
-    return liftover_report
-
-
 def choose_new_size(size_ref, size_old, size_new):
     if size_ref - size_old > size_ref - size_new:
         return True
@@ -770,16 +148,6 @@ def mkdir(dir):
         os.mkdir(dir)
     except OSError:
         print("Creation of the directory %s failed" % dir)
-
-
-def check_file(file):
-    if file:
-        if os.path.isfile(file) and os.stat(file).st_size != 0:
-            return True
-        else:
-            return False
-    else:
-        return False
 
 def make_json(bed_input, json_output):
     with open(bed_input, "r") as input, open(json_output, "w") as output:
@@ -832,12 +200,12 @@ def liftover(
     #Already completed:
         # generate genome1 index file if not present
         genome1_index = fasta1 + ".fai"
-        if not check_file(genome1_index):
+        if not check_exist(genome1_index):
             build_index(fasta1)
 
         # generate genome2 index file if not present
         genome2_index = fasta2 + ".fai"
-        if not check_file(genome2_index):
+        if not check_exist(genome2_index):
             build_index(fasta2)
 
     # loop through TE annotations, prepare data for parallel liftover jobs
@@ -1120,7 +488,7 @@ def bed_to_json(overlap, info_5p, info_3p, json_file):
         with open(json_file, "w") as output:
             json.dump(overlap_dict, output)
 
-def make_report(overlap_json, overlap_id, te_json, ref_check_5p, ref_check_3p, ref, flank_overlap_max, flank_gap_max, report_file):
+def make_report(overlap_json, overlap_id, te_json, ref_bed, ref, flank_overlap_max, flank_gap_max, report_file):
     with open(te_json, "r") as te_json_file:
         te_dict = json.load(te_json_file)
         family = te_dict["family"]
@@ -1149,7 +517,22 @@ def make_report(overlap_json, overlap_id, te_json, ref_check_5p, ref_check_3p, r
     if flank_strand == strand: lift_strand = "+"
     else: lift_strand = "-"
     # check the distance between flank alignment and nearast TE annotation
-    distance_5p, distance_3p = check_nearby_ref(ref_check_5p), check_nearby_ref(ref_check_3p)
+    distance_5p = check_nearby_ref(
+        lift_chrom,
+        start_5p,
+        end_5p,
+        family,
+        lift_strand,
+        ref_bed
+    )
+    distance_3p = check_nearby_ref(
+        lift_chrom,
+        start_3p,
+        end_3p,
+        family,
+        lift_strand,
+        ref_bed
+    )
     # report the flanking sequence alignments
     align_5p_coord = f"{chrom_genome2_5p}:{start_5p}-{end_5p}"
     align_3p_coord = f"{chrom_genome2_3p}:{start_3p}-{end_3p}"
@@ -1231,6 +614,111 @@ def make_report(overlap_json, overlap_id, te_json, ref_check_5p, ref_check_3p, r
         with open(report_file, "w") as output:
             json.dump(lift_entry, output)
 
+def choose_report(*input_files):
+    # more than one report per annotation, need to filter
+    # first step is to choose the best reference annotation by comparing gap size with TE length
+    reports = []
+    flanks = {"5p":{"bed_file":None},"3p":{"bed_file":None}}
+    te_dict = {}
+    for file in input_files:
+        if "_flank" in os.path.basename(file):
+            flank = {True:"5p",False:"3p"}["5p" in os.path.basename(file)]
+            for file_type in ["bed", "info"]
+                if file_type in os.path.basename(file):      
+                    flanks[flank][f"{file_type}_file"] = file
+        elif "_best_report.json" in file:
+            out_file = file
+        elif check_exist(file):
+            with open(file, "r") as input:
+                if os.path.basename(file) == "00_annotation.json": 
+                    te_dict = json.load(input)
+                else: reports.append(json.load(input))
+    strand = te_dict["strand"]
+    best_report = {}
+    reported = True
+    if len(reports) > 1:
+        best_ref_entry = dict()
+        best_nonref_entry = dict()
+        for report in reports:
+            if report["type"] == "reference":
+                if not best_ref_entry:
+                    best_ref_entry = report
+                else:
+                    current_gap_size = best_ref_entry["gap"]
+                    new_gap_size = report["gap"]
+                    if choose_new_size(te_length, current_gap_size, new_gap_size):
+                        best_ref_entry = report
+            if report["type"] == "non-reference":
+                if not best_nonref_entry:
+                    best_nonref_entry = report
+                else:
+                    reported = False
+        if reported:
+            if best_ref_entry and best_nonref_entry:
+                # if both reference and non-reference liftover can be found, report the non-reference one
+                # lift_entries["report"].append(best_ref_entry)
+                best_report = best_nonref_entry
+            elif best_ref_entry:
+                best_report = best_ref_entry
+            elif best_nonref_entry:
+                best_report = best_nonref_entry
+            else:
+                reported = False
+    elif len(lift_entries["report"]) == 1:
+        lift_entries["report"] = lift_entries["report"][0]
+    else: reported = False
+
+    if not reported:
+        lift_entry = {
+            "type": "unlifted",
+            "family": family,
+            "chrom": None,
+            "start": None,
+            "end": None,
+            "strand": None,
+            "gap": None,
+            "TSD_length": None,
+            "TSD_sequence": None,
+            "5p_flank_align_coord": None,
+            "5p_flank_mapping_quality": None,
+            "5p_flank_num_residue_matches": None,
+            "5p_flank_alignment_block_length": None,
+            "5p_flank_sequence_identity": None,
+            "3p_flank_align_coord": None,
+            "3p_flank_mapping_quality": None,
+            "3p_flank_num_residue_matches": None,
+            "3p_flank_alignment_block_length": None,
+            "3p_flank_sequence_identity": None,
+            "distance_5p_flank_ref_te": None,
+            "distance_3p_flank_ref_te": None,
+            "comment": "flank alignments not nearby each other / only one flank aligned",
+        }
+        # TODO: if only one flank can be lifted, check to see if there is a reference TE nearby (same family, same strand, similar size?)
+        for flank in flanks:
+            flanks[flank]["alignment_coords"] = []
+            if check_exist(flanks[flank]["bed_file"]):
+                with open(flanks[flank]["bed_file"], "r") as input:
+                    for line in input:
+                        entry = line.replace("\n", "").split("\t")
+                        flanks[flank]["alignment_coords"].append(entry[0] + ":" + entry[1] + "-" + entry[2])
+
+            if len(flanks[flank]["alignment_coords"]) == 1:
+                lift_entry[f"{flank}_flank_align_coord"] = flanks[flank]["alignment_coords"][0]
+            elif len(flanks[flank]["alignment_coords"]) > 1:
+                lift_entry[f"{flank}_flank_align_coord"] = flanks[flank]["alignment_coords"]
+
+        # if single flank mode is turned on, inspect single flanks and report as lifted
+        # if single_flank:
+        if len(flanks["5p"]["alignment_coords"]) == 1 and len(flanks["3p"]["alignment_coords"]) == 0:
+            lift_entry = single_flank_liftover(flanks, "5p", lift_entry, strand)
+        elif len(flanks["5p"]["alignment_coords"]) == 0 and len(flanks["3p"]["alignment_coords"]) == 1:
+            lift_entry = single_flank_liftover(flanks, "3p", lift_entry, strand)
+        
+
+    # write
+    with open(out_file, "w") as output:
+        json.dump(liftover_report, output)
+
 def is_reference(distance_5p, distance_3p, lift_gap):
     return (
         distance_5p is not None
@@ -1240,6 +728,92 @@ def is_reference(distance_5p, distance_3p, lift_gap):
         and distance_3p <= 0
         and -distance_3p <= lift_gap
     )
+
+def single_flank_liftover(flank_info, flank, lift_entry, strand, ref_bed):
+    flank_info = flank_info[flank]
+
+    with open(flank_info["info_file"], "r") as input:
+        align_flank_qcs = json.load(input)
+
+    with open(flank_info["bed_file"], "r") as input:
+        for line in input:
+            entry = line.replace("\n", "").split("\t")
+            flank_chrom = entry[0]
+            flank_start = int(entry[1])
+            flank_end = int(entry[2])
+            flank_mapping_quality = int(entry[4])
+            flank_strand = entry[5]
+            align_flank_id = "_".join(
+                [entry[3], entry[0], entry[1], entry[2]]
+            )
+    if flank_strand == strand:
+        lift_strand = "+"
+    else:
+        lift_strand = "-"
+    if flank_strand == "+":
+        lift_start = lift_end = {"5p":flank_end,"3p":flank_start}[flank]
+    else:
+        lift_start = lift_end = {"5p":flank_start,"3p":flank_end}[flank]
+
+    align_flank_qc = align_flank_qcs[align_flank_id]
+
+    lift_entry["chrom"] = flank_chrom
+    lift_entry["start"] = int(lift_start)
+    lift_entry["end"] = int(lift_end)
+    lift_entry["mapp_quality_5p"] = flank_mapping_quality
+    lift_entry["strand"] = lift_strand
+    lift_entry["5p_flank_num_residue_matches"] = align_flank_qc["num_residue_matches"]
+    lift_entry["5p_flank_alignment_block_length"] = align_flank_qc["alignment_block_length"]
+    lift_entry["5p_flank_sequence_identity"] = align_flank_qc["sequence_identity"]
+
+    distance = check_nearby_ref(
+        flank_chrom,
+        flank_start,
+        flank_end,
+        family,
+        lift_strand,
+        ref_bed
+    )
+    lift_entry[f"distance_{flank}_flank_ref_te"] = distance
+    # if distance between flank and ref is small, report as ref, otherwise as non-ref
+    if distance is not None and abs(distance) <= 5:
+        lift_entry["type"] = "reference"
+        lift_entry[
+            "comment"
+        ] = "only one flank aligned, flank alignment adjacent to reference TE"
+    else:
+        lift_entry["type"] = "non-reference"
+        lift_entry[
+            "comment"
+        ] = "only one flank aligned, flank alignment not adjacent to reference TE"
+    
+    return lift_entry
+
+check_nearby_ref(chrom, start_query, end_query, family, strand, ref_bed, threshold=5000):
+    """
+    Check if flanking seqeunce alignments have nearby TE annotations in genome 2
+    """
+    distance = None
+
+    if check_exist(ref_bed):
+        bed = f"{chrom}\t{start}\t{end}\t{family}\t.\t{strand}".replace("'","")
+        overlap = subprocess.call(f"echo '{bed}' | bedtools closest -a - -b {ref_bed} -d -D ref -k 5", shell=True, capture_output=True, text=True).stdout
+
+        for line in overlap.split("\n"):
+            entry = line.split("\t")
+            chrom2 = entry[6]
+            family2 = entry[9]
+            strand2 = entry[11]
+            if chrom == chrom2 and family == family2 and strand == strand2:
+                distance_new = int(entry[12])
+                if distance is None:
+                    distance = distance_new
+                else:
+                    distance = absmin(distance, distance_new)
+    if distance is not None:
+        if abs(distance) > threshold:
+            distance = None
+    return distance
 
 if __name__ == '__main__':
     globals()[sys.argv[1]](*sys.argv[2:])
