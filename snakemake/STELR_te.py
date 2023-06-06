@@ -61,11 +61,19 @@ def annotate_contig(merge_output, annotation_file):
                     contig_te_strand
                 ]
             )
-            output.write(out_line + "\n")
-            te_name = f"te_{contig_te_start}_{contig_te_end}"
-            mkdir(f"{te_dir}/{te_name}")
-            with open(f"{te_dir}/{te_name}/00_annotation.bed", "w") as te_annotation:
-                te_annotation.write(out_line)
+            output.write(f"{out_line}\n")
+
+def make_te_dir(input_annotation, output_annotation):
+    te_dir = output_annotation[:output_annotation.rindex("/")]
+    mkdir(te_dir)
+    te_name = te_dir[te_dir.rindex("/")+1:]
+    te_start_end = "\t".join(te_name.split("_")[1:])
+    with open(input_annotation, "r") as input:
+        annotation = [line for line in input if te_start_end in line][0]
+    with open(output_annotation, "w") as output:
+        output.write(annotation)
+
+
 
 def rm_parse_merge(input_file, output_file):
     with open(input_file, "r") as input, open(output_file, "w") as output:

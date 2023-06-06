@@ -436,3 +436,93 @@ def get_contig_info(reference):
             entry = line.replace("\n", "").split("\t")
             contig_info.append("##contig=<ID={},length={}>".format(entry[0], entry[1]))
     return contig_info
+
+def make_json_output(liftover_file, af_file, annotation_file, contig_file, json_output):
+    with open(liftover_file, "r") as data:
+        liftover_report = json.load(data)
+    if not liftover_report["type"] == "non-reference":
+        quit()
+    with open(af_file, "r") as data:
+        af_dict = json.load(data)
+    with open(vcf_parsed, "r") as data:
+        sniffles_info = [line for line in data][0].replace("\n","").split("\t")
+        sniffles_info = {
+            "genotype":sniffles_info[10],
+            "alt_count":sniffles_info[12],
+            "ref_count":sniffles_info[11]
+        }
+    with open(annotation_file, "r") as data:
+        annotation = [line for line in data][0].replace("\n","").split("\t")
+    sequence = subprocess.run(f"bedtools getfasta -fi '{contig_file}' -bed '{annotation_file}' -s", shell=True, capture_output=True, text=True).stdout.split("\n")[1]
+    contig_name = sequence_file.split("/contigs/")[1].split("/tes/")[0]
+    te_name = sequence_file.split("/tes/")[1].replace("/00_sequence.bed","")
+    te_start, te_end = [int(index) for index in te_name.replace("te_","").split("_")]
+    contig_length = 0
+    with open(contig_file, "r") as data:
+        for line in data[1:]:
+            contig_length += len(line.replace("\n",""))
+
+    full_report = {
+        "type": "non-reference",
+        "ID": f"{liftover_report['chrom']}_{liftover_report['start']}_{liftover_report['end']}_{liftover_report['family']}",
+        "chrom": liftover_report["chrom"],
+        "start": liftover_report["start"],
+        "end": liftover_report["end"],
+        "family": liftover_report["family"],
+        "strand": liftover_report["strand"],
+        "support": "single_side",#will be processed further
+        "tsd_length": liftover_report["TSD_length"],
+        "tsd_sequence": liftover_report["TSD_sequence"],#will be processed further
+        "te_sequence": sequence,
+        "genotype": sniffles_info["genotype"],
+        "num_sv_reads": sniffles_info["alt_count"],
+        "num_ref_reads": sniffles_info["ref_count"],
+        "allele_frequency": af_dict["freq"],
+        "gap_between_flank": liftover_report["gap"],
+        "te_length": len(sequence),
+        "contig_id": contig_name,
+        "contig_length": contig_length,
+        "contig_te_start": te_start,
+        "contig_te_end": te_end,
+        "5p_flank_align_coord": liftover_report["5p_flank_align_coord"],
+        "5p_flank_mapping_quality": liftover_report["5p_flank_mapping_quality"],
+        "5p_flank_num_residue_matches": liftover_report["5p_flank_num_residue_matches"],
+        "5p_flank_alignment_block_length": liftover_report["5p_flank_alignment_block_length"],
+        "5p_flank_sequence_identity": liftover_report["5p_flank_sequence_identity"],
+        "3p_flank_align_coord": liftover_report["3p_flank_align_coord"],
+        "3p_flank_mapping_quality": liftover_report["3p_flank_mapping_quality"],
+        "3p_flank_num_residue_matches": liftover_report["3p_flank_num_residue_matches"],
+        "3p_flank_alignment_block_length": liftover_report["3p_flank_alignment_block_length"],
+        "3p_flank_sequence_identity": liftover_report["3p_flank_sequence_identity"],
+        "te_5p_cov": af_dict["te_5p_cov"],
+        "te_3p_cov": af_dict["te_3p_cov"],
+        "flank_5p_cov": af_dict["flank_5p_cov"],
+        "flank_3p_cov": af_dict["flank_3p_cov"],
+        "te_5p_cov_rc": af_dict["te_5p_cov_rc"],
+        "te_3p_cov_rc": af_dict["te_3p_cov_rc"],
+        "flank_5p_cov_rc": af_dict["flank_5p_cov_rc"],
+        "flank_3p_cov_rc": af_dict["flank_3p_cov_rc"]
+    }
+
+    if full_report["tsd_sequence"]:
+        full_report["tsd_sequence"] = full_report["tsd_sequence"].upper()
+    
+    if full_report["5p_flank_align_coord"] and full_report["3p_flank_align_coord"]:
+        full_report["support"] = "both_sides"
+    
+    #basic_report = ["type","ID","chrom","start","end","family","strand","support","tsd_length","tsd_sequence","te_sequence","genotype","num_sv_reads","num_ref_reads","allele_frequency"]
+    #basic_report = {key:full_report[key] for key in basic_report}
+
+    with open(json_output, "w") as output:
+        json.dump(full_report, output)
+    
+    
+
+
+
+
+
+
+
+
+

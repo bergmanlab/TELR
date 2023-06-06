@@ -390,9 +390,27 @@ checkpoint annotate_contig:
         fi
         """
 
+def get_tes(wildcards): #expects annotation file to be in contigs/{contig}/tes/
+    annotation_file = checkpoints.annotate_contig.get(**wildcards).output[0]
+    te_dir = annotation_file[:annotation_file.rindex("/")]
+    tes = []
+    with open(annotation_file, "r") as input:
+        for line in input:
+            entry = line.replace("\n","").split("\t")
+            if len(entry) == 6:
+                tes.append(f"te_{entry[1]}_{entry[2]}")
+rule make_te_dirs:
+    input:
+        "intermediate_files/contigs/{contig}/tes/annotation.bed"
+    output:
+        "intermediate_files/contigs/{contig}/tes/{te}/00_annotation.bed"
+    shell:
+        "python3 STELR_te.py make_te_dir '{input}' '{output}'"
+
+
 ## use RM to annotate config
 
-rule te_fasta:
+rule rm_te_fasta:
     input:
         bed_file = "intermediate_files/contigs/{contig}/tes/annotation.bed",
         sequence = "intermediate_files/contigs/{contig}/03_contig1.fa"
@@ -698,6 +716,28 @@ rule make_report:
     touch {output}
     """
 
+def overlap_ids_report(wildcards):
+    overlap_file = checkpoints.json_for_report.get(**wildcards).output[0]
+    with open(overlap_file, "r") as overlap:
+        overlap_dict = json.load(overlap)
+        overlap_ids = [key for key in overlap_dict]
+    return [f"intermediate_files/contigs/{wildcards.contig}/tes/{wildcards.te}/16_{overlap_id}_report.json" for overlap_id in overlap_ids]
+rule best_report:
+    input:
+        flanks = [
+            "intermediate_files/contigs/{contig}/tes/{te}/14_5p_flank.info",
+            "intermediate_files/contigs/{contig}/tes/{te}/14_3p_flank.info",
+            "intermediate_files/contigs/{contig}/tes/{te}/14_5p_flank.bed",
+            "intermediate_files/contigs/{contig}/tes/{te}/14_3p_flank.bed"
+            ],
+        te_json = "intermediate_files/contigs/{contig}/tes/{te}/00_annotation.json",
+        overlap_reports = overlap_ids_report
+    output:
+        "intermediate_files/contigs/{contig}/tes/{te}/17_best_report.json"
+    shell:
+        "python3 STELR_liftover.py choose_report {output} {input}"
+
+
 def annotation_from_option(wildcards):
     return '{True:f"intermediate_files/contigs/{wildcards.contig}/10_annotation.bed",False:f"intermediate_files/contigs/{wildcards.contig}/rm_05_rm_reannotated_tes.bed"}[config["minimap2_family"]]
 
@@ -711,12 +751,6 @@ def annotation_from_option(wildcards):
         fi
         """
 
-def get_te_dirs(wildcards): #expects annotation file to be in contigs/{contig}/tes/
-    annotation_file = checkpoints.annotate_contig.get(**wildcards).output[0]
-    te_dir = annotation_file[:annotation_file.rindex("/")]
-    annotation_file = annotation_file[annotation_file.rindex("/")+1:]
-    ls = subprocess.run(f"ls '{te_dir}'", shell=True, capture_output=True, text=True)
-    return ls.stdout.split().remove(annotation_file)
 
 '''3rd stage
 Identify TE insertion breakpoint (minimap2)
@@ -868,3 +902,18 @@ rule get_allele_frequency:
         "intermediate_files/contigs/{contig}/tes/{te}/11_allele_frequency.json"
     shell:
         "python3 STELR_te.py get_af '{input.fwd}' '{input.rev}' '{output}'"
+
+'''
+Write Output
+'''
+
+rule individual_json:
+    input:
+        liftover_file = "intermediate_files/contigs/{contig}/tes/{te}/17_best_report.json",
+        af_file = "intermediate_files/contigs/{contig}/tes/{te}/11_allele_frequency.json",
+        annotation_file = "intermediate_files/contigs/{contig}/tes/{te}/00_annotation.json",
+        contig_file = "intermediate_files/contigs/{contig}/03_contig1.fa"
+    output:
+        "intermediate_files/contigs/{contig}/tes/{te}/18_output.json"
+    shell:
+        "python3 STELR_output.py make_json_output {input} {output}"

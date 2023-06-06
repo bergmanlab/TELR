@@ -614,7 +614,7 @@ def make_report(overlap_json, overlap_id, te_json, ref_bed, ref, flank_overlap_m
         with open(report_file, "w") as output:
             json.dump(lift_entry, output)
 
-def choose_report(*input_files):
+def choose_report(out_file, *input_files):
     # more than one report per annotation, need to filter
     # first step is to choose the best reference annotation by comparing gap size with TE length
     reports = []
@@ -626,8 +626,6 @@ def choose_report(*input_files):
             for file_type in ["bed", "info"]
                 if file_type in os.path.basename(file):      
                     flanks[flank][f"{file_type}_file"] = file
-        elif "_best_report.json" in file:
-            out_file = file
         elif check_exist(file):
             with open(file, "r") as input:
                 if os.path.basename(file) == "00_annotation.json": 
