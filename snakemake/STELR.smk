@@ -5,9 +5,12 @@ from TELR_utility import get_contig_length
 
 rule all:
     input: 
-        "intermediate_files/contigs/chr2L_33030_33030/07_te2contig_filter.tsv",
-        lambda wildcards: f"intermediate_files/{config['sample_name']}.vcf_filtered.tsv"
-        #"{sample_name}.loci_eval.tsv"
+        contig_fa_outfile = f"{config['sample_name']}.telr.contig.fasta",
+        te_fa_outfile = f"{config['sample_name']}.telr.te.fasta",
+        bed_outfile = f"{config['sample_name']}.telr.bed",
+        json_outfile = f"{config['sample_name']}.telr.json",
+        expanded_json_outfile = f"{config['sample_name']}.telr.expanded.json",
+        vcf_outfile = f"{config['sample_name']}.telr.vcf"
 
 def input_reads_if_in_bam_format(wildcards):
     #   this rule returns the bam format input if the input is given in bam format, or an empty list if not.
@@ -390,15 +393,6 @@ checkpoint annotate_contig:
         fi
         """
 
-def get_tes(wildcards): #expects annotation file to be in contigs/{contig}/tes/
-    annotation_file = checkpoints.annotate_contig.get(**wildcards).output[0]
-    te_dir = annotation_file[:annotation_file.rindex("/")]
-    tes = []
-    with open(annotation_file, "r") as input:
-        for line in input:
-            entry = line.replace("\n","").split("\t")
-            if len(entry) == 6:
-                tes.append(f"te_{entry[1]}_{entry[2]}")
 rule make_te_dirs:
     input:
         "intermediate_files/contigs/{contig}/tes/annotation.bed"
@@ -917,3 +911,35 @@ rule individual_json:
         "intermediate_files/contigs/{contig}/tes/{te}/18_output.json"
     shell:
         "python3 STELR_output.py make_json_output {input} {output}"
+
+
+def get_tes(wildcards): #expects annotation file to be in contigs/{contig}/tes/
+    annotation_file = checkpoints.annotate_contig.get(**wildcards).output[0]
+    te_dir = annotation_file[:annotation_file.rindex("/")]
+    tes = []
+    with open(annotation_file, "r") as input:
+        for line in input:
+            entry = line.replace("\n","").split("\t")
+            if len(entry) == 6:
+                tes.append(f"te_{entry[1]}_{entry[2]}")
+    return tes
+
+def get_output_jsons(wildcards):
+    tes = get_tes(**wildcards)
+    return [f"intermediate_files/contigs/{wildcards.contig}/tes/{te}/18_output.json" for te in tes]
+
+
+rule final_output:
+    input:
+        reference = config["reference"],
+        reference_index = lambda wildcards: f"{config['reference']}.fai",
+        json_files = get_output_jsons
+    output:
+        contig_fa_outfile = "{sample_name}.telr.contig.fasta",
+        te_fa_outfile = "{sample_name}.telr.te.fasta",
+        bed_outfile = "{sample_name}.telr.bed",
+        json_outfile = "{sample_name}.telr.json",
+        expanded_json_outfile = "{sample_name}.telr.expanded.json",
+        vcf_outfile = "{sample_name}.telr.vcf"
+    shell:
+        "python3 STELR_output.py write_output {output} {input}"
