@@ -26,6 +26,7 @@ MANIFEST
 
 # test output
 test
+*reads*
 
 #snakemake
 .snakemake/
