@@ -8,7 +8,7 @@ import logging
 import time
 import statistics
 from multiprocessing import Pool
-from TELR_utility import (
+from STELR_utility import (
     check_exist,
     mkdir,
     format_time,
@@ -38,7 +38,7 @@ def vcf_alignment_filter(intersect_file, output_file):
                 )
                 output.write(out_line + "\n")
 
-def annotate_contig(merge_output, annotation_file):
+def annotate_contig(merged_output, annotation_file):
     te_dir = annotation_file[:annotation_file.rindex("/")]
     mkdir(te_dir)
     with open(merged_output, "r") as input, open(annotation_file, "w") as output:
@@ -212,12 +212,12 @@ def estimate_coverage(te_5p, te_3p, flank_5p, flank_3p, frequency_file):
     # read contig annotation to dict
     depths = {
         "5p":{
-            "te":median_cov(te_5p),
-            "flank":median_cov(flank_5p)
-        }
-        "flank":{
-            "te":median_cov(te_3p),
-            "flank":median_cov(flank_3p)
+            "te":get_median_cov(te_5p),
+            "flank":get_median_cov(flank_5p)
+        },
+        "3p":{
+            "te":get_median_cov(te_3p),
+            "flank":get_median_cov(flank_3p)
         }
     }
     if depths["3p"]["te"] is None:
@@ -225,7 +225,7 @@ def estimate_coverage(te_5p, te_3p, flank_5p, flank_3p, frequency_file):
     with open(frequency_file, "w") as output:
         json.dump(depths, output)
 
-def get_af(fwd_freq, rev_freq, out_file):
+def get_af(fwd_freq, rev_freq, outfile):
     allele_freqs = {
         "fwd": fwd_freq,
         "rev": rev_freq
@@ -290,7 +290,7 @@ def estimate_flank_depth(bam, contig, te, flank_len, flank_offset, output_5p, ou
         "3p":f"touch {output_3p}"
     }
     if start - flank_len - flank_offset >= 0:
-        commands["5p"] = f"samtools depth -aa -r {contig_name}:{start-flank_len-offset}-{start-offset} {bam} > {output_5p}"
+        commands["5p"] = f"samtools depth -aa -r {contig_name}:{start-flank_len-flank_offset}-{start-flank_offset} {bam} > {output_5p}"
     if end + flank_len + flank_offset <= contig_length:
         commands["3p"] = f"samtools depth -aa -r {contig_name}:{end+flank_offset}-{end+flank_len+flank_offset} {bam} > {output_3p}"
     

@@ -45,6 +45,7 @@ def run_workflow(config, run_id):
     #telr_dir = os.path.dirname(os.path.abspath(__file__)) #remember to implement later!
     command = [
         "snakemake", #"--use-conda",#"--conda-prefix",f"{telr_dir}/envs",
+        "-s","STELR.smk",
         "--configfile", f"{os.path.join(config['out'], 'snakemake')}/config/config_{run_id}.json",
         "--cores", str(config["thread"]),# "--quiet"
         #"--unlock"

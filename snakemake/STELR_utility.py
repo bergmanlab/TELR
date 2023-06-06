@@ -104,7 +104,7 @@ def read_vcf(vcf_file, contig_name = False, column = False, single_contig = Fals
         contig_name = contig_name.split("_")
         contig_name = f"{'_'.join(contig_name[:-2])}\t{contig_name[-2]}\t{contig_name[-1]}"
         with open(vcf_file, "r") as input:
-            if single_contig: matching_row = input[0]
+            if single_contig: matching_row = [i for i in input][0]
             else: matching_row = [i for i in input if contig_name in i][0]
             matching_row = matching_row.replace("\n","").split("\t")
         if type(column) is int: 
@@ -133,7 +133,7 @@ def get_contig_length(contig):
     else:
         print("no contig " + contig)
 
-def string_to_bool(bool_string, default=False)
+def string_to_bool(bool_string, default=False):
     bool_string = str(bool_string).lower()
     bool_dict = {"true":True,"false":False}
     if bool_string in bool_dict: return bool_dict[bool_string]

@@ -7,7 +7,7 @@ import logging
 from Bio import SeqIO
 from multiprocessing import Pool
 import pysam
-from TELR_utility import mkdir, check_exist, format_time, get_contig_name, read_vcf
+from STELR_utility import mkdir, check_exist, format_time, get_contig_name, read_vcf
 
 
 def parse_assembled_contig(input_contig, parsed_contig):
@@ -233,7 +233,7 @@ def make_contig_dir(vcf_parsed_full, contig_name, vcf_parsed_contig):
     mkdir(contigs_dir, verbose = False)
     contig_dir = f"{contigs_dir}/{contig_name}"
     mkdir(contig_dir)
-    with open(cf_parsed_contig, "w") as output:
+    with open(vcf_parsed_contig, "w") as output:
         output.write("\t".join(read_vcf(vcf_parsed_full, contig_name)))
 
 def make_contig_file(vcf_parsed, contig_name, contig_file, reads):

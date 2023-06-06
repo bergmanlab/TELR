@@ -4,20 +4,20 @@ import json
 import subprocess
 import shutil
 from multiprocessing import Pool
-from STELR_utility.py import string_to_bool, get_subseq, check_exist
+from STELR_utility import string_to_bool, get_subseq, check_exist
 
-def extract_genome_seqs(ref, ref_size, te_json, flank_len, output_file):
+def flank_bed(ref, ref_size, te_json, flank_len, output_file):
     """
     Extract subsequence from fasta based on coordinates
     """
     with open(ref_size, "r") as ref_size_file:
         ref_size_dict = json.load(ref_size_file)
-    ref_size = ref_size_dict[chrom]
     with open(te_json, "r") as te_json_file:
         te_dict = json.load(te_json_file)
         chrom = te_dict["chrom"]
         start = te_dict["start"]
         end = te_dict["end"]
+    ref_size = ref_size_dict[chrom]
     
     if end > ref_size or start < 0:
         pass#touch file in smk
@@ -151,7 +151,7 @@ def mkdir(dir):
 
 def make_json(bed_input, json_output):
     with open(bed_input, "r") as input, open(json_output, "w") as output:
-        entry = input[0].replace("\n", "").split("\t")
+        entry = [line for line in input][0].replace("\n", "").split("\t")
         chrom = entry[0]
         start = int(entry[1])
         end = int(entry[2])
@@ -200,7 +200,7 @@ def bed_to_json(overlap, info_5p, info_3p, json_file):
                 end_3p = int(entry[8])
 
                 id_chrom = chrom_5p.replace("(","").replace(")","").replace("_","").replace(",","").replace(":","")
-                entry_id = f"({id_chrom}:{start_5p}-{end_5p},{start_3p}-{end_3p})"
+                entry_id = len(overlap_dict)
 
                 overlap_dict[entry_id] = {
                     "chrom_5p":chrom_5p,
@@ -354,7 +354,7 @@ def choose_report(out_file, *input_files):
     for file in input_files:
         if "_flank" in os.path.basename(file):
             flank = {True:"5p",False:"3p"}["5p" in os.path.basename(file)]
-            for file_type in ["bed", "info"]
+            for file_type in ["bed", "info"]:
                 if file_type in os.path.basename(file):      
                     flanks[flank][f"{file_type}_file"] = file
         elif check_exist(file):
@@ -518,7 +518,7 @@ def single_flank_liftover(flank_info, flank, lift_entry, strand, ref_bed):
     
     return lift_entry
 
-check_nearby_ref(chrom, start_query, end_query, family, strand, ref_bed, threshold=5000):
+def check_nearby_ref(chrom, start_query, end_query, family, strand, ref_bed, threshold=5000):
     """
     Check if flanking seqeunce alignments have nearby TE annotations in genome 2
     """

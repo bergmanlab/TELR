@@ -4,7 +4,7 @@ import subprocess
 import logging
 import time
 from Bio import SeqIO
-from TELR_utility import format_time
+from STELR_utility import format_time
 
 def alignment(read, reference, out, sample_name, thread, method, presets):
     """

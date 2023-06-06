@@ -1,7 +1,7 @@
 import os
 import subprocess
 import json
-from TELR_utility import get_contig_length
+from STELR_utility import get_contig_length
 
 rule all:
     input: 
@@ -41,7 +41,7 @@ rule alignment:
     input:
         config["fasta_reads"]
     output:
-        "intermediate_files/{sample_name}.sam"
+        "intermediate_files/{sample_name}_aln.sam"
     params:
         reads = config["fasta_reads"],
         reference = config["reference"],
@@ -55,7 +55,7 @@ rule alignment:
 def find_alignment(wildcards):
     bam_input = f"intermediate_files/input/reads-{wildcards.sample_name}.bam"
     if(os.path.isfile(bam_input)): return bam_input
-    else: return f"intermediate_files/{wildcards.sample_name}.sam"
+    else: return f"intermediate_files/{wildcards.sample_name}_aln.sam"
 rule sort_index_bam:
     input:
         find_alignment#gives name of input file (this depends on whether the user supplied input was in bam format or it was aligned later)
@@ -203,21 +203,21 @@ rule get_read_ids: # get a list of all the read IDs from the parsed vcf file
     output:
         "intermediate_files/contigs/{contig}/00_reads.id"
     shell:
-        "python3 STELR_assembly.py write_read_IDs '{input}' '{output}'"
+        "python3 STELR_assembly.py write_read_IDs '{input}' '{wildcards.contig}' '{output}'"
 
 rule unique_IDlist: # get a list of unique IDs from the readlist
     input:
         "intermediate_files/contigs/{contig}/00_{readlist}.id"
     output:
-        "intermediate_files/contigs/{contig}/00_{readlist}.id.unique
+        "intermediate_files/contigs/{contig}/00_{readlist}.id.unique"
     shell:
         "cat '{input}' | sort | uniq > '{output}'"
 
 rule filter_readlist: # use seqtk to get the fasta reads from the input reads file
     input:
-        "intermediate_files/contigs/{contig}/00_{readlist}.id.unique
+        "intermediate_files/contigs/{contig}/00_{readlist}.id.unique"
     output:
-        "intermediate_files/contigs/{contig}/00_{readlist}.fa
+        "intermediate_files/contigs/{contig}/00_{readlist}.fa"
     shell:
         "seqtk subseq '{config[fasta_reads]}' '{input}' | seqtk seq -a > '{output}'"
 
@@ -303,7 +303,7 @@ rule map_contig:
     output:
         "intermediate_files/contigs/{contig}/05_vcf_mm2.paf"
     params:
-        presets = lambda wildcards: '{"pacbio":"map-pb","ont":"map-ont"}[config["presets"]]
+        presets = lambda wildcards: {"pacbio":"map-pb","ont":"map-ont"}[config["presets"]]
     threads: 1
     shell:
         """
@@ -318,7 +318,7 @@ rule te_contig_map:
     output:
         "intermediate_files/contigs/{contig}/06_te_mm2.paf"
     params:
-        presets = lambda wildcards: '{"pacbio":"map-pb","ont":"map-ont"}[config["presets"]]
+        presets = lambda wildcards: {"pacbio":"map-pb","ont":"map-ont"}[config["presets"]]
     threads: 1
     shell:
         """
@@ -508,10 +508,10 @@ rule ref_repeatmask:
     threads: config["thread"]
     shell:
         """
-        if [ ! -d '{params.ref_rm_dir}' ]; then mkdir '{params.ref_rm_dir}
+        if [ ! -d '{params.ref_rm_dir}' ]; then mkdir '{params.ref_rm_dir}'
         fi
         RepeatMasker -dir '{params.ref_rm_dir}' -gff -s -nolow -no_is -e ncbi -lib '{input.lib}' -pa '{threads}' '{input.ref}'
-        touch '{output}'
+        touch {output}
         """
 
 rule ref_rm_process:
@@ -521,7 +521,7 @@ rule ref_rm_process:
     output:
         "intermediate_files/ref_repeatmask/{reference}.out.gff3"
     shell:
-        "python3 STELR_te.py parse_rm_out '{input}' '{output}'"
+        "python3 STELR_te.py parse_rm_out '{input.gff}' '{input.out}' '{output}'"
         #left off here, STELR_te.py repeatmask()
 
 rule ref_te_bed:
@@ -553,7 +553,7 @@ rule sort_ref_rm:
 
 rule build_index:
     input:
-        "intermediate_files/{genome}'"
+        "intermediate_files/{genome}"
     output:
         "intermediate_files/{genome}.fai"
     shell:
@@ -563,7 +563,7 @@ rule make_te_json:
     input:
         "intermediate_files/contigs/{contig}/tes/{te}/00_annotation.bed"
     output:
-        "intermediate_files/contigs/{contigs}/tes/{te}/00_annotation.json"
+        "intermediate_files/contigs/{contig}/tes/{te}/00_annotation.json"
     shell:
         "python3 STELR_liftover.py make_json '{input}' '{output}'"
 
@@ -578,7 +578,7 @@ rule get_genome_size:
 rule flank_bed:
     input:
         fasta = "intermediate_files/contigs/{contig}/03_contig1.fa",
-        size = "intermediate_files/contigs/{contig}/03_contig1.fa.size",
+        contig_size = "intermediate_files/contigs/{contig}/03_contig1.fa.size",
         te_dict = "intermediate_files/contigs/{contig}/tes/{te}/00_annotation.json"
     output:
         "intermediate_files/contigs/{contig}/tes/{te}/12_{flank}_flank.bed"
@@ -586,7 +586,7 @@ rule flank_bed:
         flank_len = config["flank_len"]
     shell:
         """
-        python3 STELR_liftover.py '{input.fasta}' '{input.size}' '{input.te_dict}' '{params.flank_len}' '{output}'
+        python3 STELR_liftover.py flank_bed '{input.fasta}' '{input.contig_size}' '{input.te_dict}' '{params.flank_len}' '{output}'
         touch '{output}'
         """
 
@@ -733,18 +733,7 @@ rule best_report:
 
 
 def annotation_from_option(wildcards):
-    return '{True:f"intermediate_files/contigs/{wildcards.contig}/10_annotation.bed",False:f"intermediate_files/contigs/{wildcards.contig}/rm_05_rm_reannotated_tes.bed"}[config["minimap2_family"]]
-
-
-    shell:
-        """
-        if [ -s '{input}' ]; then
-            
-        else
-            touch '{output}'
-        fi
-        """
-
+    return {True:f"intermediate_files/contigs/{wildcards.contig}/10_annotation.bed",False:f"intermediate_files/contigs/{wildcards.contig}/rm_05_rm_reannotated_tes.bed"}[config["minimap2_family"]]
 
 '''3rd stage
 Identify TE insertion breakpoint (minimap2)
@@ -761,7 +750,7 @@ Read extraction (samtools)
 rule read_context:
     input:
         vcf_parsed = "intermediate_files/contigs/{contig}/00_vcf_parsed.tsv",
-        bam = "intermediate_files/{sample_name}_sort.bam"
+        bam = lambda wildcards: f"intermediate_files/{config['sample_name']}_sort.bam"
     output:
         read_ids = "intermediate_files/contigs/{contig}/00_read_context.id",
         vcf_parsed_new = "intermediate_files/contigs/{contig}/00_parsed_vcf_with_readcount.tsv"
@@ -795,7 +784,7 @@ rule realignment:
     output:
         "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.sam"
     params:
-        presets = lambda wildcards: '{"pacbio":"map-pb","ont":"map-ont"}[config["presets"]]
+        presets = lambda wildcards: {"pacbio":"map-pb","ont":"map-ont"}[config["presets"]]
     shell:
         """
         if [ -s '{input.contig}' ]; then
@@ -886,7 +875,7 @@ rule estimate_coverage:
     output:
         "intermediate_files/contigs/{contig}/tes/{te}/{contig_revcomp}.freq"
     shell:
-        "python3 STELR_te.py estimate_coverage '{input.te_5p}' '{input.te_3p}' '{flank_5p}' '{flank_3p}' '{output}'"
+        "python3 STELR_te.py estimate_coverage '{input.te_5p}' '{input.te_3p}' '{input.flank_5p}' '{input.flank_3p}' '{output}'"
 
 rule get_allele_frequency:
     input:
@@ -913,20 +902,27 @@ rule individual_json:
         "python3 STELR_output.py make_json_output {input} {output}"
 
 
-def get_tes(wildcards): #expects annotation file to be in contigs/{contig}/tes/
-    annotation_file = checkpoints.annotate_contig.get(**wildcards).output[0]
-    te_dir = annotation_file[:annotation_file.rindex("/")]
-    tes = []
-    with open(annotation_file, "r") as input:
-        for line in input:
-            entry = line.replace("\n","").split("\t")
-            if len(entry) == 6:
-                tes.append(f"te_{entry[1]}_{entry[2]}")
+def all_contigs(wildcards):
+    vcf_parsed_file = checkpoints.merge_parsed_vcf.get(**wildcards).output[0]
+    with open(vcf_parsed_file) as vcf_parsed:
+        contigs = []
+        for line in vcf_parsed:
+            contigs.append("_".join(line.split("\t")[:3]))
+    return contigs
+def all_tes(wildcards): #expects annotation file to be in contigs/{contig}/tes/
+    tes = {}
+    for contig in all_contigs(wildcards):
+        annotation_file = checkpoints.annotate_contig.get(contig=contig).output[0]
+        te_dir = annotation_file[:annotation_file.rindex("/")]
+        with open(annotation_file, "r") as input:
+            for line in input:
+                entry = line.replace("\n","").split("\t")
+                if len(entry) == 6:
+                    tes[f"te_{entry[1]}_{entry[2]}"] = contig
     return tes
-
 def get_output_jsons(wildcards):
-    tes = get_tes(**wildcards)
-    return [f"intermediate_files/contigs/{wildcards.contig}/tes/{te}/18_output.json" for te in tes]
+    tes = all_tes(wildcards)
+    return [f"intermediate_files/contigs/{tes[te]}/tes/{te}/18_output.json" for te in tes]
 
 
 rule final_output:
