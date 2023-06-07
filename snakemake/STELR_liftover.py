@@ -220,6 +220,7 @@ def bed_to_json(overlap, info_5p, info_3p, json_file):
             json.dump(overlap_dict, output)
 
 def make_report(overlap_json, overlap_id, te_json, ref_bed, ref, flank_overlap_max, flank_gap_max, report_file):
+    flank_overlap_max, flank_gap_max = int(flank_overlap_max), int(flank_gap_max)
     with open(te_json, "r") as te_json_file:
         te_dict = json.load(te_json_file)
         family = te_dict["family"]
@@ -330,7 +331,6 @@ def make_report(overlap_json, overlap_id, te_json, ref_bed, ref, flank_overlap_m
                 lift_entry["type"] = "non-reference"
                 lift_entry["comment"] = "flanks gap size exceeds threshold but less than half of TE annotation, no genome2 TE in between"
                 num_hits = num_hits + 1
-            lift_entries["report"].append(lift_entry)
             reported = True
         elif lift_gap >= 0.5 * te_length and lift_gap <= 20000:
             # if the gap size is greater than half of the original TE size and smaller than 20kb
@@ -339,7 +339,6 @@ def make_report(overlap_json, overlap_id, te_json, ref_bed, ref, flank_overlap_m
                 lift_entry["comment"] = "flanks gap size greater than half of TE annotation, include genome2 TE in between"  # TODO: check same family?
             else:
                 lift_entry["comment"] = "flanks gap size greater than half of TE annotation, no genome2 TE in between"
-            lift_entries["report"].append(lift_entry)
             reported = True
     if reported:
         with open(report_file, "w") as output:
@@ -393,8 +392,8 @@ def choose_report(out_file, *input_files):
                 best_report = best_nonref_entry
             else:
                 reported = False
-    elif len(lift_entries["report"]) == 1:
-        lift_entries["report"] = lift_entries["report"][0]
+    elif len(reports) == 1:
+        best_report = reports[0]
     else: reported = False
 
     if not reported:
@@ -439,14 +438,14 @@ def choose_report(out_file, *input_files):
         # if single flank mode is turned on, inspect single flanks and report as lifted
         # if single_flank:
         if len(flanks["5p"]["alignment_coords"]) == 1 and len(flanks["3p"]["alignment_coords"]) == 0:
-            lift_entry = single_flank_liftover(flanks, "5p", lift_entry, strand)
+            best_report = single_flank_liftover(flanks, "5p", lift_entry, strand)
         elif len(flanks["5p"]["alignment_coords"]) == 0 and len(flanks["3p"]["alignment_coords"]) == 1:
-            lift_entry = single_flank_liftover(flanks, "3p", lift_entry, strand)
+            best_report = single_flank_liftover(flanks, "3p", lift_entry, strand)
         
 
     # write
     with open(out_file, "w") as output:
-        json.dump(liftover_report, output)
+        json.dump(best_report, output)
 
 def is_reference(distance_5p, distance_3p, lift_gap):
     return (

@@ -10,9 +10,8 @@ import pysam
 from STELR_utility import mkdir, check_exist, format_time, get_contig_name, read_vcf
 
 
-def parse_assembled_contig(input_contig, parsed_contig):
+def parse_assembled_contig(input_contig, contig_name, parsed_contig):
     if check_exist(input_contig):
-        contig_name = os.path.basename(input_contig).replace(".cns.fa", "")
         with open(input_contig, "r") as input, open(parsed_contig, "w") as parsed_output_handle:
             records = SeqIO.parse(input, "fasta")
             for record in records:

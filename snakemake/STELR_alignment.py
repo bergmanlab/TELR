@@ -6,7 +6,7 @@ import time
 from Bio import SeqIO
 from STELR_utility import format_time
 
-def alignment(read, reference, out, sample_name, thread, method, presets):
+def alignment(read, reference, outfile, sample_name, thread, method, presets):
     """
     This function takes raw reads and performs read alignment using ngmlr or minimap2.
     """
@@ -26,12 +26,11 @@ def alignment(read, reference, out, sample_name, thread, method, presets):
         print(f"Read presets not recognized, please provide {string_list(method_array)}, exiting...")
         sys.exit(1)
     try:
-        align_sam = f"{out}/{sample_name}.sam"
         command_array = {
             "ngmlr":["ngmlr","-r",reference,"-q",read,"-x",method_array["presets"],"-t",str(thread),"--rg-id",sample_name,"--rg-sm",sample_name,"--rg-lb",method_array["label"],"--no-progress"],
             "minimap2":["--cs","--MD","-Y","-L","-ax",method_array["presets"],reference,read]
             }[method]
-        with open(align_sam, "w") as output:
+        with open(outfile, "w") as output:
             subprocess.call(command_array,stdout=output)
     except Exception as e:
         print(e)

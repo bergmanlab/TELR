@@ -143,7 +143,7 @@ def get_subseq(fasta, chrom, start, end):
     """
     Extract subsequence from fasta based on coordinates
     """
-    command = ["samtools", "faidx", ref, f"{chrom}:{start}-{end}"]
+    command = ["samtools", "faidx", fasta, f"{chrom}:{start}-{end}"]
     subseq = subprocess.run(command, capture_output=True, text=True).stdout
     return subseq
 

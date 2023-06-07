@@ -39,18 +39,16 @@ rule bam_input: #if input is given in bam format, convert it to fasta format.
 #only run if reads are supplied in fasta format
 rule alignment:
     input:
-        config["fasta_reads"]
+        reads = config["fasta_reads"],
+        reference = config["reference"]
     output:
         "intermediate_files/{sample_name}_aln.sam"
     params:
-        reads = config["fasta_reads"],
-        reference = config["reference"],
-        out = "intermediate_files",
         method = config["aligner"],#minimap2 or ngmlr
         presets = config["presets"]#ont or pacbio
     threads: config["thread"]
     shell:
-        "python3 STELR_alignment.py alignment '{params.reads}' '{params.reference}' '{params.out}' '{wildcards.sample_name}' '{threads}' '{params.method}' '{params.presets}'"
+        "python3 STELR_alignment.py alignment '{input.reads}' '{input.reference}' '{output}' '{wildcards.sample_name}' '{threads}' '{params.method}' '{params.presets}'"
 
 def find_alignment(wildcards):
     bam_input = f"intermediate_files/input/reads-{wildcards.sample_name}.bam"
@@ -253,7 +251,7 @@ rule get_parsed_contigs:
         "intermediate_files/contigs/{contig}/03_contig1.fa"
     shell:
         """
-        python3 STELR_assembly.py parse_assembled_contig '{input}' '{output}' || true
+        python3 STELR_assembly.py parse_assembled_contig '{input}' '{wildcards.contig}' '{output}' || true
         touch '{output}'
         """
 
@@ -557,7 +555,10 @@ rule build_index:
     output:
         "intermediate_files/{genome}.fai"
     shell:
-        "samtools faidx '{input}'"
+        """
+        samtools faidx '{input}' || true
+        touch {output}
+        """
 
 rule make_te_json:
     input:
@@ -699,16 +700,18 @@ rule make_report:
     input:
         overlap = "intermediate_files/contigs/{contig}/tes/{te}/15_flank_overlap.json",
         te_json = "intermediate_files/contigs/{contig}/tes/{te}/00_annotation.json",
-        ref_bed = lambda wildcards: f"intermediate_files/ref_repeatmask/{os.path.basename(config['reference'])}.te.bed"
+        ref_bed = lambda wildcards: f"intermediate_files/ref_repeatmask/{os.path.basename(config['reference'])}.te.bed",
+        reference = config['reference']
     output:
         "intermediate_files/contigs/{contig}/tes/{te}/16_{overlap_id}_report.json"
     params: 
         flank_overlap_max = config["overlap"],
         flank_gap_max = config["gap"]
-    """
-    python3 STELR_liftover.py make_report {input.overlap} {wildcards.overlap_id} {input.te_json} {input.ref_bed} {config[reference]} {params.flank_overlap_max} {params.flank_gap_max} {output} || true
-    touch {output}
-    """
+    shell:
+        """
+        python3 STELR_liftover.py make_report {input.overlap} {wildcards.overlap_id} {input.te_json} {input.ref_bed} {input.reference} {params.flank_overlap_max} {params.flank_gap_max} {output}
+        touch {output}
+        """
 
 def overlap_ids_report(wildcards):
     overlap_file = checkpoints.json_for_report.get(**wildcards).output[0]
@@ -894,7 +897,8 @@ rule individual_json:
     input:
         liftover_file = "intermediate_files/contigs/{contig}/tes/{te}/17_best_report.json",
         af_file = "intermediate_files/contigs/{contig}/tes/{te}/11_allele_frequency.json",
-        annotation_file = "intermediate_files/contigs/{contig}/tes/{te}/00_annotation.json",
+        vcf_parsed = "intermediate_files/contigs/{contig}/00_vcf_parsed.tsv",
+        annotation_file = "intermediate_files/contigs/{contig}/tes/{te}/00_annotation.bed",
         contig_file = "intermediate_files/contigs/{contig}/03_contig1.fa"
     output:
         "intermediate_files/contigs/{contig}/tes/{te}/18_output.json"

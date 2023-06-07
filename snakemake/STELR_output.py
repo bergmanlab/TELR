@@ -1,10 +1,12 @@
 import os
+import sys
 import pandas as pd
 import logging
 import json
 from Bio import SeqIO
 from datetime import date
 import subprocess
+from STELR_utility import check_exist
 
 def write_vcf(input, ref, ref_index, out_vcf):
     ref_info = get_contig_info(ref_index)
@@ -69,14 +71,14 @@ def get_contig_info(reference_index):
             contig_info.append("##contig=<ID={},length={}>".format(entry[0], entry[1]))
     return contig_info
 
-def make_json_output(liftover_file, af_file, annotation_file, contig_file, json_output):
+def make_json_output(liftover_file, af_file, vcf_parsed_file, annotation_file, contig_file, json_output):
     with open(liftover_file, "r") as data:
         liftover_report = json.load(data)
     if not liftover_report["type"] == "non-reference":
         quit()
     with open(af_file, "r") as data:
         af_dict = json.load(data)
-    with open(vcf_parsed, "r") as data:
+    with open(vcf_parsed_file, "r") as data:
         sniffles_info = [line for line in data][0].replace("\n","").split("\t")
         sniffles_info = {
             "genotype":sniffles_info[10],
@@ -84,12 +86,13 @@ def make_json_output(liftover_file, af_file, annotation_file, contig_file, json_
             "ref_count":sniffles_info[11]
         }
     sequence = subprocess.run(f"bedtools getfasta -fi '{contig_file}' -bed '{annotation_file}' -s", shell=True, capture_output=True, text=True).stdout.split("\n")[1]
-    contig_name = sequence_file.split("/contigs/")[1].split("/tes/")[0]
-    te_name = sequence_file.split("/tes/")[1].replace("/00_sequence.bed","")
+    contig_name = liftover_file.split("/contigs/")[1].split("/tes/")[0]
+    te_name = liftover_file.split("/tes/")[1].split("/")[0]
     te_start, te_end = [int(index) for index in te_name.replace("te_","").split("_")]
     contig_length = 0
     with open(contig_file, "r") as data:
-        for line in data[1:]:
+        next(data)
+        for line in data:
             contig_length += len(line.replace("\n",""))
 
     full_report = {
@@ -124,14 +127,14 @@ def make_json_output(liftover_file, af_file, annotation_file, contig_file, json_
         "3p_flank_num_residue_matches": liftover_report["3p_flank_num_residue_matches"],
         "3p_flank_alignment_block_length": liftover_report["3p_flank_alignment_block_length"],
         "3p_flank_sequence_identity": liftover_report["3p_flank_sequence_identity"],
-        "te_5p_cov": af_dict["te_5p_cov"],
-        "te_3p_cov": af_dict["te_3p_cov"],
-        "flank_5p_cov": af_dict["flank_5p_cov"],
-        "flank_3p_cov": af_dict["flank_3p_cov"],
-        "te_5p_cov_rc": af_dict["te_5p_cov_rc"],
-        "te_3p_cov_rc": af_dict["te_3p_cov_rc"],
-        "flank_5p_cov_rc": af_dict["flank_5p_cov_rc"],
-        "flank_3p_cov_rc": af_dict["flank_3p_cov_rc"]
+        "te_5p_cov": af_dict["fwd"]["5p"]["te"],
+        "te_3p_cov": af_dict["fwd"]["3p"]["te"],
+        "flank_5p_cov": af_dict["fwd"]["5p"]["flank"],
+        "flank_3p_cov": af_dict["fwd"]["3p"]["flank"],
+        "te_5p_cov_rc": af_dict["rev"]["5p"]["te"],
+        "te_3p_cov_rc": af_dict["rev"]["3p"]["te"],
+        "flank_5p_cov_rc": af_dict["rev"]["5p"]["flank"],
+        "flank_3p_cov_rc": af_dict["rev"]["3p"]["flank"]
     }
 
     if full_report["tsd_sequence"]:
@@ -167,7 +170,8 @@ def write_output(contig_fa_outfile, te_fa_outfile, bed_outfile, json_outfile, ex
             te_dict = {
                 "expanded_json":te_info["expanded_json"],
                 "json":te_info["json"],
-                "te_fasta":te_info["te_fasta"]
+                "te_fasta":te_info["te_fasta"],
+                "bed_out":te_info["bed_out"]
             }
             contigs[contig_name]["te_list"][te_name] = te_dict
     
@@ -188,17 +192,10 @@ def write_output(contig_fa_outfile, te_fa_outfile, bed_outfile, json_outfile, ex
     with open(json_outfile, "w") as output:
         json.dump(json_output, output, indent=4, sort_keys=False)
     with open(expanded_json_outfile, "w") as output:
-        json.dump(json_expandedoutput, output, indent=4, sort_keys=False)
+        json.dump(json_expanded_output, output, indent=4, sort_keys=False)
 
     write_vcf(json_output, reference, reference_index, vcf_outfile)
 
 
-
-
-
-
-
-
-
-
-
+if __name__ == '__main__':
+    globals()[sys.argv[1]](*sys.argv[2:])
