@@ -26,11 +26,20 @@ def main():
         run_id = sys.argv[1] #untested
     run_workflow(config, run_id)
 
+def handle_file_paths(config):
+    telr_src = os.path.abspath(__file__) #remember to implement later!
+    telr_dir = os.path.split(telr_src)[0]
+    
+    source_files = ["alignment","assembly","sv","te","liftover","utility","output"]
+    for file in source_files:
+        config[f"STELR_{file}"] = f"{telr_dir}/STELR_{file}.py"
+    config["smk"] = f"{telr_dir}/STELR.smk"
+
 def make_run_config(if_verbose, config):
 
     # config["conda"] = os.path.join(os.path.dirname(os.path.abspath(__file__)),"envs/telr.yaml")
 
-    snake_dir = os.path.join(config["out"], "snakemake") #make directory for snakemake
+    snake_dir = os.path.join(config["tmp_dir"], "snakemake") #make directory for snakemake
     mkdir(if_verbose, snake_dir)
     mkdir(if_verbose, f"{snake_dir}/config") #make directory for config file
 
@@ -42,7 +51,6 @@ def make_run_config(if_verbose, config):
     return run_id
 
 def run_workflow(config, run_id):
-    #telr_dir = os.path.dirname(os.path.abspath(__file__)) #remember to implement later!
     command = [
         "snakemake", #"--use-conda",#"--conda-prefix",f"{telr_dir}/envs",
         "-s","STELR.smk",
