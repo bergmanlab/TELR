@@ -11,7 +11,7 @@ from STELR_utility import mkdir, format_time, create_loci_set, get_contig_name
 def detect_sv(
     bam,
     reference,
-    out,
+    vcf_out,
     sample_name,
     thread,
     sv_detector = "Sniffles"
@@ -21,12 +21,11 @@ def detect_sv(
     """
     logging.info("Detecting SVs from BAM file...")
     start_time = time.perf_counter()
-    vcf = f"{out}/{sample_name}_{sv_detector}.vcf"
     command = {
         #SVIM: Not implemented
-        "SVIM":["svim","alignment","--insertion_sequences","--read_names","--sample",sample_name,"--interspersed_duplications_as_insertions",out,bam,reference],
+        "SVIM":["svim","alignment","--insertion_sequences","--read_names","--sample",sample_name,"--interspersed_duplications_as_insertions",'.',bam,reference],
         #Sniffles: Version 1.0.12 | current 2.0.7
-        "Sniffles":["sniffles", "-n", "-1", "--threads", str(thread), "-m", bam, "-v", vcf]
+        "Sniffles":["sniffles", "-n", "-1", "--threads", thread, "-m", bam, "-v", vcf_out]
     }[sv_detector]
     try:
         subprocess.call(command)
@@ -35,10 +34,10 @@ def detect_sv(
         logging.exception(f"Detecting SVs using {sv_detector} failed, exiting...")
         sys.exit(1)
     if(sv_detector == "SVIM"):
-        vcf_tmp = os.path.join(out, "variants.vcf")
+        vcf_tmp = os.path.join("variants.vcf")
         os.rename(vcf_tmp, vcf)
     proc_time = time.perf_counter() - start_time
-    if os.path.isfile(vcf) is False:
+    if os.path.isfile(vcf_out) is False:
         sys.stderr.write("SV detection output not found, exiting...\n")
         sys.exit(1)
     else:

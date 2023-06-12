@@ -86,7 +86,7 @@ def make_json_output(liftover_file, af_file, vcf_parsed_file, annotation_file, c
             "ref_count":sniffles_info[11]
         }
     sequence = subprocess.run(f"bedtools getfasta -fi '{contig_file}' -bed '{annotation_file}' -s", shell=True, capture_output=True, text=True).stdout.split("\n")[1]
-    contig_name = liftover_file.split("/contigs/")[1].split("/tes/")[0]
+    contig_name = liftover_file.split("contigs/")[1].split("/tes/")[0]
     te_name = liftover_file.split("/tes/")[1].split("/")[0]
     te_start, te_end = [int(index) for index in te_name.replace("te_","").split("_")]
     contig_length = 0

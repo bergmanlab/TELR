@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+__version__ = "2.0"
+
 import sys
 import os
 import random
@@ -5,62 +8,98 @@ import argparse
 import subprocess
 import logging
 import json
+from shutil import rmtree
+from time import perf_counter
 
 def main():
-    if len(sys.argv) > 2:
-        config = get_args()
-        config["tmp_dir"] = os.path.join(config["out"], "intermediate_files")
-        config["verbose"] = False # add as option later
-        if_verbose = verbose(config["verbose"])
-        mkdir(if_verbose, config["tmp_dir"])
-        mkdir(if_verbose, os.path.join(config["tmp_dir"], "input"))
-        config["sample_name"] = os.path.splitext(os.path.basename(config["reads"]))[0]
-        config.update(process_input_files(
-            {"reads":config["reads"],
-            "reference":config["reference"],
-            "library":config["library"]},
-            config["sample_name"]
-            ))
-        run_id = make_run_config(if_verbose, config)
+    config = get_args()
+    config["verbose"] = False #TODO: add as option later
+    if_verbose = verbose(config["verbose"])
+    config["sample_name"] = os.path.splitext(os.path.basename(config["reads"]))[0]
+    
+    if config["resume"] is None:
+        config.update(handle_file_paths(config))
+        config.update(setup_run(if_verbose, config))
+    #TODO: test resume run
     else: 
-        run_id = sys.argv[1] #untested
-    run_workflow(config, run_id)
+        with open(f"{config['out']}/telr_run_{config['resume']}/config.json","r") as config_from_file:
+            config = json.load(config_from_file)
+        config["resume"] = config["run_id"]
+    run_workflow(config)
 
 def handle_file_paths(config):
-    telr_src = os.path.abspath(__file__) #remember to implement later!
+    telr_src = os.path.abspath(__file__)
     telr_dir = os.path.split(telr_src)[0]
     
     source_files = ["alignment","assembly","sv","te","liftover","utility","output"]
     for file in source_files:
         config[f"STELR_{file}"] = f"{telr_dir}/STELR_{file}.py"
     config["smk"] = f"{telr_dir}/STELR.smk"
+    #env_dir = telr_dir.split("src")[0] + "envs"#for now stelr env must be active when stelr is run anyway, so this isn't necessary.
+    #config["conda_yaml"] = f"{env_dir}/stelr.yaml"
 
-def make_run_config(if_verbose, config):
+    return config
 
-    # config["conda"] = os.path.join(os.path.dirname(os.path.abspath(__file__)),"envs/telr.yaml")
+def setup_run(if_verbose, config):
+    run_id = random.randint(1000000,9999999) #generate a random run ID
+    tmp_dir = f"{config['out']}/telr_run_{run_id}"
+    mkdir(if_verbose, tmp_dir)
+    mkdir(if_verbose, os.path.join(tmp_dir, "input"))
 
-    snake_dir = os.path.join(config["tmp_dir"], "snakemake") #make directory for snakemake
-    mkdir(if_verbose, snake_dir)
-    mkdir(if_verbose, f"{snake_dir}/config") #make directory for config file
+    config.update(process_input_files(
+        {"reads":config["reads"],
+        "reference":config["reference"],
+        "library":config["library"]},
+        f"{tmp_dir}/input",
+        config["sample_name"])
+    )
 
-    run_id = random.randint(1000000,9999999) # generate a random run ID
-    run_config = f"{snake_dir}/config/config_{run_id}.json" # path to config file
-    with open(run_config, "w") as conf:
-        json.dump(config, conf, indent=4) #write config file as json
+    config["output"] = [
+        f"{config['sample_name']}.telr.contig.fasta",
+        f"{config['sample_name']}.telr.te.fasta",
+        f"{config['sample_name']}.telr.bed",
+        f"{config['sample_name']}.telr.json",
+        f"{config['sample_name']}.telr.expanded.json",
+        f"{config['sample_name']}.telr.vcf"
+    ]
+
+    config["run_id"] = run_id
+    config["tmp_dir"] = tmp_dir
+    config["config_path"] = f"{tmp_dir}/config.json" # path to config file
+    with open(config["config_path"], "w") as conf:
+        json.dump(config, conf, indent=4) #write config file as json    
     
-    return run_id
+    return config
 
-def run_workflow(config, run_id):
+def run_workflow(config):
+    print(f"TELR version {__version__}")
+    print(f"Run ID {config['run_id']}")
     command = [
-        "snakemake", #"--use-conda",#"--conda-prefix",f"{telr_dir}/envs",
-        "-s","STELR.smk",
-        "--configfile", f"{os.path.join(config['out'], 'snakemake')}/config/config_{run_id}.json",
+        "snakemake", #"--use-conda",#"--conda-prefix",config["conda_yaml"],
+        "-s",config["smk"],
+        "--configfile", config["config_path"],
         "--cores", str(config["thread"]),# "--quiet"
         #"--unlock"
     ]
-    subprocess.call(command)
+    try:
+        if config["resume"] is None: 
+            start = perf_counter()
+            subprocess.call(command, cwd=config["tmp_dir"])
+        else:
+            subprocess.call(command + ["--unlock"], cwd=config["tmp_dir"])
+            subprocess.call(command + ["--rerun-incomplete"], cwd=config["tmp_dir"])
+        for output_file in config["output"]:
+            os.rename(f"{config['tmp_dir']}/{output_file}",f"{config['out']}/{output_file}")
+        if not config["keep_files"]:
+            rmtree(config['tmp_dir'])
+    except Exception as e:
+        print(e)
+        print("TELR failed!")
+        sys.exit(1)
+    if config["resume"] is None: print(f"TELR finished in {perf_counter()-start} seconds!")
+    print(f"TELR run {config['run_id']} finished.")
 
-def process_input_files(input_file_paths, sample_name):
+def process_input_files(input_file_paths, input_dir, sample_name):
     def file_extension_of(file):
         return os.path.splitext(input_file_paths[file])[1]
     accepted_formats_for = { #valid file extensions for each type of input
@@ -80,9 +119,9 @@ def process_input_files(input_file_paths, sample_name):
                 logging.error("Input format not recognized")
                 sys.exit(1)
         else: 
-            new_paths[file] = f"intermediate_files/input/{file}-{sample_name}{file_extension_of(file)}"
+            new_paths[file] = f"{input_dir}/{file}-{sample_name}{file_extension_of(file)}"
             symlink(input_file_paths[file], new_paths[file])
-    if ".bam" in new_paths["reads"]: new_paths["fasta_reads"] = f"intermediate_files/input/reads-{sample_name}.fasta"
+    if ".bam" in new_paths["reads"]: new_paths["fasta_reads"] = f"{input_dir}/reads-{sample_name}.fasta"
     else: new_paths["fasta_reads"] = new_paths["reads"]
     return new_paths
         
@@ -247,6 +286,12 @@ def get_args():
         "--keep_files",
         action="store_true",
         help="If provided then all intermediate files will be kept (default: remove intermediate files)",
+        required=False,
+    )
+    optional.add_argument(
+        "--resume",
+        type=int,
+        help="Resume a previous run by ID (default: begin new run)",
         required=False,
     )
     parser._action_groups.append(optional)

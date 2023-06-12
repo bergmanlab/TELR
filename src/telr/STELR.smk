@@ -5,12 +5,7 @@ from STELR_utility import get_contig_length
 
 rule all:
     input: 
-        contig_fa_outfile = f"{config['sample_name']}.telr.contig.fasta",
-        te_fa_outfile = f"{config['sample_name']}.telr.te.fasta",
-        bed_outfile = f"{config['sample_name']}.telr.bed",
-        json_outfile = f"{config['sample_name']}.telr.json",
-        expanded_json_outfile = f"{config['sample_name']}.telr.expanded.json",
-        vcf_outfile = f"{config['sample_name']}.telr.vcf"
+        config["output"]
 
 def input_reads_if_in_bam_format(wildcards):
     #   this rule returns the bam format input if the input is given in bam format, or an empty list if not.
@@ -26,7 +21,7 @@ rule bam_input: #if input is given in bam format, convert it to fasta format.
     output:
         config["fasta_reads"]
     shell:
-        "python3 STELR_alignment.py bam2fasta '{input}' '{output}'"
+        "python3 {config[STELR_alignment]} bam2fasta '{input}' '{output}'"
 
 """
 1st stage: identify TE insertion candidate loci
@@ -42,78 +37,77 @@ rule alignment:
         reads = config["fasta_reads"],
         reference = config["reference"]
     output:
-        "intermediate_files/{sample_name}_aln.sam"
+        "{sample_name}_aln.sam"
     params:
         method = config["aligner"],#minimap2 or ngmlr
         presets = config["presets"]#ont or pacbio
     threads: config["thread"]
     shell:
-        "python3 STELR_alignment.py alignment '{input.reads}' '{input.reference}' '{output}' '{wildcards.sample_name}' '{threads}' '{params.method}' '{params.presets}'"
+        "python3 {config[STELR_alignment]} alignment '{input.reads}' '{input.reference}' '{output}' '{wildcards.sample_name}' '{threads}' '{params.method}' '{params.presets}'"
 
 def find_alignment(wildcards):
-    bam_input = f"intermediate_files/input/reads-{wildcards.sample_name}.bam"
+    bam_input = f"input/reads-{wildcards.sample_name}.bam"
     if(os.path.isfile(bam_input)): return bam_input
-    else: return f"intermediate_files/{wildcards.sample_name}_aln.sam"
+    else: return f"{wildcards.sample_name}_aln.sam"
 rule sort_index_bam:
     input:
         find_alignment#gives name of input file (this depends on whether the user supplied input was in bam format or it was aligned later)
     output:
-        "intermediate_files/{sample_name}_sort.bam"
+        "{sample_name}_sort.bam"
     threads: config["thread"]
         #samtools
     shell:
-        "python3 STELR_alignment.py sort_index_bam '{input}' '{output}' '{threads}'"
+        "python3 {config[STELR_alignment]} sort_index_bam '{input}' '{output}' '{threads}'"
     
 '''1st stage
 SV calling (Sniffles)
 '''
 rule detect_sv:
     input:
-        bam = "intermediate_files/{sample_name}_sort.bam",
+        bam = "{sample_name}_sort.bam",
         reference = config["reference"]
     output:
-        "intermediate_files/{sample_name}_{sv_detector}.vcf"
+        "{sample_name}_{sv_detector}.vcf"
     params:
-        out = "intermediate_files",
         sample_name = config["sample_name"],
-        thread = config["thread"]
+    threads: config["thread"]
     shell:
-        "python3 STELR_sv.py detect_sv '{input.bam}' '{input.reference}' '{params.out}' '{params.sample_name}' '{params.thread}'"
+        "python3 {config[STELR_sv]} detect_sv '{input.bam}' '{input.reference}' '{output}' '{params.sample_name}' '{threads}'"
 
 rule parse_vcf:
     input:
-        "intermediate_files/{sample_name}_Sniffles.vcf"#replace Sniffles with config[sv_detector] later if there are options
+        "{sample_name}_Sniffles.vcf"#replace Sniffles with config[sv_detector] later if there are options
     output:
-        "intermediate_files/{sample_name}.vcf_parsed.tsv.tmp"
+        "{sample_name}.vcf_parsed.tsv.tmp"
     params:
-        '"%CHROM\\t%POS\\t%END\\t%SVLEN\\t%RE\\t%AF\\t%ID\\t%ALT\\t%RNAMES\\t%FILTER\\t[ %GT]\\t[ %DR]\\t[ %DV]\n"'
+        '%CHROM\\t%POS\\t%END\\t%SVLEN\\t%RE\\t%AF\\t%ID\\t%ALT\\t%RNAMES\\t%FILTER\\t[ %GT]\\t[ %DR]\\t[ %DV]\n'
         #bcftools
     shell:
         'bcftools query -i \'SVTYPE="INS" & ALT!="<INS>"\' -f "{params}" "{input}" > "{output}"'
 
 rule swap_vcf_coordinate:
     input:
-        "intermediate_files/{sample_name}.vcf_parsed.tsv.tmp"
+        "{sample_name}.vcf_parsed.tsv.tmp"
     output:
-        "intermediate_files/{sample_name}.vcf_parsed.tsv.swap"
+        "{sample_name}.vcf_parsed.tsv.swap"
     shell:
-        "python3 STELR_sv.py swap_coordinate '{input}' '{output}'"
+        "python3 {config[STELR_sv]} swap_coordinate '{input}' '{output}'"
 
 rule rm_vcf_redundancy:
     input:
-        "intermediate_files/{sample_name}.vcf_parsed.tsv.swap"
+        "{sample_name}.vcf_parsed.tsv.swap"
     output:
-        "intermediate_files/{sample_name}.vcf_parsed.tsv"
+        "{sample_name}.vcf_parsed.tsv"
     shell:
-        "python3 STELR_sv.py rm_vcf_redundancy '{input}' '{output}'"
+        "python3 {config[STELR_sv]} rm_vcf_redundancy '{input}' '{output}'"
 
 rule write_ins_seqs:
     input:
-        "intermediate_files/{sample_name}.vcf_parsed.tsv"
+        lambda wildcards: f"{config['sample_name']}.vcf_parsed.tsv"
     output:
-        "intermediate_files/{sample_name_plus}.vcf_ins.fasta"
+        "{sample_name_plus}.vcf_ins.fasta"
     shell:
-        "python3 STELR_sv.py write_ins_seqs '{input}' '{output}'"
+        "python3 {config[STELR_sv]} write_ins_seqs '{input}' '{output}'"
 
 '''1st stage
 Filter for TE insertion candidate (RepeatMasker)
@@ -121,50 +115,50 @@ Filter for TE insertion candidate (RepeatMasker)
 
 rule sv_repeatmask:
     input:
-        ins_seqs = lambda wildcards: f"intermediate_files/{config['sample_name'].replace('+','plus')}.vcf_ins.fasta",
+        ins_seqs = lambda wildcards: f"{config['sample_name'].replace('+','plus')}.vcf_ins.fasta",
         library = config["library"]
     output:
-        "intermediate_files/vcf_ins_repeatmask/{ins_seqs}.out.gff"
+        "vcf_ins_repeatmask/{ins_seqs}.out.gff"
     params:
-        repeatmasker_dir = "intermediate_files/vcf_ins_repeatmask",
+        repeatmasker_dir = "vcf_ins_repeatmask",
         thread = config["thread"]
     shell:
-        "python3 STELR_sv.py repeatmask '{params.repeatmasker_dir}' '{input.ins_seqs}' '{input.library}' '{params.thread}'"
+        "python3 {config[STELR_sv]} repeatmask '{params.repeatmasker_dir}' '{input.ins_seqs}' '{input.library}' '{params.thread}'"
 
 rule sv_RM_sort:
     input:
-        "intermediate_files/vcf_ins_repeatmask/{ins_seqs}.out.gff"
+        "vcf_ins_repeatmask/{ins_seqs}.out.gff"
     output:
-        "intermediate_files/vcf_ins_repeatmask/{ins_seqs}.out.sort.gff"
+        "vcf_ins_repeatmask/{ins_seqs}.out.sort.gff"
         #bedtools
     shell:
         "bedtools sort -i '{input}' > '{output}'"
 
 rule sv_RM_merge:
     input:
-        "intermediate_files/vcf_ins_repeatmask/{ins_seqs}.out.sort.gff"
+        "vcf_ins_repeatmask/{ins_seqs}.out.sort.gff"
     output:
-        "intermediate_files/vcf_ins_repeatmask/{ins_seqs}.out.merge.bed"
+        "vcf_ins_repeatmask/{ins_seqs}.out.merge.bed"
         #bedtools
     shell:
         "bedtools merge -i '{input}' > '{output}'"
 
 rule sv_TE_extract:
     input:
-        parsed_vcf = "intermediate_files/{sample_name}.vcf_parsed.tsv",
-        ins_seqs = lambda wildcards: f"intermediate_files/{config['sample_name'].replace('+','plus')}.vcf_ins.fasta",
-        ins_rm_merge = lambda wildcards: f"intermediate_files/vcf_ins_repeatmask/{config['sample_name'].replace('+','plus')}.vcf_ins.fasta.out.merge.bed"
+        parsed_vcf = "{sample_name}.vcf_parsed.tsv",
+        ins_seqs = lambda wildcards: f"{config['sample_name'].replace('+','plus')}.vcf_ins.fasta",
+        ins_rm_merge = lambda wildcards: f"vcf_ins_repeatmask/{config['sample_name'].replace('+','plus')}.vcf_ins.fasta.out.merge.bed"
     output:
-        ins_filtered = "intermediate_files/{sample_name}.vcf.filtered.tmp.tsv",
+        ins_filtered = "{sample_name}.vcf.filtered.tmp.tsv",
         loci_eval = "{sample_name}.loci_eval.tsv"
     shell:
-        "python3 STELR_sv.py te_extract '{input.parsed_vcf}' '{input.ins_seqs}' '{input.ins_rm_merge}' '{output.ins_filtered}' '{output.loci_eval}'"
+        "python3 {config[STELR_sv]} te_extract '{input.parsed_vcf}' '{input.ins_seqs}' '{input.ins_rm_merge}' '{output.ins_filtered}' '{output.loci_eval}'"
 
 rule seq_merge:
     input:
-        "intermediate_files/{sample_name}.vcf.filtered.tmp.tsv"
+        "{sample_name}.vcf.filtered.tmp.tsv"
     output: 
-        "intermediate_files/{sample_name}.vcf.merged.tmp.tsv"
+        "{sample_name}.vcf.merged.tmp.tsv"
     params:
         window = 20
         #bedtools
@@ -173,11 +167,11 @@ rule seq_merge:
 
 checkpoint merge_parsed_vcf:##### can we thread back to here? (probably not easily)
     input:
-        "intermediate_files/{sample_name}.vcf.merged.tmp.tsv"
+        "{sample_name}.vcf.merged.tmp.tsv"
     output:
-        "intermediate_files/{sample_name}.vcf_filtered.tsv"
+        "{sample_name}.vcf_filtered.tsv"
     shell:
-        "python3 STELR_sv.py merge_vcf '{input}' '{output}'"
+        "python3 {config[STELR_sv]} merge_vcf '{input}' '{output}'"
 
 """
 2nd stage: assembly and polish local TE contig
@@ -189,74 +183,74 @@ Local contig assembly and polishing (wtdbg2/flye + minimap2)
 
 rule initialize_contig_dir:
     input:
-        lambda wildcards: f"intermediate_files/{config['sample_name']}.vcf_filtered.tsv"
+        lambda wildcards: f"{config['sample_name']}.vcf_filtered.tsv"
     output:
-        "intermediate_files/contigs/{contig}/00_vcf_parsed.tsv"
+        "contigs/{contig}/00_vcf_parsed.tsv"
     shell:
-        "python3 STELR_assembly.py make_contig_dir '{input}' '{wildcards.contig}' '{output}'"
+        "python3 {config[STELR_assembly]} make_contig_dir '{input}' '{wildcards.contig}' '{output}'"
 
 rule get_read_ids: # get a list of all the read IDs from the parsed vcf file
     input:
-        "intermediate_files/contigs/{contig}/00_vcf_parsed.tsv"
+        "contigs/{contig}/00_vcf_parsed.tsv"
     output:
-        "intermediate_files/contigs/{contig}/00_reads.id"
+        "contigs/{contig}/00_reads.id"
     shell:
-        "python3 STELR_assembly.py write_read_IDs '{input}' '{wildcards.contig}' '{output}'"
+        "python3 {config[STELR_assembly]} write_read_IDs '{input}' '{wildcards.contig}' '{output}'"
 
 rule unique_IDlist: # get a list of unique IDs from the readlist
     input:
-        "intermediate_files/contigs/{contig}/00_{readlist}.id"
+        "contigs/{contig}/00_{readlist}.id"
     output:
-        "intermediate_files/contigs/{contig}/00_{readlist}.id.unique"
+        "contigs/{contig}/00_{readlist}.id.unique"
     shell:
         "cat '{input}' | sort | uniq > '{output}'"
 
 rule filter_readlist: # use seqtk to get the fasta reads from the input reads file
     input:
-        "intermediate_files/contigs/{contig}/00_{readlist}.id.unique"
+        "contigs/{contig}/00_{readlist}.id.unique"
     output:
-        "intermediate_files/contigs/{contig}/00_{readlist}.fa"
+        "contigs/{contig}/00_{readlist}.fa"
     shell:
         "seqtk subseq '{config[fasta_reads]}' '{input}' | seqtk seq -a > '{output}'"
 
 rule run_assembly:
     input:
-        "intermediate_files/contigs/{contig}/00_reads.fa"
+        "contigs/{contig}/00_reads.fa"
     output:
-        "intermediate_files/contigs/{contig}/01_initial_assembly.fa"
+        "contigs/{contig}/01_initial_assembly.fa"
     threads: 1
     shell:
         """
-        python3 STELR_assembly.py run_{config[assembler]}_assembly '{input}' '{wildcards.contig}' '{threads}' '{config[presets]}' '{output}' || true
+        python3 {config[STELR_assembly]} run_{config[assembler]}_assembly '{input}' '{wildcards.contig}' '{threads}' '{config[presets]}' '{output}' || true
         touch '{output}'
         """
 
 rule run_polishing:
     input:
-        reads = "intermediate_files/contigs/{contig}/00_reads.fa",
-        initial_assembly = "intermediate_files/contigs/{contig}/01_initial_assembly.fa"
+        reads = "contigs/{contig}/00_reads.fa",
+        initial_assembly = "contigs/{contig}/01_initial_assembly.fa"
     output:
-        "intermediate_files/contigs/{contig}/02_polished_assembly.fa"
+        "contigs/{contig}/02_polished_assembly.fa"
     threads: 1
     shell:
         """
-        python3 STELR_assembly.py run_{config[polisher]}_polishing '{input.initial_assembly}' '{output}' '{input.reads}' '{wildcards.contig}' '{threads}' '{config[polish_iterations]}' '{config[presets]}' || true
+        python3 {config[STELR_assembly]} run_{config[polisher]}_polishing '{input.initial_assembly}' '{output}' '{input.reads}' '{wildcards.contig}' '{threads}' '{config[polish_iterations]}' '{config[presets]}' || true
         touch '{output}'
         """
 
 rule get_parsed_contigs:
     input:
-        "intermediate_files/contigs/{contig}/02_polished_assembly.fa"
+        "contigs/{contig}/02_polished_assembly.fa"
     output:
-        "intermediate_files/contigs/{contig}/03_contig1.fa"
+        "contigs/{contig}/03_contig1.fa"
     shell:
         """
-        python3 STELR_assembly.py parse_assembled_contig '{input}' '{wildcards.contig}' '{output}' || true
+        python3 {config[STELR_assembly]} parse_assembled_contig '{input}' '{wildcards.contig}' '{output}' || true
         touch '{output}'
         """
 
 def merged_contigs_input(wildcards):
-    return [f"intermediate_files/contigs/{contig}/03_contig1.fa" for contig in all_contigs(**wildcards)]
+    return [f"contigs/{contig}/03_contig1.fa" for contig in all_contigs(**wildcards)]
 def all_contigs(wildcards):
     vcf_parsed_file = checkpoints.merge_parsed_vcf.get(**wildcards).output[0]
     with open(vcf_parsed_file) as vcf_parsed:
@@ -284,22 +278,22 @@ Contig TE annotation (minimap2 + RepeatMasker)
 
 rule get_vcf_seq:
     input:
-        contig = "intermediate_files/contigs/{contig}/00_reads.fa",
-        vcf_parsed = "intermediate_files/contigs/{contig}/00_vcf_parsed.tsv"
+        contig = "contigs/{contig}/00_reads.fa",
+        vcf_parsed = "contigs/{contig}/00_vcf_parsed.tsv"
     output:
-        "intermediate_files/contigs/{contig}/04_vcf_seq.fa"
+        "contigs/{contig}/04_vcf_seq.fa"
     shell:
         """
-        python3 STELR_te.py get_vcf_seq '{wildcards.contig}' '{input.vcf_parsed}' '{output}' || true
+        python3 {config[STELR_te]} get_vcf_seq '{wildcards.contig}' '{input.vcf_parsed}' '{output}' || true
         touch '{output}'
         """
 
 rule map_contig:
     input:
-        subject = "intermediate_files/contigs/{contig}/03_contig1.fa",
-        query = "intermediate_files/contigs/{contig}/04_vcf_seq.fa"
+        subject = "contigs/{contig}/03_contig1.fa",
+        query = "contigs/{contig}/04_vcf_seq.fa"
     output:
-        "intermediate_files/contigs/{contig}/05_vcf_mm2.paf"
+        "contigs/{contig}/05_vcf_mm2.paf"
     params:
         presets = lambda wildcards: {"pacbio":"map-pb","ont":"map-ont"}[config["presets"]]
     threads: 1
@@ -310,11 +304,11 @@ rule map_contig:
 
 rule te_contig_map:
     input:
-        minimap_initial = "intermediate_files/contigs/{contig}/05_vcf_mm2.paf",
-        subject = "intermediate_files/contigs/{contig}/03_contig1.fa",
+        minimap_initial = "contigs/{contig}/05_vcf_mm2.paf",
+        subject = "contigs/{contig}/03_contig1.fa",
         library = config["library"]
     output:
-        "intermediate_files/contigs/{contig}/06_te_mm2.paf"
+        "contigs/{contig}/06_te_mm2.paf"
     params:
         presets = lambda wildcards: {"pacbio":"map-pb","ont":"map-ont"}[config["presets"]]
     threads: 1
@@ -329,18 +323,18 @@ rule te_contig_map:
 
 rule minimap2bed:
     input:
-        "intermediate_files/{minimap_output}.paf"
+        "{minimap_output}.paf"
     output:
-        "intermediate_files/{minimap_output}.bed"
+        "{minimap_output}.bed"
     shell:
-        "python3 STELR_utility.py minimap2bed '{input}' '{output}'"
+        "python3 {config[STELR_utility]} minimap2bed '{input}' '{output}'"
 
 rule vcf_alignment_filter_intersect:
     input:
-        vcf_seq_mm2 = "intermediate_files/contigs/{contig}/05_vcf_mm2.bed",
-        te_mm2 = "intermediate_files/contigs/{contig}/06_te_mm2.bed"
+        vcf_seq_mm2 = "contigs/{contig}/05_vcf_mm2.bed",
+        te_mm2 = "contigs/{contig}/06_te_mm2.bed"
     output:
-        "intermediate_files/contigs/{contig}/07_te2contig_filter.tsv"
+        "contigs/{contig}/07_te2contig_filter.tsv"
     shell:
         """
         if [ -s '{input.te_mm2}' ]; then
@@ -352,22 +346,22 @@ rule vcf_alignment_filter_intersect:
 
 rule vcf_alignment_filter:
     input:
-        "intermediate_files/contigs/{contig}/07_te2contig_filter.tsv"
+        "contigs/{contig}/07_te2contig_filter.tsv"
     output:
-        "intermediate_files/contigs/{contig}/08_te2contig_filtered.bed"
+        "contigs/{contig}/08_te2contig_filtered.bed"
     shell:
         """
         if [ -s '{input}' ]; then
-            python3 STELR_te.py vcf_alignment_filter '{input}' '{output}'
+            python3 {config[STELR_te]} vcf_alignment_filter '{input}' '{output}'
         fi
         touch '{output}'
         """
 
 rule te_annotation_merge:
     input:
-        "intermediate_files/contigs/{contig}/08_te2contig_filtered.bed"
+        "contigs/{contig}/08_te2contig_filtered.bed"
     output:
-        "intermediate_files/contigs/{contig}/09_te2contig_merged.bed"
+        "contigs/{contig}/09_te2contig_merged.bed"
     shell:
         """
         if [ -s '{input}' ]; then
@@ -379,13 +373,13 @@ rule te_annotation_merge:
 
 checkpoint annotate_contig:
     input:
-        "intermediate_files/contigs/{contig}/09_te2contig_merged.bed"
+        "contigs/{contig}/09_te2contig_merged.bed"
     output:
-        "intermediate_files/contigs/{contig}/tes/annotation.bed"
+        "contigs/{contig}/tes/annotation.bed"
     shell:
         """
         if [ -s '{input}' ]; then
-            python3 STELR_te.py annotate_contig '{input}' '{output}'
+            python3 {config[STELR_te]} annotate_contig '{input}' '{output}'
         else
             touch '{output}'
         fi
@@ -393,21 +387,21 @@ checkpoint annotate_contig:
 
 rule make_te_dirs:
     input:
-        "intermediate_files/contigs/{contig}/tes/annotation.bed"
+        "contigs/{contig}/tes/annotation.bed"
     output:
-        "intermediate_files/contigs/{contig}/tes/{te}/00_annotation.bed"
+        "contigs/{contig}/tes/{te}/00_annotation.bed"
     shell:
-        "python3 STELR_te.py make_te_dir '{input}' '{output}'"
+        "python3 {config[STELR_te]} make_te_dir '{input}' '{output}'"
 
 
 ## use RM to annotate config
 
 rule rm_te_fasta:
     input:
-        bed_file = "intermediate_files/contigs/{contig}/tes/annotation.bed",
-        sequence = "intermediate_files/contigs/{contig}/03_contig1.fa"
+        bed_file = "contigs/{contig}/tes/annotation.bed",
+        sequence = "contigs/{contig}/03_contig1.fa"
     output:
-        "intermediate_files/contigs/{contig}/rm_01_annotated_tes.fasta"
+        "contigs/{contig}/rm_01_annotated_tes.fasta"
     shell:
         """
         if [ -s '{input.bed_file}' ]; then
@@ -419,12 +413,12 @@ rule rm_te_fasta:
 
 rule rm_annotate:
     input:
-        te_fasta = "intermediate_files/contigs/{contig}/rm_01_annotated_tes.fasta",
+        te_fasta = "contigs/{contig}/rm_01_annotated_tes.fasta",
         te_library = config["library"]
     output:
-        "intermediate_files/contigs/{contig}/rm_01_annotated_tes.fasta.out.gff"
+        "contigs/{contig}/rm_01_annotated_tes.fasta.out.gff"
     params:
-        rm_dir = lambda wildcards: f"intermediate_files/contigs/{wildcards.contig}'"
+        rm_dir = lambda wildcards: f"contigs/{wildcards.contig}'"
     threads: 1
     shell:
         """
@@ -436,9 +430,9 @@ rule rm_annotate:
 
 rule rm_annotation_sort:
     input:
-        "intermediate_files/contigs/{contig}/rm_01_annotated_tes.fasta.out.gff"
+        "contigs/{contig}/rm_01_annotated_tes.fasta.out.gff"
     output:
-        "intermediate_files/contigs/{contig}/rm_02_annotated_tes.out.sort.gff"
+        "contigs/{contig}/rm_02_annotated_tes.out.sort.gff"
     shell:
         """
         if [ -s '{input.bed_file}' ]; then
@@ -450,13 +444,13 @@ rule rm_annotation_sort:
 
 rule rm_annotation_parse_merge:
     input:
-        "intermediate_files/contigs/{contig}/rm_02_annotated_tes.out.sort.gff"
+        "contigs/{contig}/rm_02_annotated_tes.out.sort.gff"
     output:
-        "intermediate_files/contigs/{contig}/rm_03_annotated_tes_parsed.bed"
+        "contigs/{contig}/rm_03_annotated_tes_parsed.bed"
     shell:
         """
         if [ -s '{input}' ]; then
-            python3 STELR_te.py rm_parse_merge '{input}' '{output}'
+            python3 {config[STELR_te]} rm_parse_merge '{input}' '{output}'
         else
             touch '{output}'
         fi
@@ -464,9 +458,9 @@ rule rm_annotation_parse_merge:
 
 rule rm_annotation_bedtools_merge:
     input:
-        "intermediate_files/contigs/{contig}/rm_03_annotated_tes_parsed.bed"
+        "contigs/{contig}/rm_03_annotated_tes_parsed.bed"
     output:
-        "intermediate_files/contigs/{contig}/rm_04_annotated_tes_merged.bed"
+        "contigs/{contig}/rm_04_annotated_tes_merged.bed"
     shell:
         """
         if [ -s '{input}' ]; then
@@ -478,14 +472,14 @@ rule rm_annotation_bedtools_merge:
 
 rule rm_reannotate:
     input:
-        repeat_masker_out = "intermediate_files/contigs/{contig}/rm_04_annotated_tes_merged.bed",
-        original_bed = "intermediate_files/contigs/{contig}/tes/annotation.bed"
+        repeat_masker_out = "contigs/{contig}/rm_04_annotated_tes_merged.bed",
+        original_bed = "contigs/{contig}/tes/annotation.bed"
     output:
-        "intermediate_files/contigs/{contig}/rm_05_annotation.bed"
+        "contigs/{contig}/rm_05_annotation.bed"
     shell:
         """
         if [ -s '{input.repeat_masker_out}' ]; then
-            python3 STELR_te.py rm_reannotate '{input.repeat_masker_out}' '{input.original_bed}' '{output}'
+            python3 {config[STELR_te]} rm_reannotate '{input.repeat_masker_out}' '{input.original_bed}' '{output}'
         else
             touch '{output}'
         fi
@@ -498,11 +492,11 @@ rule ref_repeatmask:
         ref = config["reference"],
         lib = config["library"]
     output:
-        "intermediate_files/ref_repeatmask/{reference}.masked",
-        "intermediate_files/ref_repeatmask/{reference}.out.gff",
-        "intermediate_files/ref_repeatmask/{reference}.out"
+        "ref_repeatmask/{reference}.masked",
+        "ref_repeatmask/{reference}.out.gff",
+        "ref_repeatmask/{reference}.out"
     params:
-        ref_rm_dir = "intermediate_files/ref_repeatmask"
+        ref_rm_dir = "ref_repeatmask"
     threads: config["thread"]
     shell:
         """
@@ -514,30 +508,30 @@ rule ref_repeatmask:
 
 rule ref_rm_process:
     input:
-        gff = "intermediate_files/ref_repeatmask/{reference}.out.gff",
-        out = "intermediate_files/ref_repeatmask/{reference}.out"
+        gff = "ref_repeatmask/{reference}.out.gff",
+        out = "ref_repeatmask/{reference}.out"
     output:
-        "intermediate_files/ref_repeatmask/{reference}.out.gff3"
+        "ref_repeatmask/{reference}.out.gff3"
     shell:
-        "python3 STELR_te.py parse_rm_out '{input.gff}' '{input.out}' '{output}'"
-        #left off here, STELR_te.py repeatmask()
+        "python3 {config[STELR_te]} parse_rm_out '{input.gff}' '{input.out}' '{output}'"
+        #left off here, config[STELR_te]} repeatmask()
 
 rule ref_te_bed:
     input:
-        "intermediate_files/ref_repeatmask/{reference}.out.gff3"
+        "ref_repeatmask/{reference}.out.gff3"
     output:
-        "intermediate_files/ref_repeatmask/{reference}.te.bed.unsorted"
+        "ref_repeatmask/{reference}.te.bed.unsorted"
     shell:
         """
-        python3 STELR_te.py gff3tobed '{input}' '{output}'
+        python3 {config[STELR_te]} gff3tobed '{input}' '{output}'
         touch '{output}'
         """
 
 rule sort_ref_rm:
     input:
-        "intermediate_files/ref_repeatmask/{reference}.te.bed.unsorted"
+        "ref_repeatmask/{reference}.te.bed.unsorted"
     output:
-        "intermediate_files/ref_repeatmask/{reference}.te.bed"
+        "ref_repeatmask/{reference}.te.bed"
     shell:
         """
         if [ -s '{input}' ]; then
@@ -551,9 +545,9 @@ rule sort_ref_rm:
 
 rule build_index:
     input:
-        "intermediate_files/{genome}"
+        "{genome}"
     output:
-        "intermediate_files/{genome}.fai"
+        "{genome}.fai"
     shell:
         """
         samtools faidx '{input}' || true
@@ -562,41 +556,41 @@ rule build_index:
 
 rule make_te_json:
     input:
-        "intermediate_files/contigs/{contig}/tes/{te}/00_annotation.bed"
+        "contigs/{contig}/tes/{te}/00_annotation.bed"
     output:
-        "intermediate_files/contigs/{contig}/tes/{te}/00_annotation.json"
+        "contigs/{contig}/tes/{te}/00_annotation.json"
     shell:
-        "python3 STELR_liftover.py make_json '{input}' '{output}'"
+        "python3 {config[STELR_liftover]} make_json '{input}' '{output}'"
 
 rule get_genome_size:
     input:
-        "intermediate_files/{genome}.fai"
+        "{genome}.fai"
     output:
-        "intermediate_files/{genome}.size"
+        "{genome}.size"
     shell:
-        "python3 STELR_liftover.py get_genome_size '{input}' '{output}'"
+        "python3 {config[STELR_liftover]} get_genome_size '{input}' '{output}'"
 
 rule flank_bed:
     input:
-        fasta = "intermediate_files/contigs/{contig}/03_contig1.fa",
-        contig_size = "intermediate_files/contigs/{contig}/03_contig1.fa.size",
-        te_dict = "intermediate_files/contigs/{contig}/tes/{te}/00_annotation.json"
+        fasta = "contigs/{contig}/03_contig1.fa",
+        contig_size = "contigs/{contig}/03_contig1.fa.size",
+        te_dict = "contigs/{contig}/tes/{te}/00_annotation.json"
     output:
-        "intermediate_files/contigs/{contig}/tes/{te}/12_{flank}_flank.bed"
+        "contigs/{contig}/tes/{te}/12_{flank}_flank.bed"
     params:
         flank_len = config["flank_len"]
     shell:
         """
-        python3 STELR_liftover.py flank_bed '{input.fasta}' '{input.contig_size}' '{input.te_dict}' '{params.flank_len}' '{output}'
+        python3 {config[STELR_liftover]} flank_bed '{input.fasta}' '{input.contig_size}' '{input.te_dict}' '{params.flank_len}' '{output}'
         touch '{output}'
         """
 
 rule flank_fasta:
     input:
-        fasta = "intermediate_files/contigs/{contig}/03_contig1.fa",
-        bed = "intermediate_files/contigs/{contig}/tes/{te}/12_{flank}_flank.bed"
+        fasta = "contigs/{contig}/03_contig1.fa",
+        bed = "contigs/{contig}/tes/{te}/12_{flank}_flank.bed"
     output:
-        "intermediate_files/contigs/{contig}/tes/{te}/12_{flank}_flank.fa"
+        "contigs/{contig}/tes/{te}/12_{flank}_flank.fa"
     shell:
         """
         if [ -s '{input.bed}' ]; then
@@ -608,10 +602,10 @@ rule flank_fasta:
 
 rule align_flank:
     input:
-        flank_fa = "intermediate_files/contigs/{contig}/tes/{te}/12_{flank}_flank.fa",
+        flank_fa = "contigs/{contig}/tes/{te}/12_{flank}_flank.fa",
         ref_fa = config["reference"]
     output:
-        "intermediate_files/contigs/{contig}/tes/{te}/13_{flank}_flank.paf"
+        "contigs/{contig}/tes/{te}/13_{flank}_flank.paf"
     params:
         preset = "asm10",
         num_secondary = 10
@@ -626,13 +620,13 @@ rule align_flank:
 
 rule get_flank_alignment_info:
     input:
-        "intermediate_files/contigs/{contig}/tes/{te}/13_{flank}_flank.paf"
+        "contigs/{contig}/tes/{te}/13_{flank}_flank.paf"
     output:
-        "intermediate_files/contigs/{contig}/tes/{te}/14_{flank}_flank.info"
+        "contigs/{contig}/tes/{te}/14_{flank}_flank.info"
     shell:
         """
         if [ -s '{input}' ]; then
-            python3 STELR_liftover.py get_paf_info '{input}' '{output}'
+            python3 {config[STELR_liftover]} get_paf_info '{input}' '{output}'
         else
             touch '{output}'
         fi
@@ -640,15 +634,15 @@ rule get_flank_alignment_info:
 
 rule flank_paf_to_bed:
     input:
-        "intermediate_files/contigs/{contig}/tes/{te}/13_{flank}_flank.paf"
+        "contigs/{contig}/tes/{te}/13_{flank}_flank.paf"
     output:
-        "intermediate_files/contigs/{contig}/tes/{te}/14_{flank}_flank.bed_unsorted"
+        "contigs/{contig}/tes/{te}/14_{flank}_flank.bed_unsorted"
     params:
         different_contig_name = config["different_contig_name"]
     shell:
         """
         if [ -s '{input}' ]; then
-            python3 STELR_liftover.py paf_to_bed '{input}' '{output}' '{wildcards.contig}' '{params.different_contig_name}'
+            python3 {config[STELR_liftover]} paf_to_bed '{input}' '{output}' '{wildcards.contig}' '{params.different_contig_name}'
         else
             touch '{output}'
         fi
@@ -656,9 +650,9 @@ rule flank_paf_to_bed:
 
 rule sort_flank_bed:
     input:
-        "intermediate_files/contigs/{contig}/tes/{te}/14_{flank}_flank.bed_unsorted"
+        "contigs/{contig}/tes/{te}/14_{flank}_flank.bed_unsorted"
     output:
-        "intermediate_files/contigs/{contig}/tes/{te}/14_{flank}_flank.bed"
+        "contigs/{contig}/tes/{te}/14_{flank}_flank.bed"
     shell:
         """
         if [ -s '{input}' ]; then
@@ -670,10 +664,10 @@ rule sort_flank_bed:
 
 rule closest_flank_maps_to_ref:
     input:
-        flank_5p = "intermediate_files/contigs/{contig}/tes/{te}/14_5p_flank.bed",
-        flank_3p = "intermediate_files/contigs/{contig}/tes/{te}/14_3p_flank.bed"
+        flank_5p = "contigs/{contig}/tes/{te}/14_5p_flank.bed",
+        flank_3p = "contigs/{contig}/tes/{te}/14_3p_flank.bed"
     output:
-        "intermediate_files/contigs/{contig}/tes/{te}/15_flank_overlap.bed"
+        "contigs/{contig}/tes/{te}/15_flank_overlap.bed"
     shell:
         """
         if [ -s '{input.flank_5p}' ] && [ -s '{input.flank_3p}' ]; then
@@ -685,31 +679,31 @@ rule closest_flank_maps_to_ref:
 
 checkpoint json_for_report:
     input:
-        overlap = "intermediate_files/contigs/{contig}/tes/{te}/15_flank_overlap.bed",
-        info_5p = "intermediate_files/contigs/{contig}/tes/{te}/14_5p_flank.info",
-        info_3p = "intermediate_files/contigs/{contig}/tes/{te}/14_3p_flank.info"
+        overlap = "contigs/{contig}/tes/{te}/15_flank_overlap.bed",
+        info_5p = "contigs/{contig}/tes/{te}/14_5p_flank.info",
+        info_3p = "contigs/{contig}/tes/{te}/14_3p_flank.info"
     output:
-        "intermediate_files/contigs/{contig}/tes/{te}/15_flank_overlap.json"
+        "contigs/{contig}/tes/{te}/15_flank_overlap.json"
     shell:
         """
-        python3 STELR_liftover.py bed_to_json {input.overlap} {input.info_5p} {input.info_3p} {output}
+        python3 {config[STELR_liftover]} bed_to_json {input.overlap} {input.info_5p} {input.info_3p} {output}
         touch {output}
         """
 
 rule make_report:
     input:
-        overlap = "intermediate_files/contigs/{contig}/tes/{te}/15_flank_overlap.json",
-        te_json = "intermediate_files/contigs/{contig}/tes/{te}/00_annotation.json",
-        ref_bed = lambda wildcards: f"intermediate_files/ref_repeatmask/{os.path.basename(config['reference'])}.te.bed",
+        overlap = "contigs/{contig}/tes/{te}/15_flank_overlap.json",
+        te_json = "contigs/{contig}/tes/{te}/00_annotation.json",
+        ref_bed = lambda wildcards: f"ref_repeatmask/{os.path.basename(config['reference'])}.te.bed",
         reference = config['reference']
     output:
-        "intermediate_files/contigs/{contig}/tes/{te}/16_{overlap_id}_report.json"
+        "contigs/{contig}/tes/{te}/16_{overlap_id}_report.json"
     params: 
         flank_overlap_max = config["overlap"],
         flank_gap_max = config["gap"]
     shell:
         """
-        python3 STELR_liftover.py make_report {input.overlap} {wildcards.overlap_id} {input.te_json} {input.ref_bed} {input.reference} {params.flank_overlap_max} {params.flank_gap_max} {output}
+        python3 {config[STELR_liftover]} make_report {input.overlap} {wildcards.overlap_id} {input.te_json} {input.ref_bed} {input.reference} {params.flank_overlap_max} {params.flank_gap_max} {output}
         touch {output}
         """
 
@@ -718,25 +712,25 @@ def overlap_ids_report(wildcards):
     with open(overlap_file, "r") as overlap:
         overlap_dict = json.load(overlap)
         overlap_ids = [key for key in overlap_dict]
-    return [f"intermediate_files/contigs/{wildcards.contig}/tes/{wildcards.te}/16_{overlap_id}_report.json" for overlap_id in overlap_ids]
+    return [f"contigs/{wildcards.contig}/tes/{wildcards.te}/16_{overlap_id}_report.json" for overlap_id in overlap_ids]
 rule best_report:
     input:
         flanks = [
-            "intermediate_files/contigs/{contig}/tes/{te}/14_5p_flank.info",
-            "intermediate_files/contigs/{contig}/tes/{te}/14_3p_flank.info",
-            "intermediate_files/contigs/{contig}/tes/{te}/14_5p_flank.bed",
-            "intermediate_files/contigs/{contig}/tes/{te}/14_3p_flank.bed"
+            "contigs/{contig}/tes/{te}/14_5p_flank.info",
+            "contigs/{contig}/tes/{te}/14_3p_flank.info",
+            "contigs/{contig}/tes/{te}/14_5p_flank.bed",
+            "contigs/{contig}/tes/{te}/14_3p_flank.bed"
             ],
-        te_json = "intermediate_files/contigs/{contig}/tes/{te}/00_annotation.json",
+        te_json = "contigs/{contig}/tes/{te}/00_annotation.json",
         overlap_reports = overlap_ids_report
     output:
-        "intermediate_files/contigs/{contig}/tes/{te}/17_best_report.json"
+        "contigs/{contig}/tes/{te}/17_best_report.json"
     shell:
-        "python3 STELR_liftover.py choose_report {output} {input}"
+        "python3 {config[STELR_liftover]} choose_report {output} {input}"
 
 
 def annotation_from_option(wildcards):
-    return {True:f"intermediate_files/contigs/{wildcards.contig}/10_annotation.bed",False:f"intermediate_files/contigs/{wildcards.contig}/rm_05_rm_reannotated_tes.bed"}[config["minimap2_family"]]
+    return {True:f"contigs/{wildcards.contig}/10_annotation.bed",False:f"contigs/{wildcards.contig}/rm_05_rm_reannotated_tes.bed"}[config["minimap2_family"]]
 
 '''3rd stage
 Identify TE insertion breakpoint (minimap2)
@@ -752,15 +746,15 @@ Read extraction (samtools)
 
 rule read_context:
     input:
-        vcf_parsed = "intermediate_files/contigs/{contig}/00_vcf_parsed.tsv",
-        bam = lambda wildcards: f"intermediate_files/{config['sample_name']}_sort.bam"
+        vcf_parsed = "contigs/{contig}/00_vcf_parsed.tsv",
+        bam = lambda wildcards: f"{config['sample_name']}_sort.bam"
     output:
-        read_ids = "intermediate_files/contigs/{contig}/00_read_context.id",
-        vcf_parsed_new = "intermediate_files/contigs/{contig}/00_parsed_vcf_with_readcount.tsv"
+        read_ids = "contigs/{contig}/00_read_context.id",
+        vcf_parsed_new = "contigs/{contig}/00_parsed_vcf_with_readcount.tsv"
     params:
         window = 1000
     shell:
-        "python3 STELR_assembly.py read_context '{wildcards.contig}' '{input.vcf_parsed}' '{input.bam}' '{output.read_ids}' '{output.vcf_parsed_new}' '{params.window}'"
+        "python3 {config[STELR_assembly]} read_context '{wildcards.contig}' '{input.vcf_parsed}' '{input.bam}' '{output.read_ids}' '{output.vcf_parsed_new}' '{params.window}'"
 
 '''4th stage
 Read alignment to TE contig (minimap2)
@@ -768,13 +762,13 @@ Read alignment to TE contig (minimap2)
 
 rule get_reverse_complement:
     input:
-        "intermediate_files/contigs/{contig}/03_contig1.fa"
+        "contigs/{contig}/03_contig1.fa"
     output:
-        "intermediate_files/contigs/{contig}/10_revcomp.fa"
+        "contigs/{contig}/10_revcomp.fa"
     shell:
         """
         if [ -s '{input}' ]; then
-            python3 STELR_utility.py get_rev_comp_sequence '{input}' '{output}'
+            python3 {config[STELR_utility]} get_rev_comp_sequence '{input}' '{output}'
         else
             touch '{output}'
         fi
@@ -782,10 +776,10 @@ rule get_reverse_complement:
         
 rule realignment:
     input:
-        contig = "intermediate_files/contigs/{contig}/{contig_revcomp}.fa",
-        reads = "intermediate_files/contigs/{contig}/00_read_context.fa"
+        contig = "contigs/{contig}/{contig_revcomp}.fa",
+        reads = "contigs/{contig}/00_read_context.fa"
     output:
-        "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.sam"
+        "contigs/{contig}/{contig_revcomp}_realign.sam"
     params:
         presets = lambda wildcards: {"pacbio":"map-pb","ont":"map-ont"}[config["presets"]]
     shell:
@@ -799,9 +793,9 @@ rule realignment:
 
 rule realignment_to_bam:
     input:
-        "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.sam"
+        "contigs/{contig}/{contig_revcomp}_realign.sam"
     output:
-        "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.bam"
+        "contigs/{contig}/{contig_revcomp}_realign.bam"
     shell:
         """
         if [ -s '{input}' ]; then
@@ -813,9 +807,9 @@ rule realignment_to_bam:
 
 rule sort_index_realignment:
     input:
-        "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.bam"
+        "contigs/{contig}/{contig_revcomp}_realign.bam"
     output:
-        "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.sort.bam"
+        "contigs/{contig}/{contig_revcomp}_realign.sort.bam"
     threads: 1
     shell:
         """
@@ -833,18 +827,18 @@ Depth-based TAF estimation (SAMtools)
 
 rule estimate_te_depth:
     input:
-        bam = "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.sort.bam",
-        contig = "intermediate_files/contigs/{contig}/{contig_revcomp}.fa"
+        bam = "contigs/{contig}/{contig_revcomp}_realign.sort.bam",
+        contig = "contigs/{contig}/{contig_revcomp}.fa"
     output:
-        depth_5p = "intermediate_files/contigs/{contig}/tes/{te}/{contig_revcomp}_5p_te.depth",
-        depth_3p = "intermediate_files/contigs/{contig}/tes/{te}/{contig_revcomp}_3p_te.depth"
+        depth_5p = "contigs/{contig}/tes/{te}/{contig_revcomp}_5p_te.depth",
+        depth_3p = "contigs/{contig}/tes/{te}/{contig_revcomp}_3p_te.depth"
     params:
         te_interval = config["af_te_interval"],
         te_offset = config["af_te_offset"]
     shell:
         """
         if [ -s '{input.bam}' ]; then
-            python3 STELR_te.py estimate_te_depth '{input.bam}' '{input.contig}' '{wildcards.te}' '{params.te_interval}' '{params.te_offset}' '{output.depth_5p}' '{output.depth_3p}'
+            python3 {config[STELR_te]} estimate_te_depth '{input.bam}' '{input.contig}' '{wildcards.te}' '{params.te_interval}' '{params.te_offset}' '{output.depth_5p}' '{output.depth_3p}'
         else
             touch '{output}'
         fi
@@ -852,18 +846,18 @@ rule estimate_te_depth:
 
 rule estimate_flank_depth:
     input:
-        bam = "intermediate_files/contigs/{contig}/{contig_revcomp}_realign.sort.bam",
-        contig = "intermediate_files/contigs/{contig}/{contig_revcomp}.fa"
+        bam = "contigs/{contig}/{contig_revcomp}_realign.sort.bam",
+        contig = "contigs/{contig}/{contig_revcomp}.fa"
     output:
-        depth_5p = "intermediate_files/contigs/{contig}/tes/{te}/{contig_revcomp}_5p_flank.depth",
-        depth_3p = "intermediate_files/contigs/{contig}/tes/{te}/{contig_revcomp}_3p_flank.depth"
+        depth_5p = "contigs/{contig}/tes/{te}/{contig_revcomp}_5p_flank.depth",
+        depth_3p = "contigs/{contig}/tes/{te}/{contig_revcomp}_3p_flank.depth"
     params:
         flank_len = config["af_flank_interval"],
         flank_offset = config["af_flank_offset"]
     shell:
         """
         if [ -s '{input.bam}' ]; then
-            python3 STELR_te.py estimate_flank_depth '{input.bam}' '{input.contig}' '{wildcards.te}' '{params.flank_len}' '{params.flank_offset}' '{output.depth_5p}' '{output.depth_3p}'
+            python3 {config[STELR_te]} estimate_flank_depth '{input.bam}' '{input.contig}' '{wildcards.te}' '{params.flank_len}' '{params.flank_offset}' '{output.depth_5p}' '{output.depth_3p}'
         else
             touch '{output}'
         fi
@@ -871,23 +865,23 @@ rule estimate_flank_depth:
     
 rule estimate_coverage:
     input:
-        te_5p = "intermediate_files/contigs/{contig}/tes/{te}/{contig_revcomp}_5p_te.depth",
-        te_3p = "intermediate_files/contigs/{contig}/tes/{te}/{contig_revcomp}_3p_te.depth",
-        flank_5p = "intermediate_files/contigs/{contig}/tes/{te}/{contig_revcomp}_5p_flank.depth",
-        flank_3p = "intermediate_files/contigs/{contig}/tes/{te}/{contig_revcomp}_3p_flank.depth"
+        te_5p = "contigs/{contig}/tes/{te}/{contig_revcomp}_5p_te.depth",
+        te_3p = "contigs/{contig}/tes/{te}/{contig_revcomp}_3p_te.depth",
+        flank_5p = "contigs/{contig}/tes/{te}/{contig_revcomp}_5p_flank.depth",
+        flank_3p = "contigs/{contig}/tes/{te}/{contig_revcomp}_3p_flank.depth"
     output:
-        "intermediate_files/contigs/{contig}/tes/{te}/{contig_revcomp}.freq"
+        "contigs/{contig}/tes/{te}/{contig_revcomp}.freq"
     shell:
-        "python3 STELR_te.py estimate_coverage '{input.te_5p}' '{input.te_3p}' '{input.flank_5p}' '{input.flank_3p}' '{output}'"
+        "python3 {config[STELR_te]} estimate_coverage '{input.te_5p}' '{input.te_3p}' '{input.flank_5p}' '{input.flank_3p}' '{output}'"
 
 rule get_allele_frequency:
     input:
-        fwd = "intermediate_files/contigs/{contig}/tes/{te}/03_contig1.freq",
-        rev = "intermediate_files/contigs/{contig}/tes/{te}/10_revcomp.freq"
+        fwd = "contigs/{contig}/tes/{te}/03_contig1.freq",
+        rev = "contigs/{contig}/tes/{te}/10_revcomp.freq"
     output:
-        "intermediate_files/contigs/{contig}/tes/{te}/11_allele_frequency.json"
+        "contigs/{contig}/tes/{te}/11_allele_frequency.json"
     shell:
-        "python3 STELR_te.py get_af '{input.fwd}' '{input.rev}' '{output}'"
+        "python3 {config[STELR_te]} get_af '{input.fwd}' '{input.rev}' '{output}'"
 
 '''
 Write Output
@@ -895,15 +889,15 @@ Write Output
 
 rule individual_json:
     input:
-        liftover_file = "intermediate_files/contigs/{contig}/tes/{te}/17_best_report.json",
-        af_file = "intermediate_files/contigs/{contig}/tes/{te}/11_allele_frequency.json",
-        vcf_parsed = "intermediate_files/contigs/{contig}/00_vcf_parsed.tsv",
-        annotation_file = "intermediate_files/contigs/{contig}/tes/{te}/00_annotation.bed",
-        contig_file = "intermediate_files/contigs/{contig}/03_contig1.fa"
+        liftover_file = "contigs/{contig}/tes/{te}/17_best_report.json",
+        af_file = "contigs/{contig}/tes/{te}/11_allele_frequency.json",
+        vcf_parsed = "contigs/{contig}/00_vcf_parsed.tsv",
+        annotation_file = "contigs/{contig}/tes/{te}/00_annotation.bed",
+        contig_file = "contigs/{contig}/03_contig1.fa"
     output:
-        "intermediate_files/contigs/{contig}/tes/{te}/18_output.json"
+        "contigs/{contig}/tes/{te}/18_output.json"
     shell:
-        "python3 STELR_output.py make_json_output {input} {output}"
+        "python3 {config[STELR_output]} make_json_output {input} {output}"
 
 
 def all_contigs(wildcards):
@@ -926,7 +920,7 @@ def all_tes(wildcards): #expects annotation file to be in contigs/{contig}/tes/
     return tes
 def get_output_jsons(wildcards):
     tes = all_tes(wildcards)
-    return [f"intermediate_files/contigs/{tes[te]}/tes/{te}/18_output.json" for te in tes]
+    return [f"contigs/{tes[te]}/tes/{te}/18_output.json" for te in tes]
 
 
 rule final_output:
@@ -942,4 +936,4 @@ rule final_output:
         expanded_json_outfile = "{sample_name}.telr.expanded.json",
         vcf_outfile = "{sample_name}.telr.vcf"
     shell:
-        "python3 STELR_output.py write_output {output} {input}"
+        "python3 {config[STELR_output]} write_output {output} {input}"
