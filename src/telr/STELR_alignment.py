@@ -28,7 +28,7 @@ def alignment(read, reference, outfile, sample_name, thread, method, presets):
     try:
         command_array = {
             "ngmlr":["ngmlr","-r",reference,"-q",read,"-x",method_array["presets"],"-t",str(thread),"--rg-id",sample_name,"--rg-sm",sample_name,"--rg-lb",method_array["label"],"--no-progress"],
-            "minimap2":["--cs","--MD","-Y","-L","-ax",method_array["presets"],reference,read]
+            "minimap2":["minimap2","--cs","--MD","-Y","-L","-ax",method_array["presets"],reference,read]
             }[method]
         with open(outfile, "w") as output:
             subprocess.call(command_array,stdout=output)
@@ -57,6 +57,7 @@ def sort_index_bam(unsorted_bam, sorted_bam, thread):
     logging.info("Sort and index BAM...")
     start_time = time.perf_counter()
     try:
+        print(["samtools", "sort", "-@", str(thread), "-o", sorted_bam, unsorted_bam])
         subprocess.call(["samtools", "sort", "-@", str(thread), "-o", sorted_bam, unsorted_bam])
         subprocess.call(["samtools", "index", "-@", str(thread), sorted_bam])
     except Exception as e:
