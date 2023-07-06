@@ -3,6 +3,8 @@ import sys
 from datetime import datetime, timedelta
 import subprocess
 from Bio import SeqIO
+from functools import reduce
+from operator import getitem
 
 
 def rm_file(file):
@@ -146,6 +148,13 @@ def get_subseq(fasta, chrom, start, end):
     command = ["samtools", "faidx", fasta, f"{chrom}:{start}-{end}"]
     subseq = subprocess.run(command, capture_output=True, text=True).stdout
     return subseq
+
+def getdict(dictionary, map_list):
+    return reduce(getitem, map_list, dictionary)
+    
+def setdict(dictionary, map_list, value):
+    getdict(dictionary, map_list[:-1])[map_list[-1]] = value
+
 
 if __name__ == '__main__':
     globals()[sys.argv[1]](*sys.argv[2:])
