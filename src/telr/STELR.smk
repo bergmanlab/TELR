@@ -32,53 +32,71 @@ rule bam_input: #if input is given in bam format, convert it to fasta format.
 ^(or minimap2)
 '''
 #only run if reads are supplied in fasta format
-rule alignment:
-    input:
-        reads = config["fasta_reads"],
-        reference = config["reference"]
-    output:
-        "{sample_name}_aln.sam"
-    params:
-        method = config["aligner"],#minimap2 or ngmlr
-        presets = config["presets"]#ont or pacbio
-    threads: config["thread"]
-    shell:
-        "python3 {config[STELR_alignment]} alignment '{input.reads}' '{input.reference}' '{output}' '{wildcards.sample_name}' '{threads}' '{params.method}' '{params.presets}'"
-
 def find_alignment(wildcards):
-    bam_input = f"input/reads-{wildcards.sample_name}.bam"
+    bam_input = f"input/reads.bam"
     if(os.path.isfile(bam_input)): return bam_input
-    else: return f"{wildcards.sample_name}_aln.sam"
+    else: 
+        return f"{config['aligner']}_alignment.sam"
 rule sort_index_bam:
     input:
         find_alignment#gives name of input file (this depends on whether the user supplied input was in bam format or it was aligned later)
     output:
-        "{sample_name}_sort.bam"
+        "reads_sort.bam"
     threads: config["thread"]
         #samtools
     shell:
         "python3 {config[STELR_alignment]} sort_index_bam '{input}' '{output}' '{threads}'"
     
+rule align_with_ngmlr:#TODO: add timers to these alignments
+    input:
+        reads = config["fasta_reads"],
+        reference = config["reference"]
+    output:
+        "ngmlr_alignment.sam"
+    params:
+        presets = config["presets"],
+        label = lambda wildcards: {"ont":"ont","pacbio":"pb"}[config["presets"]]
+    threads: config["thread"]
+    shell:
+        """
+        ngmlr -r {input.reference} -q {input.reads} -x {params.presets} -t {threads} --rg-id reads --rg-sm reads --rg-lb {params.label} --no-progress | python3 {config[fix_ngmlr]} > {output}
+        """
+
+rule align_with_minimap2:
+    input:
+        reads = config["fasta_reads"],
+        reference = config["reference"]
+    output:
+        "minimap2_alignment.sam"
+    params:
+        presets = lambda wildcards: {"ont":"map-ont","pacbio":"map-pb"}[config["presets"]]
+    threads: config["thread"]
+    shell:
+        """
+        minimap2 --cs --MD -Y -L -ax {params.presets} {input.reference} {input.reads} > {output}
+        """
+
+
 '''1st stage
 SV calling (Sniffles)
 '''
 rule detect_sv:
     input:
-        bam = "{sample_name}_sort.bam",
+        bam = "reads_sort.bam",
         reference = config["reference"]
     output:
-        "{sample_name}_{sv_detector}.vcf"
+        "sv-reads_{sv_detector}.vcf"
     params:
-        sample_name = config["sample_name"],
+        sample_name = "reads",
     threads: config["thread"]
     shell:
         "python3 {config[STELR_sv]} detect_sv '{input.bam}' '{input.reference}' '{output}' '{params.sample_name}' '{threads}'"
 
 rule parse_vcf:
     input:
-        "{sample_name}_Sniffles.vcf"#replace Sniffles with config[sv_detector] later if there are options
+        "sv-reads_Sniffles.vcf"#replace Sniffles with config[sv_detector] later if there are options
     output:
-        "{sample_name}.vcf_parsed.tsv.tmp"
+        "reads.vcf_parsed.tsv.tmp"
     params:
         '%CHROM\\t%POS\\t%END\\t%SVLEN\\t%RE\\t%AF\\t%ID\\t%ALT\\t%RNAMES\\t%FILTER\\t[ %GT]\\t[ %DR]\\t[ %DV]\n'
         #bcftools
@@ -87,25 +105,25 @@ rule parse_vcf:
 
 rule swap_vcf_coordinate:
     input:
-        "{sample_name}.vcf_parsed.tsv.tmp"
+        "reads.vcf_parsed.tsv.tmp"
     output:
-        "{sample_name}.vcf_parsed.tsv.swap"
+        "reads.vcf_parsed.tsv.swap"
     shell:
         "python3 {config[STELR_sv]} swap_coordinate '{input}' '{output}'"
 
 rule rm_vcf_redundancy:
     input:
-        "{sample_name}.vcf_parsed.tsv.swap"
+        "reads.vcf_parsed.tsv.swap"
     output:
-        "{sample_name}.vcf_parsed.tsv"
+        "reads.vcf_parsed.tsv"
     shell:
         "python3 {config[STELR_sv]} rm_vcf_redundancy '{input}' '{output}'"
 
 rule write_ins_seqs:
     input:
-        lambda wildcards: f"{config['sample_name']}.vcf_parsed.tsv"
+        lambda wildcards: "reads.vcf_parsed.tsv"
     output:
-        "{sample_name_plus}.vcf_ins.fasta"
+        "reads.vcf_ins.fasta"
     shell:
         "python3 {config[STELR_sv]} write_ins_seqs '{input}' '{output}'"
 
@@ -115,7 +133,7 @@ Filter for TE insertion candidate (RepeatMasker)
 
 rule sv_repeatmask:
     input:
-        ins_seqs = lambda wildcards: f"{config['sample_name'].replace('+','plus')}.vcf_ins.fasta",
+        ins_seqs = lambda wildcards: "reads.vcf_ins.fasta",
         library = config["library"]
     output:
         "vcf_ins_repeatmask/{ins_seqs}.out.gff"
@@ -145,20 +163,20 @@ rule sv_RM_merge:
 
 rule sv_TE_extract:
     input:
-        parsed_vcf = "{sample_name}.vcf_parsed.tsv",
-        ins_seqs = lambda wildcards: f"{config['sample_name'].replace('+','plus')}.vcf_ins.fasta",
-        ins_rm_merge = lambda wildcards: f"vcf_ins_repeatmask/{config['sample_name'].replace('+','plus')}.vcf_ins.fasta.out.merge.bed"
+        parsed_vcf = "reads.vcf_parsed.tsv",
+        ins_seqs = "reads.vcf_ins.fasta",
+        ins_rm_merge = "vcf_ins_repeatmask/reads.vcf_ins.fasta.out.merge.bed"
     output:
-        ins_filtered = "{sample_name}.vcf.filtered.tmp.tsv",
-        loci_eval = "{sample_name}.loci_eval.tsv"
+        ins_filtered = "reads.vcf.filtered.tmp.tsv",
+        loci_eval = "reads.loci_eval.tsv"
     shell:
         "python3 {config[STELR_sv]} te_extract '{input.parsed_vcf}' '{input.ins_seqs}' '{input.ins_rm_merge}' '{output.ins_filtered}' '{output.loci_eval}'"
 
 rule seq_merge:
     input:
-        "{sample_name}.vcf.filtered.tmp.tsv"
+        "reads.vcf.filtered.tmp.tsv"
     output: 
-        "{sample_name}.vcf.merged.tmp.tsv"
+        "reads.vcf.merged.tmp.tsv"
     params:
         window = 20
         #bedtools
@@ -167,9 +185,9 @@ rule seq_merge:
 
 checkpoint merge_parsed_vcf:##### can we thread back to here? (probably not easily)
     input:
-        "{sample_name}.vcf.merged.tmp.tsv"
+        "reads.vcf.merged.tmp.tsv"
     output:
-        "{sample_name}.vcf_filtered.tsv"
+        "reads.vcf_filtered.tsv"
     shell:
         "python3 {config[STELR_sv]} merge_vcf '{input}' '{output}'"
 
@@ -183,7 +201,7 @@ Local contig assembly and polishing (wtdbg2/flye + minimap2)
 
 rule initialize_contig_dir:
     input:
-        lambda wildcards: f"{config['sample_name']}.vcf_filtered.tsv"
+        "reads.vcf_filtered.tsv"
     output:
         "contigs/{contig}/00_vcf_parsed.tsv"
     shell:
@@ -262,7 +280,7 @@ rule merged_contigs:
     input:
         merged_contigs_input
     output:
-        "{sample_name}.contigs.fa"
+        "reads.contigs.fa"
     shell:
         """
         cat '{input}' > '{output}'
@@ -747,7 +765,7 @@ Read extraction (samtools)
 rule read_context:
     input:
         vcf_parsed = "contigs/{contig}/00_vcf_parsed.tsv",
-        bam = lambda wildcards: f"{config['sample_name']}_sort.bam"
+        bam = "reads_sort.bam"
     output:
         read_ids = "contigs/{contig}/00_read_context.id",
         vcf_parsed_new = "contigs/{contig}/00_parsed_vcf_with_readcount.tsv"
@@ -929,11 +947,11 @@ rule final_output:
         reference_index = lambda wildcards: f"{config['reference']}.fai",
         json_files = get_output_jsons
     output:
-        contig_fa_outfile = "{sample_name}.telr.contig.fasta",
-        te_fa_outfile = "{sample_name}.telr.te.fasta",
-        bed_outfile = "{sample_name}.telr.bed",
-        json_outfile = "{sample_name}.telr.json",
-        expanded_json_outfile = "{sample_name}.telr.expanded.json",
-        vcf_outfile = "{sample_name}.telr.vcf"
+        contig_fa_outfile = "reads.telr.contig.fasta",
+        te_fa_outfile = "reads.telr.te.fasta",
+        bed_outfile = "reads.telr.bed",
+        json_outfile = "reads.telr.json",
+        expanded_json_outfile = "reads.telr.expanded.json",
+        vcf_outfile = "reads.telr.vcf"
     shell:
         "python3 {config[STELR_output]} write_output {output} {input}"
