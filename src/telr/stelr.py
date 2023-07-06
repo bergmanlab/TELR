@@ -35,8 +35,10 @@ def handle_file_paths(config):
     for file in source_files:
         config[f"STELR_{file}"] = f"{telr_dir}/STELR_{file}.py"
     config["smk"] = f"{telr_dir}/STELR.smk"
-    #env_dir = telr_dir.split("src")[0] + "envs"#for now stelr env must be active when stelr is run anyway, so this isn't necessary.
-    #config["conda_yaml"] = f"{env_dir}/stelr.yaml"
+    config["fix_ngmlr"] = f"{telr_dir}/fix_ngmlr.py"
+    env_dir = telr_dir.split("src")[0] + "envs"
+    config["envs"] = {}
+
 
     return config
 
@@ -119,9 +121,9 @@ def process_input_files(input_file_paths, input_dir, sample_name):
                 logging.error("Input format not recognized")
                 sys.exit(1)
         else: 
-            new_paths[file] = f"{input_dir}/{file}-{sample_name}{file_extension_of(file)}"
+            new_paths[file] = f"{input_dir}/{file}{file_extension_of(file)}"
             symlink(input_file_paths[file], new_paths[file])
-    if ".bam" in new_paths["reads"]: new_paths["fasta_reads"] = f"{input_dir}/reads-{sample_name}.fasta"
+    if ".bam" in new_paths["reads"]: new_paths["fasta_reads"] = f"{input_dir}/reads.fasta"
     else: new_paths["fasta_reads"] = new_paths["reads"]
     return new_paths
         
