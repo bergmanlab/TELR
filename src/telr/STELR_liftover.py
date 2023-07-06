@@ -297,7 +297,7 @@ def make_report(overlap_json, overlap_id, te_json, ref_bed, ref, flank_overlap_m
     reported = False
     if lift_gap < -flank_overlap_max:
         pass
-    elif lift_gap >= -flank_overlap_max and lift_gap <= flank_gap_max:
+    elif lift_gap <= flank_gap_max:#rm'd redundant if
         # if the gap between flank alignments is smaller than 50bp
         # report as reference if 1) there is a reference 2 TE in between two flanks or 2) the gap size and original TE size is similar or 3) the gap size is bigger than the size of the TE.
         # report as non-reference otherwise.
