@@ -155,6 +155,31 @@ def getdict(dictionary, map_list):
 def setdict(dictionary, map_list, value):
     getdict(dictionary, map_list[:-1])[map_list[-1]] = value
 
+def abs_path(path=False):
+    if not path: path = os.getcwd()
+    return os.path.abspath(os.path.expanduser(path))
+
+def format_memory(data, units="mb"):
+    inpt = data
+    if units == "mb" and type(data) is str:
+        data = data.split("=")[-1].lower()
+        for unit in ["tb","gb","mb","kb"]:
+            if unit in data:
+                units = unit
+                data = data.replace(unit,"")
+    correction = {
+        "tb":1000000,
+        "gb":1000,
+        "mb":1,
+        "kb":0.001
+    }[units]
+    try:
+        data = float(data)*correction
+        if int(data) == data:
+            data = int(data)
+        return data
+    except:
+        raise Exception(f"Unable to interpret memory value {inpt}")
 
 if __name__ == '__main__':
     globals()[sys.argv[1]](*sys.argv[2:])
