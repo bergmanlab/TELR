@@ -5,18 +5,16 @@ import json
 import subprocess
 telr_dir = f"{__file__.split("evaluation")[0]}/telr"
 sys.path.insert(0,telr_dir)
-from STELR_utility import getdict, setdict, memory_format, abs_path
+from STELR_utility import getdict, setdict, memory_format, abs_path, mkdir
 from interpret_config import config_from_file
 
 def main():
     config = parse_args()
     config.update(get_file_paths())
-    setdict(config,())
 
     if not "resume" in config:
         #config.update(handle_file_paths(config))
         config.update(setup_run(config))
-    #TODO: test resume run
     else:
         run_id = config["resume"]
         tmp_dir = f"{config['out']}/stelr_eval_run_{run_id}"
@@ -223,20 +221,9 @@ def setup_run(config):
     config["tmp_dir"] = tmp_dir
     config["config_file"] = config_path
 
-    return config
+    setdict(config,("Resources","Estimated memory"),f'mem_mb={getdict(config,("Resources","Estimated memory"))}')
 
-def mkdir(dir, verbose = True):
-    if os.path.isdir(dir):
-        if verbose:
-            print(f"Directory {dir} exists")
-        return
-    try:
-        os.mkdir(dir)
-    except OSError:
-        print(f"Creation of the directory {dir} failed")
-    else:
-        if verbose:
-            print(f"Successfully created the directory {dir}")
+    return config
 
 def run_workflow(snakefile, config):
     print(f"STELR_evaluation run ID {config['run_id']}")
@@ -245,10 +232,10 @@ def run_workflow(snakefile, config):
         "-s", snakefile,
         "--configfile", config["config_file"]
     ]
-    optional_args = {"thread":"--cores","memory":"--resources"}
+    optional_args = {("Resources","Threads"):"--cores",("Resources","Estimated memory"):"--resources"}
     for arg in optional_args:
-        if arg in config:
-            command += [optional_args[arg], str(config[arg])]
+        if getdict(config,arg):
+            command += [optional_args[arg], str(getdict(config,arg))]
     try:
         if not "resume" in config:
             subprocess.call(command, cwd=config["tmp_dir"])

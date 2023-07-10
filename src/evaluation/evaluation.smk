@@ -1,4 +1,8 @@
 import os
+telr_dir = f"{__file__.split("evaluation")[0]}/telr"
+sys.path.insert(0,telr_dir)
+from STELR_utility import getdict, setdict, abs_path
+
 
 rule all:
     input:
@@ -7,6 +11,18 @@ rule all:
 
 def if_get_genome(wildcards):
     genome = os.path.basename(wildcards.reference)
+    genomes_in_config = [
+        ("options for simulated reads","Reference Genomes","Reference Genome"),
+        ("options for simulated reads","Reference Genomes","Alternate Genome"),
+        ("options for reads from file","Reference Genome"),
+        ("TELR parameters","options for different reference"),
+    ]
+    for genome_from in genomes_in_config:
+        if getdict(config,genome_from+("name",)) == genome:
+            get_by = getdict(config,genome_from+("get by",))
+            if get_by == "accession":
+                return getdict(config,genome_from+("accession",))
+            else: return ""#left off here
     if genome in config["accessions"]:
         return config["accessions"][genome]
     else:

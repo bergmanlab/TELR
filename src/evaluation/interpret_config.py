@@ -66,6 +66,9 @@ def config_from_file(config_file):
             ["Seed:",[["Seed:","\n",int,("options for simulated reads","seed")]]],
             ["Coverage:",[["Coverage:","\n",int,("options for simulated reads","coverage")]]],
             ["READS FROM FILE",[["[","]","selection",("read source",)]],3],
+            ["] Reference Genome:",[
+                ["Reference Genome:","\n",str,("options for reads from file","Reference Genome","name")]
+                ],],
             ["] By path:",[
                 ["[","]","selection",("options for reads from file","Reference Genome","get by")],
                 ["By path:","\n","file_path",("options for reads from file","Reference Genome","file path")]
@@ -76,7 +79,10 @@ def config_from_file(config_file):
             ],0],
             ["Long read sequencing data:",[["Long read sequencing data:","\n","file_path",("options for reads from file","Long read sequencing data")]]],
             ["TE Library:",[["TE Library:","\n","file_path",("TELR parameters","TE library")]]],
-            ["] Different reference:",[["[","]",bool,("TELR parameters","Different reference")]]],
+            ["] Different reference:",[
+                ["[","]",bool,("TELR parameters","Different reference")],
+                ["Different reference:","\n",str,("TELR parameters","options for different reference", "name")]
+                ]],
             ["] By path:",[
                 ["[","]","selection",("TELR parameters","options for different reference","get by")],
                 ["] By path:","\n","file_path",("TELR parameters","options for different reference","file path")]
@@ -349,79 +355,81 @@ def check_input(config, line_number, data_map):
             
 def empty_default_config():
     return {
-    "read source":"simulated reads or file",
-    "options for simulated reads":{
-        "Reference Genomes":{
-            "Reference genome given":True,
+        "read source":"simulated reads or file",
+        "options for simulated reads":{
+            "Reference Genomes":{
+                "Reference genome given":True,
+                "Reference Genome":{
+                    "name":"name of genome",
+                    "get by":"file path or accession",
+                    "file path":"path to file",
+                    "accession":"genbank accession number"
+                },
+                "Alternate genome given":True,
+                "Alternate Genome":{
+                    "name":"name of genome",
+                    "get by":"file path or accession",
+                    "file path":"path to file",
+                    "accession":"genbank accession number"
+                }
+            },
+            "Simulator":"pbsim2",
+            "pbsim2":{
+                "model name":"P6C4",
+                "model file":"path to file",
+                "get by":"model file"
+            },
+            "Simulation type":"diploid, tetraploid, or proportion",
+            "Simulation type params":{
+                "genotype":"homozygous ref, homozygous alt, heterozygous, simplex, duplex, triplex, quadruplex",
+                "proportion":[0.5,0.5]
+            },
+            "seed":100,
+            "coverage":50
+        },
+        "options for reads from file":{
             "Reference Genome":{
                 "name":"name of genome",
                 "get by":"file path or accession",
                 "file path":"path to file",
                 "accession":"genbank accession number"
             },
-            "Alternate genome given":True,
-            "Alternate Genome":{
+            "Long read sequencing data":"path to file"
+        },
+        "TELR parameters":{
+            "TE library":"path to file",
+            "Different reference":False,
+            "options for different reference":{
                 "name":"name of genome",
                 "get by":"file path or accession",
                 "file path":"path to file",
                 "accession":"genbank accession number"
+            },
+            "Aligner":"NGMLR",
+            "Assembler":"wtdbg2",
+            "Polisher":"flye",
+            "Polishing iterations":1,
+            "Flanking sequence alignment parameters":{
+                "Max gap size":20,
+                "Max overlap size":20,
+                "Flanking sequence length":500
+            },
+            "Allele frequency estimation parameters":{
+                "Flank sequence interval size":100,
+                "Flank sequence offset":200,
+                "TE sequence interval size":50,
+                "TE sequence offset":50
+            },
+            "Additional options":{
+                "Use minimap2 to annotate TE family names":False,
+                "Keep intermediate files":False
             }
         },
-        "Simulator":"pbsim2",
-        "pbsim2":{
-            "model name":"P6C4",
-            "model file":"path to file",
-            "get by":"model file"
-        },
-        "Simulation type":"diploid, tetraploid, or proportion",
-        "Simulation type params":{
-            "genotype":"homozygous ref, homozygous alt, heterozygous, simplex, duplex, triplex, quadruplex",
-            "proportion":[0.5,0.5]
-        },
-        "seed":100,
-        "coverage":50
-    },
-    "options for reads from file":{
-        "Reference Genome":{
-            "get by":"file path or accession",
-            "file path":"path to file",
-            "accession":"genbank accession number"
-        },
-        "Long read sequencing data":"path to file"
-    },
-    "TELR parameters":{
-        "TE library":"path to file",
-        "Different reference":False,
-        "options for different reference":{
-            "get by":"file path or accession",
-            "file path":"path to file",
-            "accession":"genbank accession number"
-        },
-        "Aligner":"NGMLR",
-        "Assembler":"wtdbg2",
-        "Polisher":"flye",
-        "Polishing iterations":1,
-        "Flanking sequence alignment parameters":{
-            "Max gap size":20,
-            "Max overlap size":20,
-            "Flanking sequence length":500
-        },
-        "Allele frequency estimation parameters":{
-            "Flank sequence interval size":100,
-            "Flank sequence offset":200,
-            "TE sequence interval size":50,
-            "TE sequence offset":50
-        },
-        "Additional options":{
-            "Use minimap2 to annotate TE family names":False,
-            "Keep intermediate files":False
+        "Resources":{
+            "Estimated memory":"100gb",
+            "Threads":1
         }
-    },
-    "Resources":{
-        "Estimated memory":"100gb",
-        "Threads":1
     }
-}
 
 
 if __name__ == "__main__":

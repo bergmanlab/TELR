@@ -36,6 +36,7 @@ config = {
     },
     "options for reads from file":{
         "Reference Genome":{
+            "name":"name of genome",
             "get by":"file path or accession",
             "file path":"path to file",
             "accession":"genbank accession number"
@@ -46,6 +47,7 @@ config = {
         "TE library":"path to file",
         "Different reference":False,
         "options for different reference":{
+            "name":"name of genome",
             "get by":"file path or accession",
             "file path":"path to file",
             "accession":"genbank accession number"
