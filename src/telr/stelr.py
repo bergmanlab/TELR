@@ -57,12 +57,12 @@ def setup_run(if_verbose, config):
     )
 
     config["output"] = [
-        f"{config['sample_name']}.telr.contig.fasta",
-        f"{config['sample_name']}.telr.te.fasta",
-        f"{config['sample_name']}.telr.bed",
-        f"{config['sample_name']}.telr.json",
-        f"{config['sample_name']}.telr.expanded.json",
-        f"{config['sample_name']}.telr.vcf"
+        f"reads.telr.contig.fasta",
+        f"reads.telr.te.fasta",
+        f"reads.telr.bed",
+        f"reads.telr.json",
+        f"reads.telr.expanded.json",
+        f"reads.telr.vcf"
     ]
 
     config["run_id"] = run_id
@@ -91,7 +91,7 @@ def run_workflow(config):
             subprocess.call(command + ["--unlock"], cwd=config["tmp_dir"])
             subprocess.call(command + ["--rerun-incomplete"], cwd=config["tmp_dir"])
         for output_file in config["output"]:
-            os.rename(f"{config['tmp_dir']}/{output_file}",f"{config['out']}/{output_file}")
+            os.rename(f"{config['tmp_dir']}/{output_file}",f"{config['out']}/{output_file.replace('reads',config['sample_name'])}")
         if not config["keep_files"]:
             rmtree(config['tmp_dir'])
     except Exception as e:

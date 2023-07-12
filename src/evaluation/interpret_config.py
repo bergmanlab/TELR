@@ -65,7 +65,7 @@ def config_from_file(config_file):
                 ],0],
             ["Seed:",[["Seed:","\n",int,("options for simulated reads","seed")]]],
             ["Coverage:",[["Coverage:","\n",int,("options for simulated reads","coverage")]]],
-            ["READS FROM FILE",[["[","]","selection",("read source",)]],3],
+            ["READS FROM FILE",[["[","]","selection",("read source",)]],4],
             ["] Reference Genome:",[
                 ["Reference Genome:","\n",str,("options for reads from file","Reference Genome","name")]
                 ],],
@@ -355,7 +355,7 @@ def check_input(config, line_number, data_map):
             
 def empty_default_config():
     return {
-        "read source":"simulated reads or file",
+        "read source":"simulated reads or reads from file",
         "options for simulated reads":{
             "Reference Genomes":{
                 "Reference genome given":True,

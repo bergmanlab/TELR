@@ -159,7 +159,7 @@ def abs_path(path=False):
     if not path: path = os.getcwd()
     return os.path.abspath(os.path.expanduser(path))
 
-def format_memory(data, units="mb"):
+def memory_format(data, units="mb"):
     inpt = data
     if units == "mb" and type(data) is str:
         data = data.split("=")[-1].lower()

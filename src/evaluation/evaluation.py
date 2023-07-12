@@ -3,7 +3,7 @@ import sys
 import random
 import json
 import subprocess
-telr_dir = f"{__file__.split("evaluation")[0]}/telr"
+telr_dir = f"{__file__.split('/evaluation')[0]}/telr"
 sys.path.insert(0,telr_dir)
 from STELR_utility import getdict, setdict, memory_format, abs_path, mkdir
 from interpret_config import config_from_file
@@ -30,13 +30,14 @@ def main():
     run_workflow(snakefile, config)
 
 
-def get_file_paths():#TODO: update when 
+def get_file_paths():
     eval_src = abs_path(__file__)
     eval_src_dir = os.path.split(eval_src)[0]
     telr_dir = eval_src_dir.split("evaluation")[0] + "telr"
     
     path_dict = {
-        "telr":f"{telr_dir}/stelr.py"
+        "telr":f"{telr_dir}/stelr.py",
+        "telr_dir":telr_dir
     }
 
     return path_dict
@@ -63,14 +64,14 @@ def parse_args():
             unparsed.append(this)
 
     config = config_from_file(unparsed[0])
-    print(params)
+    #print(params)
     for param in params:
         setdict(config,param,params[param])
     
     return config
 
 def format_input(value, required_format, input_for_arg = "unknown"):
-    print([value, required_format, input_for_arg])
+    #print([value, required_format, input_for_arg])
     if required_format == "file":
         try:
             path = abs_path(value)
@@ -207,10 +208,22 @@ def setup_run(config):
     run_id = random.randint(1000000,9999999) #generate a random run ID
     tmp_dir = f"{config['out']}/stelr_eval_run_{run_id}"
     mkdir(tmp_dir)
+    
+    source = config["read source"]
+    if source == "reads from file":
+        reads_name =  config["options for reads from file"]["Long read sequencing data"]
+    elif source == "simulated reads":
+        cov = config["options for simulated reads"]["coverage"]
+        simulation_type = config["options for simulated reads"]["Simulation type"]
+        if simulation_type == "proportion":
+            proportion = config["options for simulated reads"]["Simulation type params"]["proportion"]
+            reads_name =  f"{cov}x_{proportion[0]}-{proportion[1]}.fastq"
+        else:
+            genotype = config["options for simulated reads"]["Simulation type params"]["genotype"]
+            reads_name =  f"{cov}x_{simulation_type}_{genotype}.fastq"
 
     config["output"] = [
-        f"{config['simulation']}.fastq",
-        f"{config['simulation']}.telr.contig"
+        f"{reads_name}.telr.contig"
     ]
 
     config_path = f"{tmp_dir}/config.json" # path to config file
