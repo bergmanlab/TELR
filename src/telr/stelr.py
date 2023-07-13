@@ -13,18 +13,17 @@ from time import perf_counter
 
 def main():
     config = get_args()
-    config["verbose"] = False #TODO: add as option later
-    if_verbose = verbose(config["verbose"])
-    config["sample_name"] = os.path.splitext(os.path.basename(config["reads"]))[0]
-    
-    if config["resume"] is None:
-        config.update(handle_file_paths(config))
-        config.update(setup_run(if_verbose, config))
-    #TODO: test resume run
-    else: 
+    if config["resume"]:
         with open(f"{config['out']}/telr_run_{config['resume']}/config.json","r") as config_from_file:
             config = json.load(config_from_file)
         config["resume"] = config["run_id"]
+    else:
+        config["verbose"] = False #TODO: add as option later
+        if_verbose = verbose(config["verbose"])
+        config["sample_name"] = os.path.splitext(os.path.basename(config["reads"]))[0]
+    
+        config.update(handle_file_paths(config))
+        config.update(setup_run(if_verbose, config))
     run_workflow(config)
 
 def handle_file_paths(config):
@@ -89,7 +88,7 @@ def run_workflow(config):
             subprocess.call(command, cwd=config["tmp_dir"])
         else:
             subprocess.call(command + ["--unlock"], cwd=config["tmp_dir"])
-            subprocess.call(command + ["--rerun-incomplete"], cwd=config["tmp_dir"])
+            subprocess.call(command + ["--rerun-incomplete"] + ["--rerun-triggers","mtime"], cwd=config["tmp_dir"])
         for output_file in config["output"]:
             os.rename(f"{config['tmp_dir']}/{output_file}",f"{config['out']}/{output_file.replace('reads',config['sample_name'])}")
         if not config["keep_files"]:
@@ -151,6 +150,17 @@ def mkdir(if_verbose, dir):
         if_verbose.print(f"Successfully created the directory {dir}")
 
 def get_args():
+    if "--resume" in sys.argv:
+        config = {"out":"."}
+        resume_params = {
+            "--resume":"resume",
+            "--out":"out",
+            "-o":"out"
+        }
+        for param in resume_params:
+            if param in sys.argv:
+                config.update({resume_params[param]:sys.argv[sys.argv.index(param)+1]})
+        return config
     parser = argparse.ArgumentParser(
         description="Program for detecting non-reference TEs in long read data"
     )
