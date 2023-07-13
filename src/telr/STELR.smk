@@ -101,7 +101,7 @@ rule sv_detection_sniffles:
     threads: config["thread"]
     shell:
         """
-        sniffles -n -1 --threads {threads} -m {input} -v {output}
+        sniffles --output-rnames -t 10 -i {input} -v {output}
         """
 
 rule parse_vcf:
@@ -110,7 +110,7 @@ rule parse_vcf:
     output:
         "reads.vcf_parsed.tsv.tmp"
     params:
-        '%CHROM\\t%POS\\t%END\\t%SVLEN\\t%RE\\t%AF\\t%ID\\t%ALT\\t%RNAMES\\t%FILTER\\t[ %GT]\\t[ %DR]\\t[ %DV]\n'
+        '%CHROM\\t%POS\\t%END\\t%SVLEN\\t%AF\\t%ID\\t%ALT\\t%RNAMES\\t%FILTER\\t[ %GT]\\t[ %DR]\\t[ %DV]\n'
         #bcftools
     shell:
         'bcftools query -i \'SVTYPE="INS" & ALT!="<INS>"\' -f "{params}" "{input}" > "{output}"'

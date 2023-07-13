@@ -108,6 +108,7 @@ def swap_coordinate(vcf_in, vcf_out):
             entry = line.replace("\n", "").split("\t")
             if int(entry[2]) < int(entry[1]):
                 entry[1], entry[2] = entry[2], entry[1]
+            entry = entry.insert(4,len(entry[7].split(",")))
             out_line = "\t".join(entry)
             output.write(f"{out_line}\n")
 
