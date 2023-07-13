@@ -80,6 +80,7 @@ rule align_with_minimap2:
 '''1st stage
 SV calling (Sniffles)
 '''
+'''
 rule detect_sv:
     input:
         bam = "reads_sort.bam",
@@ -91,6 +92,17 @@ rule detect_sv:
     threads: config["thread"]
     shell:
         "python3 {config[STELR_sv]} detect_sv '{input.bam}' '{input.reference}' '{output}' '{params.sample_name}' '{threads}'"
+'''
+rule sv_detection_sniffles:
+    input:
+        "reads_sort.bam"
+    output:
+        "sv-reads_Sniffles.vcf"
+    threads: config["thread"]
+    shell:
+        """
+        sniffles -n -1 --threads {threads} -m {input} -v {output}
+        """
 
 rule parse_vcf:
     input:
@@ -102,6 +114,10 @@ rule parse_vcf:
         #bcftools
     shell:
         'bcftools query -i \'SVTYPE="INS" & ALT!="<INS>"\' -f "{params}" "{input}" > "{output}"'
+'''
+bcftools query -i 'SVTYPE="INS" & ALT!="<INS>"' -f "%CHROM\t%POS\t%END\t%SVLEN\t%RE\t%AF\t%ID\t%ALT\t%RNAMES\t%FILTER\t[ %GT]\t[ %DR]\t[ %DV]
+" "{input}" > "{output}"
+''''
 
 rule swap_vcf_coordinate:
     input:
@@ -121,7 +137,7 @@ rule rm_vcf_redundancy:
 
 rule write_ins_seqs:
     input:
-        lambda wildcards: "reads.vcf_parsed.tsv"
+        "reads.vcf_parsed.tsv"
     output:
         "reads.vcf_ins.fasta"
     shell:
@@ -133,7 +149,7 @@ Filter for TE insertion candidate (RepeatMasker)
 
 rule sv_repeatmask:
     input:
-        ins_seqs = lambda wildcards: "reads.vcf_ins.fasta",
+        ins_seqs = "reads.vcf_ins.fasta",
         library = config["library"]
     output:
         "vcf_ins_repeatmask/{ins_seqs}.out.gff"
