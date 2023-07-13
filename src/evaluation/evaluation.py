@@ -210,6 +210,7 @@ def setup_run(config):
     mkdir(tmp_dir)
     
     source = config["read source"]
+    #print(json.dumps(config, indent=4))
     if source == "reads from file":
         reads_name =  config["options for reads from file"]["Long read sequencing data"]
     elif source == "simulated reads":

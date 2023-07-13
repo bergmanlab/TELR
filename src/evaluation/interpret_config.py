@@ -66,7 +66,7 @@ def config_from_file(config_file):
             ["Seed:",[["Seed:","\n",int,("options for simulated reads","seed")]]],
             ["Coverage:",[["Coverage:","\n",int,("options for simulated reads","coverage")]]],
             ["READS FROM FILE",[["[","]","selection",("read source",)]],4],
-            ["] Reference Genome:",[
+            ["Reference Genome:",[
                 ["Reference Genome:","\n",str,("options for reads from file","Reference Genome","name")]
                 ],],
             ["] By path:",[
@@ -152,7 +152,7 @@ def format_input(config, line, info_line, data):
                 "name":"model name",#keep an eye on this as more features are added
                 "model file":"model file",
                 "pbsim2":"pbsim2",
-                "reads from file":"file",
+                "reads from file":"reads from file",
                 "simulation reads":"simulated reads",
                 "from file":"model file",
                 "ngmlr":"ngmlr",
