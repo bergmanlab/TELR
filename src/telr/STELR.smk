@@ -93,39 +93,55 @@ rule detect_sv:
     shell:
         "python3 {config[STELR_sv]} detect_sv '{input.bam}' '{input.reference}' '{output}' '{params.sample_name}' '{threads}'"
 '''
-rule sv_detection_sniffles:
+
+rule sv_detection_sniffles1:
     input:
         "reads_sort.bam"
     output:
-        "sv-reads_Sniffles.vcf"
+        "sv-reads_Sniffles1.vcf"
+    threads: config["thread"]
+    shell:
+        "sniffles -n -1 --threads {threads} -m {input} -v {output}"
+
+rule sv_detection_sniffles2:
+    input:
+        "reads_sort.bam"
+    output:
+        "sv-reads_Sniffles2.vcf"
     threads: config["thread"]
     shell:
         """
         sniffles --output-rnames -t 10 -i {input} -v {output}
         """
-
+def sv_detector(wildcards):
+    if "sv_detector" in config:
+        return config["sv_detector"]
+    else:
+        return "Sniffles1"
+def parse_vcf_input(wildcards):
+    return f"sv-reads_{sv_detector(wildcards)}.vcf"
 rule parse_vcf:
     input:
-        "sv-reads_Sniffles.vcf"#replace Sniffles with config[sv_detector] later if there are options
+        sv_detector
     output:
         "reads.vcf_parsed.tsv.tmp"
     params:
-        '%CHROM\\t%POS\\t%END\\t%SVLEN\\t%AF\\t%ID\\t%ALT\\t%RNAMES\\t%FILTER\\t[ %GT]\\t[ %DR]\\t[ %DV]\n'
-        #bcftools
+        lambda wildcards: {
+            "Sniffles1":'%CHROM\\t%POS\\t%END\\t%SVLEN\\t%RE\\t%AF\\t%ID\\t%ALT\\t%RNAMES\\t%FILTER\\t[ %GT]\\t[ %DR]\\t[ %DV]\n',
+            "Sniffles2":'%CHROM\\t%POS\\t%END\\t%SVLEN\\t%AF\\t%ID\\t%ALT\\t%RNAMES\\t%FILTER\\t[ %GT]\\t[ %DR]\\t[ %DV]\n'
+        }[sv_detector(wildcards)]
     shell:
         'bcftools query -i \'SVTYPE="INS" & ALT!="<INS>"\' -f "{params}" "{input}" > "{output}"'
-'''
-bcftools query -i 'SVTYPE="INS" & ALT!="<INS>"' -f "%CHROM\t%POS\t%END\t%SVLEN\t%RE\t%AF\t%ID\t%ALT\t%RNAMES\t%FILTER\t[ %GT]\t[ %DR]\t[ %DV]
-" "{input}" > "{output}"
-''''
 
 rule swap_vcf_coordinate:
     input:
         "reads.vcf_parsed.tsv.tmp"
     output:
         "reads.vcf_parsed.tsv.swap"
+    params:
+        lambda wildcards: sv_detector(wildcards)
     shell:
-        "python3 {config[STELR_sv]} swap_coordinate '{input}' '{output}'"
+        "python3 {config[STELR_sv]} swap_coordinate '{input}' '{output}' {params}"
 
 rule rm_vcf_redundancy:
     input:
@@ -391,9 +407,22 @@ rule vcf_alignment_filter:
         touch '{output}'
         """
 
-rule te_annotation_merge:
+rule te_annotation_sort:
     input:
         "contigs/{contig}/08_te2contig_filtered.bed"
+    output:
+        "contigs/{contig}/08_te2contig_sorted.bed"
+    shell:
+        """
+        if [ -s '{input}' ]; then
+            bedtools sort -i {input} > {output}
+        fi
+        touch '{output}'
+        """
+
+rule te_annotation_merge:
+    input:
+        "contigs/{contig}/08_te2contig_sorted.bed"
     output:
         "contigs/{contig}/09_te2contig_merged.bed"
     shell:
@@ -743,10 +772,13 @@ rule make_report:
 
 def overlap_ids_report(wildcards):
     overlap_file = checkpoints.json_for_report.get(**wildcards).output[0]
-    with open(overlap_file, "r") as overlap:
-        overlap_dict = json.load(overlap)
-        overlap_ids = [key for key in overlap_dict]
-    return [f"contigs/{wildcards.contig}/tes/{wildcards.te}/16_{overlap_id}_report.json" for overlap_id in overlap_ids]
+    try:
+        with open(overlap_file, "r") as overlap:
+            overlap_dict = json.load(overlap)
+            overlap_ids = [key for key in overlap_dict]
+        return [f"contigs/{wildcards.contig}/tes/{wildcards.te}/16_{overlap_id}_report.json" for overlap_id in overlap_ids]
+    except:
+        return []
 rule best_report:
     input:
         flanks = [
@@ -931,7 +963,10 @@ rule individual_json:
     output:
         "contigs/{contig}/tes/{te}/18_output.json"
     shell:
-        "python3 {config[STELR_output]} make_json_output {input} {output}"
+        """
+        python3 {config[STELR_output]} make_json_output {input} {output}
+        touch {output}
+        """
 
 
 def all_contigs(wildcards):

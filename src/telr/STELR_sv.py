@@ -102,15 +102,18 @@ def average(lst):
     num_list = string2int(num_list)
     return round(sum(num_list) / len(num_list))
 
-def swap_coordinate(vcf_in, vcf_out):
+def swap_coordinate(vcf_in, vcf_out, sv_detector="Sniffles1"):
     with open(vcf_in, "r") as input, open(vcf_out, "w") as output:
         for line in input:
             entry = line.replace("\n", "").split("\t")
             if int(entry[2]) < int(entry[1]):
                 entry[1], entry[2] = entry[2], entry[1]
-            entry.insert(4,str(len(entry[7].split(","))))
+            if sv_detector == "Sniffles2":
+                entry.insert(4,str(len(entry[7].split(","))))
             out_line = "\t".join(entry)
             output.write(f"{out_line}\n")
+
+#TODO reimplement sniffles1 version
 
 def rm_vcf_redundancy(vcf_in, vcf_out):
     header = [
