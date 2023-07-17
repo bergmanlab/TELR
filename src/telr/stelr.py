@@ -14,9 +14,11 @@ from time import perf_counter
 def main():
     config = get_args()
     if config["resume"]:
+        resume_params = config
         with open(f"{config['out']}/telr_run_{config['resume']}/config.json","r") as config_from_file:
             config = json.load(config_from_file)
-        config["resume"] = config["run_id"]
+        resume_params.pop("out")
+        config.update(resume_params)
     else:
         config["verbose"] = False #TODO: add as option later
         if_verbose = verbose(config["verbose"])
@@ -155,7 +157,8 @@ def get_args():
         resume_params = {
             "--resume":"resume",
             "--out":"out",
-            "-o":"out"
+            "-o":"out",
+            "-t":"thread"
         }
         for param in resume_params:
             if param in sys.argv:
