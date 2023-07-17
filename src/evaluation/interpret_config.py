@@ -78,12 +78,12 @@ def config_from_file(config_file):
                 ["By accession:","\n",str,("options for reads from file","Mapping Reference","accession")]
             ],0],
             ["Long read sequencing data:",[["Long read sequencing data:","\n","file_path",("options for reads from file","Long read sequencing data")]]],
-            ["TE Library:",[["TE Library:","\n","file_path",("TELR parameters","TE library")]]],
             ["] TELR version 1.X",[["[","]","selection",("TELR command",)]]],
             ["] Specific conda environment:",[
                 ["[","]","selection",("TELR parameters","Specific conda environment")],
                 ["] Specific conda environment:","\n",str,("TELR parameters","Specific conda environment")]
                 ],0],
+            ["TE Library:",[["TE Library:","\n","file_path",("TELR parameters","TE library")]]],
             ["] Different mapping reference:",[
                 ["[","]",bool,("TELR parameters","Different reference")],
                 ["Different mapping reference:","\n",str,("TELR parameters","options for different reference", "name")]
@@ -407,7 +407,7 @@ def empty_default_config():
             },
             "Long read sequencing data":"path to file"
         },
-        "TELR command":f"python3 {abs_path(__file__).split('evaluation')[0]}telr/stelr.py"
+        "TELR command":f"python3 {abs_path(__file__).split('evaluation')[0]}telr/stelr.py",
         "TELR parameters":{
             "Specific conda environment":False,
             "TE library":"path to file",
