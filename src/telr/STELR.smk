@@ -299,25 +299,6 @@ rule get_parsed_contigs:
         touch '{output}'
         """
 
-def merged_contigs_input(wildcards):
-    return [f"contigs/{contig}/03_contig1.fa" for contig in all_contigs(**wildcards)]
-def all_contigs(wildcards):
-    vcf_parsed_file = checkpoints.merge_parsed_vcf.get(**wildcards).output[0]
-    with open(vcf_parsed_file) as vcf_parsed:
-        contigs = []
-        for line in vcf_parsed:
-            contigs.append("_".join(line.split("\t")[:3]))
-    return contigs
-rule merged_contigs:
-    input:
-        merged_contigs_input
-    output:
-        "reads.contigs.fa"
-    shell:
-        """
-        cat '{input}' > '{output}'
-        """
-
 """
 3rd stage: annotate TE and predict location in reference genome
 """
