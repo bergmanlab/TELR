@@ -74,6 +74,8 @@ def get_contig_info(reference_index):
 def make_json_output(liftover_file, af_file, vcf_parsed_file, annotation_file, contig_file, json_output):
     with open(liftover_file, "r") as data:
         liftover_report = json.load(data)
+    if not "type" in liftover_report:
+        quit()
     if not liftover_report["type"] == "non-reference":
         quit()
     with open(af_file, "r") as data:
@@ -161,19 +163,21 @@ def make_json_output(liftover_file, af_file, vcf_parsed_file, annotation_file, c
 def write_output(contig_fa_outfile, te_fa_outfile, bed_outfile, json_outfile, expanded_json_outfile, vcf_outfile, reference, reference_index, *json_files):
     contigs = {}
     for file in json_files:
-        with open(file, "r") as data:
-            te_info = json.load(data)
-            contig_name = te_info["contig_name"]
-            te_name = te_info["json"]["ID"]
-            if not contig_name in contigs:
-                contigs[contig_name] = {"contig_path":te_info["contig_path"],"te_list":{}}
-            te_dict = {
-                "expanded_json":te_info["expanded_json"],
-                "json":te_info["json"],
-                "te_fasta":te_info["te_fasta"],
-                "bed_out":te_info["bed_out"]
-            }
-            contigs[contig_name]["te_list"][te_name] = te_dict
+        try:
+            with open(file, "r") as data:
+                te_info = json.load(data)
+                contig_name = te_info["contig_name"]
+                te_name = te_info["json"]["ID"]
+                if not contig_name in contigs:
+                    contigs[contig_name] = {"contig_path":te_info["contig_path"],"te_list":{}}
+                te_dict = {
+                    "expanded_json":te_info["expanded_json"],
+                    "json":te_info["json"],
+                    "te_fasta":te_info["te_fasta"],
+                    "bed_out":te_info["bed_out"]
+                }
+                contigs[contig_name]["te_list"][te_name] = te_dict
+        except: pass
     
     json_output = []
     json_expanded_output = []
