@@ -17,29 +17,29 @@ def config_from_file(config_file):
         config = empty_default_config()
         info = [
             ["SIMULATION READS",[["[","]","selection",("read source",)]],21],
-            ["] Reference Genome:",[
-                ["[","]",bool,("options for simulated reads","Reference Genomes","Reference genome given")],
-                ["Reference Genome:","\n",str,("options for simulated reads","Reference Genomes", "Reference Genome","name")]
+            ["] Mapping Reference:",[
+                ["[","]",bool,("options for simulated reads","Reference Genomes","Mapping Reference given")],
+                ["Mapping Reference:","\n",str,("options for simulated reads","Reference Genomes", "Mapping Reference","name")]
                 ],2],
             ["] By path:",[
-                ["[","]","selection",("options for simulated reads","Reference Genomes", "Reference Genome","get by")],
-                ["By path:","\n","file_path",("options for simulated reads","Reference Genomes", "Reference Genome","file path")]
+                ["[","]","selection",("options for simulated reads","Reference Genomes", "Mapping Reference","get by")],
+                ["By path:","\n","file_path",("options for simulated reads","Reference Genomes", "Mapping Reference","file path")]
                 ],0],
             ["] By accession:",[
-                ["[","]","selection",("options for simulated reads","Reference Genomes", "Reference Genome","get by")],
-                ["By accession:","\n",str,("options for simulated reads","Reference Genomes", "Reference Genome","accession")]
+                ["[","]","selection",("options for simulated reads","Reference Genomes", "Mapping Reference","get by")],
+                ["By accession:","\n",str,("options for simulated reads","Reference Genomes", "Mapping Reference","accession")]
                 ],0],
-            ["] Alternate Genome:",[
-                ["[","]",bool,("options for simulated reads","Reference Genomes","Alternate genome given")],
-                ["Alternate Genome:","\n",str,("options for simulated reads","Reference Genomes", "Alternate Genome","name")]
+            ["] Community Reference:",[
+                ["[","]",bool,("options for simulated reads","Reference Genomes","Community Reference given")],
+                ["Community Reference:","\n",str,("options for simulated reads","Reference Genomes", "Community Reference","name")]
                 ],2],
             ["] By path:",[
-                ["[","]","selection",("options for simulated reads","Reference Genomes", "Alternate Genome","get by")],
-                ["By path:","\n","file_path",("options for simulated reads","Reference Genomes", "Alternate Genome","file path")]
+                ["[","]","selection",("options for simulated reads","Reference Genomes", "Community Reference","get by")],
+                ["By path:","\n","file_path",("options for simulated reads","Reference Genomes", "Community Reference","file path")]
                 ],0],
             ["] By accession:",[
-                ["[","]","selection",("options for simulated reads","Reference Genomes", "Alternate Genome","get by")],
-                ["By accession:","\n",str,("options for simulated reads","Reference Genomes", "Alternate Genome","accession")]
+                ["[","]","selection",("options for simulated reads","Reference Genomes", "Community Reference","get by")],
+                ["By accession:","\n",str,("options for simulated reads","Reference Genomes", "Community Reference","accession")]
                 ],0],
             ["] pbsim2",[["[","]","selection",("options for simulated reads", "Simulator")]],2],
             ["] By name:",[
@@ -66,22 +66,27 @@ def config_from_file(config_file):
             ["Seed:",[["Seed:","\n",int,("options for simulated reads","seed")]]],
             ["Coverage:",[["Coverage:","\n",int,("options for simulated reads","coverage")]]],
             ["READS FROM FILE",[["[","]","selection",("read source",)]],4],
-            ["Reference Genome:",[
-                ["Reference Genome:","\n",str,("options for reads from file","Reference Genome","name")]
+            ["Mapping Reference:",[
+                ["Mapping Reference:","\n",str,("options for reads from file","Mapping Reference","name")]
                 ],],
             ["] By path:",[
-                ["[","]","selection",("options for reads from file","Reference Genome","get by")],
-                ["By path:","\n","file_path",("options for reads from file","Reference Genome","file path")]
+                ["[","]","selection",("options for reads from file","Mapping Reference","get by")],
+                ["By path:","\n","file_path",("options for reads from file","Mapping Reference","file path")]
             ],0],
             ["] By accession:",[
-                ["[","]","selection",("options for reads from file","Reference Genome","get by")],
-                ["By accession:","\n",str,("options for reads from file","Reference Genome","accession")]
+                ["[","]","selection",("options for reads from file","Mapping Reference","get by")],
+                ["By accession:","\n",str,("options for reads from file","Mapping Reference","accession")]
             ],0],
             ["Long read sequencing data:",[["Long read sequencing data:","\n","file_path",("options for reads from file","Long read sequencing data")]]],
             ["TE Library:",[["TE Library:","\n","file_path",("TELR parameters","TE library")]]],
-            ["] Different reference:",[
+            ["] TELR version 1.X",[["[","]","selection",("TELR command",)]]],
+            ["] Specific conda environment:",[
+                ["[","]","selection",("TELR parameters","Specific conda environment")],
+                ["] Specific conda environment:","\n",str,("TELR parameters","Specific conda environment")]
+                ],0],
+            ["] Different mapping reference:",[
                 ["[","]",bool,("TELR parameters","Different reference")],
-                ["Different reference:","\n",str,("TELR parameters","options for different reference", "name")]
+                ["Different mapping reference:","\n",str,("TELR parameters","options for different reference", "name")]
                 ]],
             ["] By path:",[
                 ["[","]","selection",("TELR parameters","options for different reference","get by")],
@@ -107,6 +112,9 @@ def config_from_file(config_file):
             ["TE sequence offset:",[["TE sequence offset:","\n",int,("TELR parameters","Allele frequency estimation parameters","TE sequence offset")]]],
             ["] Use minimap2 to annotate TE family names instead of RepeatMasker",[["[","]",bool,("TELR parameters","Additional options","Use minimap2 to annotate TE family names")]]],
             ["] Keep intermediate files",[["[","]",bool,("TELR parameters","Additional options","Keep intermediate files")]]],
+            ["Mapping reference annotation:",[["Mapping reference annotation:","\n","file_path",("Evaluation requirements","Mapping reference annotation")]]],
+            ["Community reference annotation:",[["Community reference annotation:","\n","file_path",("Evaluation requirements","Community reference annotation")]]],
+            ["Regular recombination region:",[["Regular recombination region:","\n","file_path",("Evaluation requirements","Regular recombination region")]]],
             ["Estimated memory:",[["Estimated memory:","\n",memory_format,("Resources","Estimated memory")]]],
             ["Threads:",[["Threads:","\n",int,("Resources","Threads")]]]
         ]
@@ -156,7 +164,9 @@ def format_input(config, line, info_line, data):
                 "simulation reads":"simulated reads",
                 "from file":"model file",
                 "ngmlr":"ngmlr",
-                "minimap2":"minimap2"
+                "minimap2":"minimap2",
+                "telr version 1.x":"telr",
+                "specific conda environment":True
             }
             for selection in selections:
                 if selection in line.lower():
@@ -311,6 +321,7 @@ def check_input(config, line_number, data_map):
             "Long read sequencing data":check_file
         },
         "TELR parameters":{
+            "Specific conda environment":check_file,
             "TE library":check_file,
             "options for different reference":{
                 "file path":check_file,
@@ -358,15 +369,15 @@ def empty_default_config():
         "read source":"simulated reads or reads from file",
         "options for simulated reads":{
             "Reference Genomes":{
-                "Reference genome given":True,
-                "Reference Genome":{
+                "Mapping Reference given":True,
+                "Mapping Reference":{
                     "name":"name of genome",
                     "get by":"file path or accession",
                     "file path":"path to file",
                     "accession":"genbank accession number"
                 },
-                "Alternate genome given":True,
-                "Alternate Genome":{
+                "Community Reference given":True,
+                "Community Reference":{
                     "name":"name of genome",
                     "get by":"file path or accession",
                     "file path":"path to file",
@@ -388,7 +399,7 @@ def empty_default_config():
             "coverage":50
         },
         "options for reads from file":{
-            "Reference Genome":{
+            "Mapping Reference":{
                 "name":"name of genome",
                 "get by":"file path or accession",
                 "file path":"path to file",
@@ -396,9 +407,11 @@ def empty_default_config():
             },
             "Long read sequencing data":"path to file"
         },
+        "TELR command":f"python3 {abs_path(__file__).split('evaluation')[0]}telr/stelr.py"
         "TELR parameters":{
+            "Specific conda environment":False,
             "TE library":"path to file",
-            "Different reference":False,
+            "Different mapping reference":False,
             "options for different reference":{
                 "name":"name of genome",
                 "get by":"file path or accession",
@@ -424,6 +437,11 @@ def empty_default_config():
                 "Use minimap2 to annotate TE family names":False,
                 "Keep intermediate files":False
             }
+        },
+        "Evaluation requirements":{
+            "Mapping reference annotatation":"path to file",
+            "Community reference annotation":"path to file",
+            "Regular recombination region":"path to file"
         },
         "Resources":{
             "Estimated memory":"100gb",

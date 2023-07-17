@@ -34,10 +34,12 @@ def get_file_paths():
     eval_src = abs_path(__file__)
     eval_src_dir = os.path.split(eval_src)[0]
     telr_dir = eval_src_dir.split("evaluation")[0] + "telr"
+    env_dir = eval_src_dir.split("src")[0] + "envs"
     
     path_dict = {
         "telr":f"{telr_dir}/stelr.py",
-        "telr_dir":telr_dir
+        "telr_dir":telr_dir,
+        "telr_conda":f"{env_dir}/stelr_sniffles1.yaml"
     }
 
     return path_dict
@@ -68,140 +70,6 @@ def parse_args():
     for param in params:
         setdict(config,param,params[param])
     
-    return config
-
-def format_input(value, required_format, input_for_arg = "unknown"):
-    #print([value, required_format, input_for_arg])
-    if required_format == "file":
-        try:
-            path = abs_path(value)
-            open(path, "r").close()
-            return path
-        except:
-            if not os.path.isfile(value):
-                print(f"Error: {input_for_arg} -- file '{value}' could not be found.", file=sys.stderr)
-            else:
-                print(f"Error: {input_for_arg} -- file '{value}' could not be read.", file=sys.stderr)
-            sys.exit(1)
-    elif required_format == "ploidy":
-        try:
-            return {
-                "diploid":"diploid",
-                "2":"diploid",
-                "tetraploid":"tetraploid",
-                "4":"tetraploid"
-            }[value]
-        except:
-            print(f"Invalid ploidy type. Given ploidy type was '{value}'. Valid ploidy types are diploid or tetraploid.", file=sys.stderr)
-            sys.exit(1)            
-    elif required_format == "memory":
-        if "mem_mb=" in value:
-            return value
-        else:
-            try:
-                return f"mem_mb={int(value)}"
-            except:
-                memory_units = {
-                    ("tb","TB"):1000000,
-                    ("gb","GB"):1000,
-                    ("mb","MB"):1,
-                    ("kb","KB"):0.001
-                    }
-                for unit in memory_units:
-                    for abbreviation in unit:
-                        if abbreviation in value:
-                            try:
-                                value = value.replace(abbreviation, "")
-                                return f"mem_mb={int(value)*memory_units[unit]}"
-                            except:
-                                print("Error: input format for memory not recognized. Please enter the estimated memory in mb.")
-                                sys.exit(1)
-    else:
-        format_function = {"integer":int,"string":str,"decimal value":float,"genbank accession number":str}[required_format]
-        if type(value) is format_function:
-            return value
-        else:
-            try:
-                return format_function(value)
-            except:
-                print(f"Error: input {input_for_arg} formatted incorrectly. Expected format is {required_format}.", file=sys.stderr)
-                sys.exit(1)
-
-def get_allele_proportion(params):
-    #determine the read depth required for each reference
-    #TODO: it would be entirely possible to allow for >2 input genomes if that's a functionality that would be useful, eg for pooled sequence sims
-    cov = params["cov"]
-    if "proportion" in params:
-        return params["proportion"], 1 - params["proportion"]
-    else:
-        genotype = params["genotype"]
-        allele_proportion = {
-            "heterozygous":[0.5, 0.5],
-            "homozygous":[0, 1],
-            "simplex":[0.75, 0.25],
-            "duplex":[0.5, 0.5],
-            "triplex":[0.25, 0.75],
-            "quadruplex":[0, 1],
-            "control":[1, 0]
-        }
-        if genotype in allele_proportion:
-            return allele_proportion[genotype]
-        else:
-            genotype_type = ""
-            valid_inputs = "heterozygous, homozygous, simplex, duplex, triplex, quadruplex"
-            if "ploidy" in params:
-                ploidy = params["ploidy"]
-                valid_input_for_ploidy = {
-                    "diploid":"heterozygous, homozygous",
-                    "tetraploid":"simplex, duplex, triplex, quadruplex"
-                }
-                valid_inputs = valid_input_for_ploidy[ploidy]
-                genotype_type = f" for {ploidy} genome"                        
-            print(f"Invalid genotype{genotype_type}. Given genotype was '{genotype}'. Valid input types are {valid_inputs}, or control.", file=sys.stderr)
-            sys.exit(1)
-
-def get_simulation(params):
-    cov = params["cov"]
-    allele_proportion = get_allele_proportion(params)
-    if "proportion" in params:
-        return f"{cov}x_{allele_proportion[0]}-{allele_proportion[1]}"
-    else:
-        genotype = params["genotype"]
-        if "ploidy" in params:
-            ploidy = params['ploidy']
-        else:
-            ploidy = {
-                "heterozygous":"diploid","homozygous":"diploid",
-                "simplex":"tetraploid","duplex":"tetraploid","triplex":"tetraploid","quadruplex":"tetraploid",
-                "control":"ref"
-            }[genotype]
-        return f"{cov}x_{ploidy}_{genotype}"
-
-def get_simulation_config(params):
-    config = {
-        "simulation":get_simulation(params),
-        "sub_simulations":{},
-        "accessions":{}
-    }
-    cov = params["cov"]
-    allele_proportion = get_allele_proportion(params)
-    references = [param for param in params if "reference" in param]
-    if "reference" in params: config["reference"] = format_input(params["reference"], "file", "reference")
-    if 0 in allele_proportion and len(references) < len(allele_proportion):
-        allele_proportion = [proportion for proportion in allele_proportion if proportion != 0]
-    for reference in references:
-        if not "reference" in config:
-            config["reference"] = params[reference]["path"]
-        if len(allele_proportion) > 0:
-            proportion = allele_proportion.pop(0)
-            if not proportion == 0:
-                sub_cov = proportion*cov
-                if sub_cov == int(sub_cov):
-                    sub_cov = int(sub_cov)
-                ref_name = params[reference]["name"]
-                config["sub_simulations"][f"{sub_cov}x_{ref_name}"] = params[reference]["path"]
-                if "accession" in params[reference]:
-                    config["accessions"][ref_name] = params[reference]["accession"]
     return config
 
 def setup_run(config):
@@ -244,7 +112,8 @@ def run_workflow(snakefile, config):
     command = [
         "snakemake",
         "-s", snakefile,
-        "--configfile", config["config_file"]
+        "--configfile", config["config_file"],
+        "--use-conda"
     ]
     optional_args = {("Resources","Threads"):"--cores",("Resources","Estimated memory"):"--resources"}
     for arg in optional_args:
