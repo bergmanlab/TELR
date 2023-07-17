@@ -330,7 +330,6 @@ def make_report(overlap_json, overlap_id, te_json, ref_bed, ref, flank_overlap_m
             else:
                 lift_entry["type"] = "non-reference"
                 lift_entry["comment"] = "flanks gap size exceeds threshold but less than half of TE annotation, no genome2 TE in between"
-                num_hits = num_hits + 1
             reported = True
         elif lift_gap >= 0.5 * te_length and lift_gap <= 20000:
             # if the gap size is greater than half of the original TE size and smaller than 20kb
@@ -399,7 +398,7 @@ def choose_report(out_file, *input_files):
     if not reported:
         lift_entry = {
             "type": "unlifted",
-            "family": family,
+            "family": te_dict["family"],
             "chrom": None,
             "start": None,
             "end": None,
@@ -524,8 +523,8 @@ def check_nearby_ref(chrom, start_query, end_query, family, strand, ref_bed, thr
     distance = None
 
     if check_exist(ref_bed):
-        bed = f"{chrom}\t{start}\t{end}\t{family}\t.\t{strand}".replace("'","")
-        overlap = subprocess.call(f"echo '{bed}' | bedtools closest -a - -b {ref_bed} -d -D ref -k 5", shell=True, capture_output=True, text=True).stdout
+        bed = f"{chrom}\t{start_query}\t{end_query}\t{family}\t.\t{strand}".replace("'","")
+        overlap = subprocess.check_output(f"echo '{bed}' | bedtools closest -a - -b {ref_bed} -d -D ref -k 5", shell=True, text=True).strip()
 
         for line in overlap.split("\n"):
             entry = line.split("\t")
