@@ -179,45 +179,47 @@ def make_json(bed_input, json_output):
         json.dump(annotation, output)
 
 def bed_to_json(overlap, info_5p, info_3p, json_file):
-    with open(info_5p, "r") as info:
-        align_5p_flank_qcs = json.load(info)
-    with open(info_3p, "r") as info:
-        align_3p_flank_qcs = json.load(info)
-    overlap_dict = dict()
-    with open(overlap, "r") as input:
-        for line in input:
-            entry = line.replace("\n", "").split("\t")
+    try:
+        with open(info_5p, "r") as info:
+            align_5p_flank_qcs = json.load(info)
+        with open(info_3p, "r") as info:
+            align_3p_flank_qcs = json.load(info)
+        overlap_dict = dict()
+        with open(overlap, "r") as input:
+            for line in input:
+                entry = line.replace("\n", "").split("\t")
 
-            chrom_5p = entry[0]
-            chrom_3p = entry[6]
-            if (chrom_5p == chrom_3p and chrom_3p != "."):  # to make sure the entry exists
-                align_5p_flank_id = "_".join([entry[3], entry[0], entry[1], entry[2]])
-                align_3p_flank_id = "_".join([entry[9], entry[6], entry[7], entry[8]])
+                chrom_5p = entry[0]
+                chrom_3p = entry[6]
+                if (chrom_5p == chrom_3p and chrom_3p != "."):  # to make sure the entry exists
+                    align_5p_flank_id = "_".join([entry[3], entry[0], entry[1], entry[2]])
+                    align_3p_flank_id = "_".join([entry[9], entry[6], entry[7], entry[8]])
 
-                start_5p = int(entry[1])
-                end_5p = int(entry[2])
-                start_3p = int(entry[7])
-                end_3p = int(entry[8])
+                    start_5p = int(entry[1])
+                    end_5p = int(entry[2])
+                    start_3p = int(entry[7])
+                    end_3p = int(entry[8])
 
-                id_chrom = chrom_5p.replace("(","").replace(")","").replace("_","").replace(",","").replace(":","")
-                entry_id = len(overlap_dict)
+                    id_chrom = chrom_5p.replace("(","").replace(")","").replace("_","").replace(",","").replace(":","")
+                    entry_id = len(overlap_dict)
 
-                overlap_dict[entry_id] = {
-                    "chrom_5p":chrom_5p,
-                    "chrom_3p":chrom_3p,
-                    "flank_strand":entry[5],
-                    "mapp_quality_5p":int(entry[4]),
-                    "mapp_quality_3p":int(entry[10]),
-                    "align_5p_flank_qc":align_5p_flank_qcs[align_5p_flank_id],
-                    "align_3p_flank_qc":align_3p_flank_qcs[align_3p_flank_id],
-                    "start_5p":start_5p,
-                    "end_5p":end_5p,
-                    "start_3p":start_3p,
-                    "end_3p":end_3p
-                }
-    if len(overlap_dict) > 0:
-        with open(json_file, "w") as output:
-            json.dump(overlap_dict, output)
+                    overlap_dict[entry_id] = {
+                        "chrom_5p":chrom_5p,
+                        "chrom_3p":chrom_3p,
+                        "flank_strand":entry[5],
+                        "mapp_quality_5p":int(entry[4]),
+                        "mapp_quality_3p":int(entry[10]),
+                        "align_5p_flank_qc":align_5p_flank_qcs[align_5p_flank_id],
+                        "align_3p_flank_qc":align_3p_flank_qcs[align_3p_flank_id],
+                        "start_5p":start_5p,
+                        "end_5p":end_5p,
+                        "start_3p":start_3p,
+                        "end_3p":end_3p
+                    }
+        if len(overlap_dict) > 0:
+            with open(json_file, "w") as output:
+                json.dump(overlap_dict, output)
+    except: pass
 
 def make_report(overlap_json, overlap_id, te_json, ref_bed, ref, flank_overlap_max, flank_gap_max, report_file):
     flank_overlap_max, flank_gap_max = int(flank_overlap_max), int(flank_gap_max)
