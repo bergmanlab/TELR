@@ -108,7 +108,7 @@ def setup_run(config):
     return config
 
 def run_workflow(snakefile, config):
-    print(f"STELR_evaluation run ID {config['run_id']}")
+    print(f"\nSTELR_evaluation run ID {config['run_id']}\n")
     command = [
         "snakemake",
         "-s", snakefile,
