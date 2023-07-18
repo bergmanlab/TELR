@@ -768,6 +768,7 @@ rule best_report:
             "contigs/{contig}/tes/{te}/14_5p_flank.bed",
             "contigs/{contig}/tes/{te}/14_3p_flank.bed"
             ],
+        ref_bed = lambda wildcards: f"ref_repeatmask/{os.path.basename(config['reference'])}.te.bed",
         te_json = "contigs/{contig}/tes/{te}/00_annotation.json",
         overlap_reports = overlap_ids_report
     output:

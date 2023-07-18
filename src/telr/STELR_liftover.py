@@ -358,10 +358,13 @@ def choose_report(out_file, *input_files):
                 if file_type in os.path.basename(file):      
                     flanks[flank][f"{file_type}_file"] = file
         elif check_exist(file):
-            with open(file, "r") as input:
-                if os.path.basename(file) == "00_annotation.json": 
-                    te_dict = json.load(input)
-                else: reports.append(json.load(input))
+            if ".te.bed" in file:
+                ref_bed = file
+            else: 
+                with open(file, "r") as input:
+                    if os.path.basename(file) == "00_annotation.json": 
+                        te_dict = json.load(input)
+                    else: reports.append(json.load(input))
     strand = te_dict["strand"]
     best_report = {}
     reported = True
@@ -439,9 +442,9 @@ def choose_report(out_file, *input_files):
         # if single flank mode is turned on, inspect single flanks and report as lifted
         # if single_flank:
         if len(flanks["5p"]["alignment_coords"]) == 1 and len(flanks["3p"]["alignment_coords"]) == 0:
-            best_report = single_flank_liftover(flanks, "5p", lift_entry, strand)
+            best_report = single_flank_liftover(flanks, "5p", lift_entry, strand, ref_bed)
         elif len(flanks["5p"]["alignment_coords"]) == 0 and len(flanks["3p"]["alignment_coords"]) == 1:
-            best_report = single_flank_liftover(flanks, "3p", lift_entry, strand)
+            best_report = single_flank_liftover(flanks, "3p", lift_entry, strand, ref_bed)
         
 
     # write
