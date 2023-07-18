@@ -122,7 +122,7 @@ def parse_vcf_input(wildcards):
     return f"sv-reads_{sv_detector(wildcards)}.vcf"
 rule parse_vcf:
     input:
-        sv_detector
+        parse_vcf_input
     output:
         "reads.vcf_parsed.tsv.tmp"
     params:
