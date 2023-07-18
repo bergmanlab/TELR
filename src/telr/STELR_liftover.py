@@ -24,7 +24,7 @@ def flank_bed(ref, ref_size, te_json, flank_len, output_file):
     else:
         direction = {True:"5p",False:"3p"}["5p" in os.path.basename(output_file)]
         flank_len = int(flank_len)
-        start, end = {"5p":start-flank_len+1,"3p":end}[direction], {"5p":start,"3p":end+flank_len}[direction]
+        start, end = {"5p":max(0,start-flank_len+1),"3p":end}[direction], {"5p":start,"3p":min(ref_size,end+flank_len)}[direction]
 
         with open(output_file, "w") as output:
             output.write(f"{chrom}\t{start}\t{end}\n")
